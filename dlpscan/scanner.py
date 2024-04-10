@@ -6,34 +6,33 @@ from .context_patterns import CONTEXT_KEYWORDS
 
 
 def redact_sensitive_info(match, redaction_char='X'):
-    """
-    Redacts sensitive information from a matched string by replacing all but the last four characters with a specified character.
+    # Make sure the match string is not None or Empty
+    if match:
+        # Remove control and non-printable characters from the match before checking its length
+        cleaned_match = ''.join(c for c in match if c.isprintable())
     
-    Parameters:
-        match (str): The string containing sensitive information to be redacted.
-        redaction_char (str): The character used for redaction.
+        if len(cleaned_match) < 4:
+            raise ValueError("Input string must have at least 4 printable characters.")
+        
+        return redaction_char * (len(cleaned_match) - 4) + cleaned_match[-4:]
+    else:
+        raise ValueError("Input string cannot be None or Empty.")
 
-    Returns:
-        str: A redacted string with only the last four characters visible.
-    """
-    if len(match) < 4:
-        raise ValueError("Input string must have at least 4 characters.")
-    return redaction_char * (len(match) - 4) + match[-4:]
 
 
 def is_luhn_valid(card_number: str) -> bool:
-    """
-    Validates a credit card number using the Luhn algorithm.
+    # Remove any non-digit characters like spaces or hyphens
+    sanitized_card_number = ''.join(filter(str.isdigit, card_number))
     
-    Parameters:
-        card_number (str): The credit card number as a string.
-
-    Returns:
-        bool: True if the credit card number is valid, False otherwise.
-    """
+    # Ensure the sanitized card number is not empty and contains only digits
+    if not sanitized_card_number or not sanitized_card_number.isdigit():
+        raise ValueError("Card number must contain only digits.")
+    
     num_sum = sum(int(digit) if (idx + 1) % 2 else int(digit) * 2 - 9 if int(digit) * 2 > 9
-                  else int(digit) * 2 for idx, digit in enumerate(reversed(card_number)))
+                  else int(digit) * 2 for idx, digit in enumerate(reversed(sanitized_card_number)))
+
     return num_sum % 10 == 0
+
 
 
 def scan_for_context(text: str, start_index: int, category: str) -> bool:
