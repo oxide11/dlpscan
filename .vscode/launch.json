@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Module",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "tests.test2",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/dlpscan"
+            }
+        }
+    ]
+}
