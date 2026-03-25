@@ -280,238 +280,132 @@ PATTERNS = {
     # NORTH AMERICA — United States
     # =========================================================================
     'North America - United States': {
-        # -----------------------------------------------------------------
-        # FEDERAL IDENTIFIERS
-        # -----------------------------------------------------------------
-
         # Social Security Number: XXX-XX-XXXX
         'USA SSN': re.compile(r'\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b'),
-
         # Individual Taxpayer Identification Number: 9XX-XX-XXXX
         'USA ITIN': re.compile(r'\b9\d{2}[-\s]?\d{2}[-\s]?\d{4}\b'),
-
         # Employer Identification Number: XX-XXXXXXX
         'USA EIN': re.compile(r'\b\d{2}-\d{7}\b'),
-
-        # US Passport Book — legacy 9-digit or Next-Gen (letter + 8 digits)
-        # Example: 123456789  or  A12345678
-        'USA Passport Book': re.compile(r'\b(?:[A-Z]\d{8}|\d{9})\b'),
-
-        # US Passport Card — C + 8 digits  (e.g. C12345678)
-        'USA Passport Card': re.compile(r'\b[Cc]\d{8}\b'),
-
+        # Passport Book: 9 digits
+        'USA Passport': re.compile(r'\b\d{9}\b'),
+        # Passport Card: C + 8 digits
+        'USA Passport Card': re.compile(r'\bC\d{8}\b'),
         # Routing Number: 9 digits
         'USA Routing Number': re.compile(r'\b\d{9}\b'),
-
         # DEA Number: 2 letters + 7 digits
         'US DEA Number': re.compile(r'\b[A-Z]{2}\d{7}\b'),
-
-        # NPI (National Provider Identifier): 10 digits, starts with 1 or 2
+        # NPI: 10 digits starting with 1 or 2
         'US NPI': re.compile(r'\b[12]\d{9}\b'),
-
-        # Medicare Beneficiary Identifier (MBI) — CMS 11-char format
-        # Pos: C(1-9) A(letter*) AN(digit-or-letter*) N(0-9) …
-        # *letter = [AC-HJKMNP-RT-Y] (excludes S,L,O,I,B,Z)
-        # Example: 1EG4-TE5-MK73  (hyphens optional, for display only)
-        'US MBI': re.compile(
-            r'\b[1-9][AC-HJKMNP-RT-Y][0-9AC-HJKMNP-RT-Y][0-9]'
-            r'-?[AC-HJKMNP-RT-Y][0-9AC-HJKMNP-RT-Y][0-9]'
-            r'-?[AC-HJKMNP-RT-Y]{2}[0-9]{2}\b'
-        ),
-
-        # DoD ID Number (EDIPI) — 10-digit military identifier on CAC cards
-        # Example: 1234567890
+        # Medicare Beneficiary Identifier
+        'US MBI': re.compile(r'\b[1-9][A-CEGHJ-NP-RT-Y](?:[0-9]|[A-CEGHJ-NP-RT-Y])[0-9]-?[A-CEGHJ-NP-RT-Y](?:[0-9]|[A-CEGHJ-NP-RT-Y])[0-9]-?[A-CEGHJ-NP-RT-Y]{2}[0-9]{2}\b'),
+        # DoD/EDIPI: 10 digits
         'US DoD ID': re.compile(r'\b\d{10}\b'),
-
-        # Known Traveler Number — Global Entry / NEXUS / SENTRI PASS ID
-        # 9 digits, typically starts with 10,13,14,15,16,50,70,80,95,98,99
-        # Example: 100123456
+        # Known Traveler Number (Global Entry/TSA PreCheck): 9 digits
         'US Known Traveler Number': re.compile(r'\b\d{9}\b'),
-
-        # Known Traveler Number — TSA PreCheck enrollment prefix variants
-        # TT (IDEMIA), TE (Telos), AC (CLEAR) + 7-9 digits
-        # Example: TT1234567
-        'US TSA PreCheck KTN': re.compile(r'\b(?:TT|TE|AC)\d{7,9}\b'),
-
-        # US/Canada phone: (555) 123-4567, 555-123-4567, +1-555-123-4567
-        'US Phone Number': re.compile(
-            r'(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}(?!\d)'
-        ),
-
-        # -----------------------------------------------------------------
-        # STATE DRIVER'S LICENSES — all 50 states + DC
-        # Sources: NTSI, FMCSA, Milyli Blackout reference
-        # -----------------------------------------------------------------
-
-        # Alabama: 1-8 digits (typically 7)  — example: 6996164
-        'Alabama DL': re.compile(r'\b\d{1,8}\b'),
-
-        # Alaska: 1-7 digits  — example: 1234567
-        'Alaska DL': re.compile(r'\b\d{1,7}\b'),
-
-        # Arizona: L + 1-8 digits | LL + 2-5 digits | 9 digits
-        'Arizona DL': re.compile(
-            r'\b(?:[A-Z]\d{1,8}|[A-Z]{2}\d{2,5}|\d{9})\b'
-        ),
-
-        # Arkansas: 4-9 digits  — example: 999999999
-        'Arkansas DL': re.compile(r'\b\d{4,9}\b'),
-
-        # California: L + 7 digits  — example: A0002144
+        # US Phone: (XXX) XXX-XXXX
+        'US Phone Number': re.compile(r'(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}(?!\d)'),
+        # Alabama DL: 7 digits
+        'Alabama DL': re.compile(r'\b\d{7}\b'),
+        # Alaska DL: 7 digits
+        'Alaska DL': re.compile(r'\b\d{7}\b'),
+        # Arizona DL: letter + 8 digits OR 9 digits
+        'Arizona DL': re.compile(r'\b(?:[A-Z]\d{8}|\d{9})\b'),
+        # Arkansas DL: 8-9 digits
+        'Arkansas DL': re.compile(r'\b\d{8,9}\b'),
+        # California DL: letter + 7 digits
         'California DL': re.compile(r'\b[A-Z]\d{7}\b'),
-
-        # Colorado: 9 digits | L + 3-6 digits | LL + 2-5 digits
-        'Colorado DL': re.compile(
-            r'\b(?:\d{9}|[A-Z]\d{3,6}|[A-Z]{2}\d{2,5})\b'
-        ),
-
-        # Connecticut: 9 digits  — example: 123456789
+        # Colorado DL: 9 digits or letter + 3-6 digits
+        'Colorado DL': re.compile(r'\b(?:\d{9}|[A-Z]\d{3,6})\b'),
+        # Connecticut DL: 9 digits
         'Connecticut DL': re.compile(r'\b\d{9}\b'),
-
-        # Delaware: 1-7 digits  — example: 1234567
+        # Delaware DL: 1-7 digits
         'Delaware DL': re.compile(r'\b\d{1,7}\b'),
-
-        # District of Columbia: 7 or 9 digits
+        # DC DL: 7 digits or 9 digits
         'DC DL': re.compile(r'\b(?:\d{7}|\d{9})\b'),
-
-        # Florida: L + 12 digits  — example: G544-061-73-925-0
-        'Florida DL': re.compile(r'\b[A-Z]\d{3}-?\d{3}-?\d{2}-?\d{3}-?\d\b'),
-
-        # Georgia: 7-9 digits  — example: 123456789
+        # Florida DL: letter + 12 digits
+        'Florida DL': re.compile(r'\b[A-Z]\d{12}\b'),
+        # Georgia DL: 7-9 digits
         'Georgia DL': re.compile(r'\b\d{7,9}\b'),
-
-        # Hawaii: L + 8 digits | 9 digits
+        # Hawaii DL: letter + 8 digits or 9 digits
         'Hawaii DL': re.compile(r'\b(?:[A-Z]\d{8}|\d{9})\b'),
-
-        # Idaho: LL + 6 digits + L | 9 digits  — example: AA123456Z
-        'Idaho DL': re.compile(r'\b(?:[A-Z]{2}\d{6}[A-Z]|\d{9})\b'),
-
-        # Illinois: L + 11 digits (L###-####-####)  — example: D400-7836-0001
-        'Illinois DL': re.compile(r'\b[A-Z]\d{3}-?\d{4}-?\d{4}\b'),
-
-        # Indiana: L + 9 digits | 9-10 digits  — example: 0299-11-6078
-        'Indiana DL': re.compile(r'\b(?:[A-Z]\d{9}|\d{9,10})\b'),
-
-        # Iowa: 9 digits | 3 digits + 2 letters + 4 digits
-        'Iowa DL': re.compile(r'\b(?:\d{9}|\d{3}[A-Z]{2}\d{4})\b'),
-
-        # Kansas: LNLNL | L + 8 digits | 9 digits  — example: K00-09-7443
-        'Kansas DL': re.compile(
-            r'\b(?:[A-Z]\d[A-Z]\d[A-Z]|[A-Z]\d{2}-?\d{2}-?\d{4}|\d{9})\b'
-        ),
-
-        # Kentucky: L + 8-9 digits | 9 digits  — example: V12-345-678
-        'Kentucky DL': re.compile(r'\b(?:[A-Z]\d{8,9}|\d{9})\b'),
-
-        # Louisiana: 1-9 digits (typically 9)  — example: 007000100
-        'Louisiana DL': re.compile(r'\b\d{1,9}\b'),
-
-        # Maine: 7 digits | 7 digits + L | 8 digits  — example: 0015000
-        'Maine DL': re.compile(r'\b(?:\d{7}[A-Z]?|\d{8})\b'),
-
-        # Maryland: L + 12 digits  — example: S514778616977
+        # Idaho DL: 2 letters + 6 digits + letter
+        'Idaho DL': re.compile(r'\b[A-Z]{2}\d{6}[A-Z]\b'),
+        # Illinois DL: letter + 11 digits
+        'Illinois DL': re.compile(r'\b[A-Z]\d{11}\b'),
+        # Indiana DL: 10 digits or letter + 9 digits
+        'Indiana DL': re.compile(r'\b(?:\d{10}|[A-Z]\d{9})\b'),
+        # Iowa DL: 3 digits + 2 letters + 4 digits
+        'Iowa DL': re.compile(r'\b\d{3}[A-Z]{2}\d{4}\b'),
+        # Kansas DL: letter + 8 digits or letter + letter + 7 digits or 9 digits
+        'Kansas DL': re.compile(r'\b(?:[A-Z]\d{8}|[A-Z]{2}\d{7}|\d{9})\b'),
+        # Kentucky DL: letter + 8 digits
+        'Kentucky DL': re.compile(r'\b[A-Z]\d{8}\b'),
+        # Louisiana DL: 9 digits
+        'Louisiana DL': re.compile(r'\b\d{9}\b'),
+        # Maine DL: 7 digits or 7 digits + letter
+        'Maine DL': re.compile(r'\b\d{7}[A-Z]?\b'),
+        # Maryland DL: letter + 12 digits
         'Maryland DL': re.compile(r'\b[A-Z]\d{12}\b'),
-
-        # Massachusetts: L + 8 digits | 9 digits  — example: S99988880
+        # Massachusetts DL: letter + 8 digits or 9 digits
         'Massachusetts DL': re.compile(r'\b(?:[A-Z]\d{8}|\d{9})\b'),
-
-        # Michigan: L + 10-12 digits  — example: P800000224322
-        'Michigan DL': re.compile(r'\b[A-Z]\d{10,12}\b'),
-
-        # Minnesota: L + 12 digits  — example: A123456789012
+        # Michigan DL: letter + 12 digits
+        'Michigan DL': re.compile(r'\b[A-Z]\d{12}\b'),
+        # Minnesota DL: letter + 12 digits
         'Minnesota DL': re.compile(r'\b[A-Z]\d{12}\b'),
-
-        # Mississippi: 9 digits  — example: 123456789
+        # Mississippi DL: 9 digits
         'Mississippi DL': re.compile(r'\b\d{9}\b'),
-
-        # Missouri: L + 5-9 digits | L + 6 digits + R |
-        #           8 digits + 2 letters | 9 digits + L | 9 digits
-        'Missouri DL': re.compile(
-            r'\b(?:[A-Z]\d{5,9}|[A-Z]\d{6}R|\d{8}[A-Z]{2}|\d{9}[A-Z]|\d{9})\b'
-        ),
-
-        # Montana: L + 8 digits | 9 digits | 13-14 digits
-        'Montana DL': re.compile(
-            r'\b(?:[A-Z]\d{8}|\d{9}|\d{13,14})\b'
-        ),
-
-        # Nebraska: L + 8 digits | 1-7 digits  — example: A20600249
-        'Nebraska DL': re.compile(r'\b(?:[A-Z]\d{8}|\d{1,7})\b'),
-
-        # Nevada: 9-12 digits | X + 8 digits  — example: 0002102201
-        'Nevada DL': re.compile(r'\b(?:\d{9,12}|X\d{8})\b'),
-
-        # New Hampshire: 2 digits + 3 letters + 5 digits
-        # (month-of-birth + name letters + year/day + dup code)
+        # Missouri DL: letter + 5-9 digits or 9 digits
+        'Missouri DL': re.compile(r'\b(?:[A-Z]\d{5,9}|\d{9})\b'),
+        # Montana DL: 13 digits or 9 digits
+        'Montana DL': re.compile(r'\b(?:\d{13}|\d{9})\b'),
+        # Nebraska DL: letter + 8 digits
+        'Nebraska DL': re.compile(r'\b[A-Z]\d{8}\b'),
+        # Nevada DL: 10 digits or 12 digits
+        'Nevada DL': re.compile(r'\b(?:\d{10}|\d{12})\b'),
+        # New Hampshire DL: 2 digits + 3 letters + 5 digits
         'New Hampshire DL': re.compile(r'\b\d{2}[A-Z]{3}\d{5}\b'),
-
-        # New Jersey: L + 14 digits (L####-#####-#####)
-        'New Jersey DL': re.compile(r'\b[A-Z]\d{4}-?\d{5}-?\d{5}\b'),
-
-        # New Mexico: 8-9 digits  — example: 013696424
-        'New Mexico DL': re.compile(r'\b\d{8,9}\b'),
-
-        # New York: 9 digits (### ### ###)  — example: 123 456 789
-        'New York DL': re.compile(r'\b\d{3}\s?\d{3}\s?\d{3}\b'),
-
-        # North Carolina: 1-12 digits  — example: 801330315912
+        # New Jersey DL: letter + 14 digits
+        'New Jersey DL': re.compile(r'\b[A-Z]\d{14}\b'),
+        # New Mexico DL: 9 digits
+        'New Mexico DL': re.compile(r'\b\d{9}\b'),
+        # New York DL: 9 digits
+        'New York DL': re.compile(r'\b\d{9}\b'),
+        # North Carolina DL: 1-12 digits
         'North Carolina DL': re.compile(r'\b\d{1,12}\b'),
-
-        # North Dakota: LLL + 6 digits | 9 digits
-        # first 3 letters of surname + DOB-based digits
+        # North Dakota DL: 3 letters + 6 digits or 9 digits
         'North Dakota DL': re.compile(r'\b(?:[A-Z]{3}\d{6}|\d{9})\b'),
-
-        # Ohio: LL + 6 digits | L + 4-8 digits | 8 digits — example: TL545796
-        'Ohio DL': re.compile(
-            r'\b(?:[A-Z]{2}\d{6}|[A-Z]\d{4,8}|\d{8})\b'
-        ),
-
-        # Oklahoma: L + 9 digits | 9 digits  — example: B000062835
+        # Ohio DL: 2 letters + 6 digits
+        'Ohio DL': re.compile(r'\b[A-Z]{2}\d{6}\b'),
+        # Oklahoma DL: letter + 9 digits or 9 digits
         'Oklahoma DL': re.compile(r'\b(?:[A-Z]\d{9}|\d{9})\b'),
-
-        # Oregon: 1-9 digits (typically 7)  — example: 6110033
+        # Oregon DL: 1-9 digits
         'Oregon DL': re.compile(r'\b\d{1,9}\b'),
-
-        # Pennsylvania: 8 digits (## ### ###)  — example: 17 600 550
-        'Pennsylvania DL': re.compile(r'\b\d{2}\s?\d{3}\s?\d{3}\b'),
-
-        # Rhode Island: 7 digits | V + 6 digits
-        'Rhode Island DL': re.compile(r'\b(?:\d{7}|V\d{6})\b'),
-
-        # South Carolina: 5-11 digits  — example: 123456789
+        # Pennsylvania DL: 8 digits
+        'Pennsylvania DL': re.compile(r'\b\d{8}\b'),
+        # Rhode Island DL: 7 digits or letter + 6 digits
+        'Rhode Island DL': re.compile(r'\b(?:\d{7}|[A-Z]\d{6})\b'),
+        # South Carolina DL: 5-11 digits
         'South Carolina DL': re.compile(r'\b\d{5,11}\b'),
-
-        # South Dakota: 6-10 digits | 12 digits
-        'South Dakota DL': re.compile(r'\b(?:\d{6,10}|\d{12})\b'),
-
-        # Tennessee: 7-9 digits  — example: 12345678
+        # South Dakota DL: 8-10 digits or 12 digits
+        'South Dakota DL': re.compile(r'\b(?:\d{8,10}|\d{12})\b'),
+        # Tennessee DL: 7-9 digits
         'Tennessee DL': re.compile(r'\b\d{7,9}\b'),
-
-        # Texas: 8 digits  — example: 17600550
+        # Texas DL: 8 digits
         'Texas DL': re.compile(r'\b\d{8}\b'),
-
-        # Utah: 4-10 digits  — example: 123456789
+        # Utah DL: 4-10 digits
         'Utah DL': re.compile(r'\b\d{4,10}\b'),
-
-        # Vermont: 8 digits | 7 digits + L  — example: 17600550 or 8205059A
+        # Vermont DL: 8 digits or 7 digits + letter
         'Vermont DL': re.compile(r'\b(?:\d{8}|\d{7}[A-Z])\b'),
-
-        # Virginia: L + 8-11 digits | 9 digits
+        # Virginia DL: letter + 8-11 digits or 9 digits
         'Virginia DL': re.compile(r'\b(?:[A-Z]\d{8,11}|\d{9})\b'),
-
-        # Washington: 1-7 letters + alphanumeric/asterisk mix, 12 chars total
+        # Washington DL: 1-7 letters + alphanumeric (12 chars)
         'Washington DL': re.compile(r'\b[A-Z]{1,7}[A-Z0-9*]{5,11}\b'),
-
-        # West Virginia: 7 digits | 1-2 letters + 5-6 digits
-        'West Virginia DL': re.compile(
-            r'\b(?:\d{7}|[A-Z]{1,2}\d{5,6})\b'
-        ),
-
-        # Wisconsin: L + 13 digits (L###-####-####-##)  — example: M123-4567-8901-23
-        'Wisconsin DL': re.compile(r'\b[A-Z]\d{3}-?\d{4}-?\d{4}-?\d{2}\b'),
-
-        # Wyoming: 9-10 digits (######-### or ######-####)  — example: 050070-003
-        'Wyoming DL': re.compile(r'\b\d{6}-?\d{3,4}\b'),
+        # West Virginia DL: 7 digits or letter + 6 digits
+        'West Virginia DL': re.compile(r'\b(?:\d{7}|[A-Z]\d{6})\b'),
+        # Wisconsin DL: letter + 13 digits
+        'Wisconsin DL': re.compile(r'\b[A-Z]\d{13}\b'),
+        # Wyoming DL: 9-10 digits
+        'Wyoming DL': re.compile(r'\b\d{9,10}\b'),
     },
 
     # =========================================================================
@@ -526,156 +420,83 @@ PATTERNS = {
     # NORTH AMERICA — Canada
     # =========================================================================
     'North America - Canada': {
-        # -----------------------------------------------------------------
-        # FEDERAL IDENTIFIERS
-        # -----------------------------------------------------------------
-
-        # Social Insurance Number: XXX-XXX-XXX (Luhn-validated at scan time)
+        # Social Insurance Number: XXX-XXX-XXX
         'Canada SIN': re.compile(r'\b\d{3}[-\s]?\d{3}[-\s]?\d{3}\b'),
-
-        # Business Number: 9 digits + 2 letters + 4 digits (e.g. 123456789RC0001)
+        # Business Number: 9 digits + 2 letters + 4 digits
         'Canada BN': re.compile(r'\b\d{9}[A-Z]{2}\d{4}\b'),
-
-        # Canadian Passport: 2 letters + 6 digits (e.g. GA123456)
+        # Passport: 2 letters + 6 digits
         'Canada Passport': re.compile(r'\b[A-Z]{2}\d{6}\b'),
-
-        # Permanent Resident Card Number: 2 letters + 7-10 digits
-        # e.g. PA0123456 (9 chars) or RA0302123456 (12 chars)
-        'Canada PR Card': re.compile(r'\b[A-Z]{2}\d{7,10}\b'),
-
-        # NEXUS Card (PASS ID): 9 digits
-        # Typically starts with 10, 13, 14, 15, 16, 50, 70, 80, 95, 98, or 99
-        'Canada NEXUS': re.compile(r'\b\d{9}\b'),
-
         # Bank transit/institution code: XXXXX-XXX
         'Canada Bank Code': re.compile(r'\b\d{5}-\d{3}\b'),
-
-        # -----------------------------------------------------------------
-        # PROVINCIAL DRIVER'S LICENCES
-        # -----------------------------------------------------------------
-
-        # Ontario: L + 4 digits + 5 digits + 5 digits (L####-#####-#####)
-        # Example: A1234-56789-01234
-        'Ontario DL': re.compile(r'\b[A-Z]\d{4}-?\d{5}-?\d{5}\b'),
-
-        # Quebec: L + 12 digits  — example: M123456789012
-        'Quebec DL': re.compile(r'\b[A-Z]\d{12}\b'),
-
-        # British Columbia: 7 digits  — example: 1234567
+        # Permanent Resident Card: 2 letters + 7-10 digits
+        'Canada PR Card': re.compile(r'\b[A-Z]{2}\d{7,10}\b'),
+        # NEXUS Card: 9 digits
+        'Canada NEXUS': re.compile(r'\b\d{9}\b'),
+        # Ontario DL: letter + 4 digits + dash + 5 digits + dash + 5 digits
+        'Ontario DL': re.compile(r'\b[A-Z]\d{4}-\d{5}-\d{5}\b'),
+        # Ontario Health (OHIP): 10 digits + 2-letter version code
+        'Ontario HC': re.compile(r'\b\d{10}(?:\s?[A-Z]{2})?\b'),
+        # Quebec DL: letter + 4 digits + dash + 6 digits + dash + 2 digits
+        'Quebec DL': re.compile(r'\b[A-Z]\d{4}-\d{6}-\d{2}\b'),
+        # Quebec Health (RAMQ): 4 letters + 8 digits
+        'Quebec HC': re.compile(r'\b[A-Z]{4}\d{8}\b'),
+        # British Columbia DL: 7 digits
         'British Columbia DL': re.compile(r'\b\d{7}\b'),
-
-        # Alberta: 6 digits-3 digits | 5-9 digits  — example: 123456-789
-        'Alberta DL': re.compile(r'\b(?:\d{6}-\d{3}|\d{5,9})\b'),
-
-        # Saskatchewan: 8 digits  — example: 12345678
+        # BC Health (MSP): 10 digits starting with 9
+        'BC HC': re.compile(r'\b9\d{9}\b'),
+        # Alberta DL: 6-9 digits
+        'Alberta DL': re.compile(r'\b\d{6,9}\b'),
+        # Alberta Health (AHCIP): 9 digits
+        'Alberta HC': re.compile(r'\b\d{9}\b'),
+        # Saskatchewan DL: 8 digits
         'Saskatchewan DL': re.compile(r'\b\d{8}\b'),
-
-        # Manitoba: encoded name+DOB — pattern LL-LL-LL-LNNNLL
-        # Example: AB-CD-EF-G123HJ
-        'Manitoba DL': re.compile(
-            r'\b[A-Z]{2}-?[A-Z]{2}-?[A-Z]{2}-?[A-Z]\d{3}[A-Z]{2}\b'
-        ),
-
-        # New Brunswick: 5-7 digits  — example: 1234567
-        'New Brunswick DL': re.compile(r'\b\d{5,7}\b'),
-
-        # Nova Scotia: 5 letters + 9 digits (LLLLL-NNN-NNN-NNN)
-        # First 5 letters of surname + encoded DOB
-        # Example: SMITH-301-106-789
-        'Nova Scotia DL': re.compile(
-            r'\b[A-Z]{5}-?\d{3}-?\d{3}-?\d{3}\b'
-        ),
-
-        # Prince Edward Island: 5-6 digits  — example: 12345
-        'PEI DL': re.compile(r'\b\d{5,6}\b'),
-
-        # Newfoundland & Labrador: L + 9 digits  — example: A123456789
-        'Newfoundland DL': re.compile(r'\b[A-Z]\d{9}\b'),
-
-        # Yukon: 1-6 digits  — example: 123456
-        'Yukon DL': re.compile(r'\b\d{1,6}\b'),
-
-        # Northwest Territories: 6 digits  — example: 123456
-        'NWT DL': re.compile(r'\b\d{6}\b'),
-
-        # Nunavut: 6 digits (similar to NWT)  — example: 123456
-        'Nunavut DL': re.compile(r'\b\d{6}\b'),
-
-        # -----------------------------------------------------------------
-        # PROVINCIAL HEALTH CARDS
-        # -----------------------------------------------------------------
-
-        # Ontario OHIP: 10 digits + optional 2-char version code
-        # Example: 1234567890 or 1234567890 AB
-        'Ontario OHIP': re.compile(r'\b\d{10}(?:\s?[A-Z]{2})?\b'),
-
-        # Quebec RAMQ: 4 letters (surname + first initial) + 8 digits
-        # Example: SMIJ12345678
-        'Quebec RAMQ': re.compile(r'\b[A-Z]{4}\d{8}\b'),
-
-        # British Columbia MSP: 10 digits starting with 9
-        # Example: 9123456789
-        'BC MSP': re.compile(r'\b9\d{9}\b'),
-
-        # Alberta AHCIP (PHN): 9 digits
-        # Example: 123456789
-        'Alberta AHCIP': re.compile(r'\b\d{9}\b'),
-
-        # Saskatchewan Health: 9 digits  — example: 123456789
+        # Saskatchewan Health: 9 digits
         'Saskatchewan HC': re.compile(r'\b\d{9}\b'),
-
-        # Manitoba PHIN: 9 digits  — example: 123456789
-        'Manitoba PHIN': re.compile(r'\b\d{9}\b'),
-
-        # New Brunswick Medicare: 9 digits  — example: 123456789
+        # Manitoba DL: 6 letters + 6 digits (Soundex-based)
+        'Manitoba DL': re.compile(r'\b[A-Z]{6}\d{6}\b'),
+        # Manitoba Health (PHIN): 9 digits
+        'Manitoba HC': re.compile(r'\b\d{9}\b'),
+        # New Brunswick DL: 5-7 digits
+        'New Brunswick DL': re.compile(r'\b\d{5,7}\b'),
+        # New Brunswick Health: 9 digits
         'New Brunswick HC': re.compile(r'\b\d{9}\b'),
-
-        # Nova Scotia MSI: 10 digits  — example: 1234567890
-        'Nova Scotia MSI': re.compile(r'\b\d{10}\b'),
-
-        # PEI Health Card: 8 digits  — example: 12345678
+        # Nova Scotia DL: 5 letters + 9 digits (Soundex-based)
+        'Nova Scotia DL': re.compile(r'\b[A-Z]{5}\d{9}\b'),
+        # Nova Scotia Health (MSI): 10 digits
+        'Nova Scotia HC': re.compile(r'\b\d{10}\b'),
+        # PEI DL: 1-6 digits
+        'PEI DL': re.compile(r'\b\d{1,6}\b'),
+        # PEI Health: 8 digits
         'PEI HC': re.compile(r'\b\d{8}\b'),
-
-        # Newfoundland MCP: 12 digits  — example: 123456789012
-        'Newfoundland MCP': re.compile(r'\b\d{12}\b'),
+        # Newfoundland DL: letter + 9-10 digits
+        'Newfoundland DL': re.compile(r'\b[A-Z]\d{9,10}\b'),
+        # Newfoundland Health (MCP): 12 digits
+        'Newfoundland HC': re.compile(r'\b\d{12}\b'),
+        # Yukon DL: 6 digits
+        'Yukon DL': re.compile(r'\b\d{6}\b'),
+        # NWT DL: 6 digits
+        'NWT DL': re.compile(r'\b\d{6}\b'),
+        # Nunavut DL: 6 digits
+        'Nunavut DL': re.compile(r'\b\d{6}\b'),
     },
 
     # =========================================================================
     # NORTH AMERICA — Mexico
     # =========================================================================
     'North America - Mexico': {
-        # CURP: 4 letters + 6 digits + H/M + 5 letters + alphanum + digit
-        # Example: GARC850101HDFRRL09
-        'Mexico CURP': re.compile(
-            r'\b[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d\b'
-        ),
-
-        # RFC (tax ID): 3-4 letters/& + 6 digits + 3 alphanumeric
-        # Persona moral (12): ABC060101AB1  |  Persona fisica (13): GARC850101AB1
-        'Mexico RFC': re.compile(r'\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b'),
-
-        # INE/IFE Voter Credential — Clave de Elector: 18 characters
-        # 6 consonants + YYMMDD + state-code(2) + H/M + 3 digits
-        # Example: GRCRRL850101H001
-        'Mexico Clave Elector': re.compile(
-            r'\b[A-Z]{6}\d{2}[01]\d[0-3]\d[0-3]\d[HM]\d{3}\b'
-        ),
-
-        # INE/IFE — CIC (Credential Identification Code): 9 digits
-        # Example: 123456789
+        # CURP: 18 alphanumeric
+        'Mexico CURP': re.compile(r'\b[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d\b'),
+        # RFC: 12-13 alphanumeric
+        'Mexico RFC': re.compile(r'\b[A-Z&]{3,4}\d{6}[A-Z0-9]{3}\b'),
+        # Clave de Elector (INE voter key): 18 chars
+        'Mexico Clave Elector': re.compile(r'\b[A-Z]{6}\d{8}[HM]\d{3}\b'),
+        # INE CIC: 9 digits
         'Mexico INE CIC': re.compile(r'\b\d{9}\b'),
-
-        # INE/IFE — OCR code: 13 digits (unique per physical card)
-        # Example: 1234567890123
+        # INE OCR: 13 digits
         'Mexico INE OCR': re.compile(r'\b\d{13}\b'),
-
-        # Mexican Passport: 1 letter + 8 digits (currently G or N series)
-        # Example: G12345678
+        # Mexican Passport: letter + 8 digits
         'Mexico Passport': re.compile(r'\b[A-Z]\d{8}\b'),
-
-        # IMSS NSS (Numero de Seguro Social): 11 digits
-        # subdelegation(2) + reg-year(2) + birth-year(2) + consecutive(4) + check(1)
-        # Example: 12345678901
+        # NSS/IMSS (social security): 11 digits
         'Mexico NSS': re.compile(r'\b\d{11}\b'),
     },
 
@@ -804,69 +625,396 @@ PATTERNS = {
     # ASIA-PACIFIC — India
     # =========================================================================
     'Asia-Pacific - India': {
-        # PAN: XXXXX9999X (5 letters, 4 digits, 1 letter)
+        # PAN: ABCDE1234F — 5 upper letters, 4 digits, 1 upper letter.
+        # 4th char encodes holder type (P=individual, C=company, etc.).
+        # Example (fake): BNZAA2318J
         'India PAN': re.compile(r'\b[A-Z]{5}\d{4}[A-Z]\b'),
 
-        # Aadhaar Number: 12 digits with optional spaces/hyphens
-        'India Aadhaar': re.compile(r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'),
+        # Aadhaar: 12 digits, first digit 2-9 (0/1 reserved), Verhoeff check digit.
+        # Commonly formatted as XXXX XXXX XXXX or XXXX-XXXX-XXXX.
+        # Example (fake): 2345 6789 0123
+        'India Aadhaar': re.compile(r'\b[2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4}\b'),
 
-        # Passport: letter + 7 digits
-        'India Passport': re.compile(r'\b[A-Z]\d{7}\b'),
+        # Passport: 1 uppercase letter + 7 digits (2nd digit 1-9, last digit 1-9).
+        # Common series letters: J, K, L, M, N, P, R, S, T, U.
+        # Example (fake): K1234567
+        'India Passport': re.compile(r'\b[A-Z][1-9]\d{5}[1-9]\b'),
 
-        # Driver's license: 2 letters + 13 digits
-        'India DL': re.compile(r'\b[A-Z]{2}\d{13}\b'),
+        # Driving Licence: SS-RR-YYYY-NNNNNNN or SSRR YYYYNNNNNNN.
+        # SS=state code (2 letters), RR=RTO code (2 digits),
+        # YYYY=year of issue, NNNNNNN=7-digit serial.
+        # Example (fake): HR-06-1985-0034761
+        'India DL': re.compile(
+            r'\b[A-Z]{2}[-\s]?\d{2}[-\s]?(?:19|20)\d{2}[-\s]?\d{7}\b'
+        ),
+
+        # Voter ID (EPIC): 3 uppercase letters + 7 digits.
+        # Issued by Election Commission of India.
+        # Example (fake): ABC1234567
+        'India Voter ID': re.compile(r'\b[A-Z]{3}\d{7}\b'),
+
+        # Ration Card: 10-digit standardised format (One Nation One Ration Card).
+        # First 2 digits = state code, remaining 8 = running number.
+        # Example (fake): 2712345678
+        'India Ration Card': re.compile(r'\b\d{2}[\s-]?\d{8}\b'),
     },
 
     # =========================================================================
-    # ASIA-PACIFIC — Singapore
+    # ASIA-PACIFIC — China (incl. Hong Kong, Macau, Taiwan)
     # =========================================================================
-    'Asia-Pacific - Singapore': {
-        # NRIC: [STFGM]XXXXXXX[A-Z]
-        'Singapore NIRC': re.compile(r'\b[STFGM]\d{7}[A-Z]\b'),
-    },
+    'Asia-Pacific - China': {
+        # Resident Identity Card (居民身份证): 18 chars.
+        # Format: RRRRRR-YYYYMMDD-SSS-C where C may be 0-9 or X.
+        # 6-digit region code, 8-digit DOB, 3-digit sequence, 1 check digit.
+        # Check digit via ISO 7064 MOD 11-2.
+        # Example (fake): 110101199003074518
+        'China Resident ID': re.compile(
+            r'\b\d{6}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])'
+            r'(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b'
+        ),
 
-    # =========================================================================
-    # ASIA-PACIFIC — Australia
-    # =========================================================================
-    'Asia-Pacific - Australia': {
-        # Tax File Number: 8 or 9 digits
-        'Australia TFN': re.compile(r'\b\d{8,9}\b'),
+        # China Passport: E/G/D prefix + 8 digits, or EA-EZ series (letter + 7 digits).
+        # E = e-passport (since 2012), G = older ordinary, D = diplomatic.
+        # Example (fake): E12345678, G23456789
+        'China Passport': re.compile(r'\b[EGD][A-Z]?\d{7,8}\b'),
 
-        # Medicare: 11 digits
-        'Australia Medicare': re.compile(r'\b\d{11}\b'),
+        # Hong Kong Identity Card (HKID): 1-2 letters + 6 digits + (check digit).
+        # Check digit is 0-9 or A, usually in parentheses.
+        # Example (fake): A123456(7), AB987654(A)
+        'Hong Kong ID': re.compile(
+            r'\b[A-Z]{1,2}\d{6}\s?\(?[0-9A]\)?\b'
+        ),
 
-        # Passport: letter + 7 digits
-        'Australia Passport': re.compile(r'\b[A-Z]\d{7}\b'),
+        # Macau BIR (Resident Identity Card): 7 digits + check digit in parens.
+        # First digit: 1 (post-1992), 5 (Portuguese BI), 7 (PSP card).
+        # Example (fake): 1234567(8)
+        'Macau ID': re.compile(
+            r'\b[1578]\d{6}\s?\(?[0-9]\)?\b'
+        ),
+
+        # Taiwan National ID: 1 letter (region) + 9 digits.
+        # 2nd digit: 1=male, 2=female (citizen); 8=male, 9=female (new UI).
+        # Check digit via weighted mod-10 algorithm.
+        # Example (fake): A123456789
+        'Taiwan National ID': re.compile(r'\b[A-Z][12489]\d{8}\b'),
     },
 
     # =========================================================================
     # ASIA-PACIFIC — Japan
     # =========================================================================
     'Asia-Pacific - Japan': {
-        # My Number (Individual Number): 12 digits
+        # My Number (個人番号): 12 digits, last digit is check digit.
+        # Check: mod-11 with weights (2,3,4,5,6,7,2,3,4,5,6) from right.
+        # Example (fake): 123456789012
         'Japan My Number': re.compile(r'\b\d{12}\b'),
 
-        # Passport: M/S/R/C + 7 digits
-        'Japan Passport': re.compile(r'\b[MSRC]\d{7}\b'),
+        # Passport: 2 uppercase letters + 7 digits.
+        # Series: TZ, MZ, TK, etc.
+        # Example (fake): TZ1234567
+        'Japan Passport': re.compile(r'\b[A-Z]{2}\d{7}\b'),
+
+        # Driving Licence: 12 consecutive digits.
+        # Digits 1-2: prefecture code, 3-4: year of first qualification,
+        # 5-10: serial, 11: check digit, 12: reissue count.
+        # Example (fake): 432019654321
+        'Japan DL': re.compile(r'\b\d{12}\b'),
+
+        # Juminhyo Code (Resident Registration Network code): 11 digits.
+        # Used in Basic Resident Registry.
+        # Example (fake): 12345678901
+        'Japan Juminhyo Code': re.compile(r'\b\d{11}\b'),
+
+        # Health Insurance Insurer Number (保険者番号): 6 or 8 digits.
+        # 8-digit: 2 legal-class + 2 prefecture + 3 insurer + 1 check.
+        # Example (fake): 06130012
+        'Japan Health Insurance': re.compile(r'\b\d{8}\b'),
+
+        # Residence Card (Zairyu Card): 2 letters + 8 digits + 2 letters.
+        # Example (fake): AB12345678CD
+        'Japan Residence Card': re.compile(r'\b[A-Z]{2}\d{8}[A-Z]{2}\b'),
     },
 
     # =========================================================================
     # ASIA-PACIFIC — South Korea
     # =========================================================================
     'Asia-Pacific - South Korea': {
-        # Resident Registration Number: XXXXXX-XXXXXXX
-        'South Korea RRN': re.compile(r'\b\d{6}[-\s]?\d{7}\b'),
+        # Resident Registration Number (RRN): YYMMDD-SBBBBAC.
+        # First 6 = DOB, 7th = gender/century (1-4,9,0), then area/serial/check.
+        # Check digit via weighted mod formula.
+        # Example (fake): 850102-1234567
+        'South Korea RRN': re.compile(
+            r'\b\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])[-\s]?[1-8]\d{6}\b'
+        ),
+
+        # Passport: M (multi-entry) or S (single-entry) or R/O/D + 8 digits.
+        # Example (fake): M12345678
+        'South Korea Passport': re.compile(r'\b[MSROD]\d{8}\b'),
+
+        # Driving Licence: AA-BB-CCCCCC-DE (12 digits with hyphens).
+        # AA=region, BB=year, CCCCCC=serial, D=check, E=reissue count.
+        # Example (fake): 11-22-333333-44
+        'South Korea DL': re.compile(
+            r'\b\d{2}[-\s]?\d{2}[-\s]?\d{6}[-\s]?\d{2}\b'
+        ),
     },
 
     # =========================================================================
-    # ASIA-PACIFIC — China
+    # ASIA-PACIFIC — Singapore
     # =========================================================================
-    'Asia-Pacific - China': {
-        # Resident Identity Card: 18 digits (last may be X)
-        'China Resident ID': re.compile(r'\b\d{17}[\dX]\b'),
+    'Asia-Pacific - Singapore': {
+        # NRIC: [S|T]NNNNNNN[A-Z] (citizens/PRs).
+        # S = born before 2000, T = born 2000+. Check letter via mod-11.
+        # Example (fake): S1234567D
+        'Singapore NRIC': re.compile(r'\b[ST]\d{7}[A-Z]\b'),
 
-        # Passport: E or G + 8 digits
-        'China Passport': re.compile(r'\b[EG]\d{8}\b'),
+        # FIN (Foreign Identification Number): [F|G|M]NNNNNNN[A-Z].
+        # F = pre-2000, G = 2000-2021, M = 2022+.
+        # Example (fake): G1234567X
+        'Singapore FIN': re.compile(r'\b[FGM]\d{7}[A-Z]\b'),
+
+        # Passport: 1 letter (typically E for biometric) + 7 digits + 1 letter.
+        # Example (fake): E1234567A
+        'Singapore Passport': re.compile(r'\b[A-Z]\d{7}[A-Z]\b'),
+
+        # Driving Licence: same format as NRIC/FIN (NRIC is used as DL number).
+        # Example (fake): S1234567D
+        'Singapore DL': re.compile(r'\b[STFGM]\d{7}[A-Z]\b'),
+    },
+
+    # =========================================================================
+    # ASIA-PACIFIC — Australia
+    # =========================================================================
+    'Asia-Pacific - Australia': {
+        # Tax File Number (TFN): 8 or 9 digits.
+        # 9-digit: 8-digit identifier + 1 check digit.
+        # Check: weights [1,4,3,7,5,8,6,9,10], sum mod 11 == 0.
+        # Example (fake): 123456782
+        'Australia TFN': re.compile(r'\b\d{3}[\s]?\d{3}[\s]?\d{2,3}\b'),
+
+        # Medicare: 10-11 digits, first digit 2-6.
+        # Digits 1-8: card ID, 9: check digit (weighted mod-10), 10: issue, 11: IRN.
+        # Example (fake): 2123 45670 1 1
+        'Australia Medicare': re.compile(r'\b[2-6]\d{3}[\s]?\d{5}[\s]?\d[\s]?\d?\b'),
+
+        # Passport: 1-2 letters + 7 digits.
+        # Example (fake): PA1234567
+        'Australia Passport': re.compile(r'\b[A-Z]{1,2}\d{7}\b'),
+
+        # Driving Licence — formats vary by state/territory
+        # NSW: 8 digits.                   Example: 12345678
+        'Australia DL NSW': re.compile(r'\b\d{8}\b'),
+        # VIC: 8-10 digits.                Example: 123456789
+        'Australia DL VIC': re.compile(r'\b\d{8,10}\b'),
+        # QLD: 8-9 digits.                 Example: 12345678
+        'Australia DL QLD': re.compile(r'\b\d{8,9}\b'),
+        # WA: 7 digits.                    Example: 1234567
+        'Australia DL WA': re.compile(r'\b\d{7}\b'),
+        # SA: 1 letter + 5-6 digits or 6 digits.  Example: T52682
+        'Australia DL SA': re.compile(r'\b[A-Z]?\d{5,6}\b'),
+        # TAS: 1 letter + 5-6 digits.      Example: A12345
+        'Australia DL TAS': re.compile(r'\b[A-Z]\d{5,6}\b'),
+        # ACT: 6-10 digits.                Example: 12345678
+        'Australia DL ACT': re.compile(r'\b\d{6,10}\b'),
+        # NT: 5-7 digits.                  Example: 123456
+        'Australia DL NT': re.compile(r'\b\d{5,7}\b'),
+    },
+
+    # =========================================================================
+    # ASIA-PACIFIC — New Zealand
+    # =========================================================================
+    'Asia-Pacific - New Zealand': {
+        # IRD Number: 8 or 9 digits (8-digit numbers get a leading zero).
+        # Check digit via mod-11 with weights [3,2,7,6,5,4,3,2].
+        # Example (fake): 12345678, 012345678
+        'New Zealand IRD': re.compile(r'\b\d{8,9}\b'),
+
+        # Passport: 2 letters + 6 digits (e.g., RA series since 2021).
+        # Example (fake): LA123456
+        'New Zealand Passport': re.compile(r'\b[A-Z]{2}\d{6}\b'),
+
+        # NHI (National Health Index): 3 letters (excl. I, O) + 4 digits.
+        # Check digit via weighted mod-11 on letter ordinals.
+        # Example (fake): ZAC5361
+        'New Zealand NHI': re.compile(r'\b[A-HJ-NP-Z]{3}\d{4}\b'),
+
+        # Driving Licence: 2 letters + 6 digits.
+        # Example (fake): BQ739482
+        'New Zealand DL': re.compile(r'\b[A-Z]{2}\d{6}\b'),
+    },
+
+    # =========================================================================
+    # ASIA-PACIFIC — Philippines
+    # =========================================================================
+    'Asia-Pacific - Philippines': {
+        # PhilSys National ID (PSN): 12-digit randomly generated number.
+        # Example (fake): 1234-5678-9012
+        'Philippines PhilSys': re.compile(r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'),
+
+        # TIN: 9 digits (+ optional 3-digit branch code = 12 digits).
+        # Format: ###-###-### or ###-###-###-###.
+        # 1st digit: 0=corp, 1-9=individual.
+        # Example (fake): 123-456-789, 123-456-789-001
+        'Philippines TIN': re.compile(
+            r'\b\d{3}-?\d{3}-?\d{3}(?:-?\d{3})?\b'
+        ),
+
+        # SSS: 10 digits, format ##-#######-#.
+        # Example (fake): 34-1234567-8
+        'Philippines SSS': re.compile(r'\b\d{2}-?\d{7}-?\d\b'),
+
+        # PhilHealth: 12 digits, format ##-#########-# (2-9-1).
+        # Last digit is mod-11 check digit.
+        # Example (fake): 12-123456789-0
+        'Philippines PhilHealth': re.compile(r'\b\d{2}-?\d{9}-?\d\b'),
+
+        # Passport: current e-passport (post-Aug 2016): L#######L.
+        # Older: LL###### or LL#######.
+        # Example (fake): P1234567A
+        'Philippines Passport': re.compile(
+            r'\b[A-Z]{1,2}\d{6,7}[A-Z]?\b'
+        ),
+
+        # UMID (CRN): 12 digits, format ####-#######-#.
+        # Example (fake): 0012-3456789-0
+        'Philippines UMID': re.compile(r'\b\d{4}-?\d{7}-?\d\b'),
+    },
+
+    # =========================================================================
+    # ASIA-PACIFIC — Thailand
+    # =========================================================================
+    'Asia-Pacific - Thailand': {
+        # National ID: 13 digits, format X-XXXX-XXXXX-XX-X.
+        # 1st digit: citizen category. Last digit: check digit.
+        # Example (fake): 1-1234-56789-01-2
+        'Thailand National ID': re.compile(
+            r'\b\d[-\s]?\d{4}[-\s]?\d{5}[-\s]?\d{2}[-\s]?\d\b'
+        ),
+
+        # Passport: 2 letters + 7 digits.
+        # Example (fake): AA1234567
+        'Thailand Passport': re.compile(r'\b[A-Z]{2}\d{7}\b'),
+
+        # Driving Licence: for Thai citizens, same as 13-digit National ID.
+        # Example (fake): 1123456789012
+        'Thailand DL': re.compile(r'\b\d{13}\b'),
+
+        # Tax ID: 13 digits (same as National ID for individuals).
+        # Example (fake): 1234567890123
+        'Thailand Tax ID': re.compile(r'\b\d{13}\b'),
+    },
+
+    # =========================================================================
+    # ASIA-PACIFIC — Malaysia
+    # =========================================================================
+    'Asia-Pacific - Malaysia': {
+        # MyKad (IC Number): YYMMDD-PB-####, 12 digits with or without hyphens.
+        # PB = place-of-birth code (2 digits), last digit odd=male/even=female.
+        # Example (fake): 850916-14-5023
+        'Malaysia MyKad': re.compile(
+            r'\b\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])[-\s]?'
+            r'\d{2}[-\s]?\d{4}\b'
+        ),
+
+        # Passport: 1 letter (A=Peninsula, H=Sabah, K=Sarawak) + 8 digits.
+        # Example (fake): A12345678
+        'Malaysia Passport': re.compile(r'\b[A-Z]\d{8}\b'),
+    },
+
+    # =========================================================================
+    # ASIA-PACIFIC — Indonesia
+    # =========================================================================
+    'Asia-Pacific - Indonesia': {
+        # NIK (Nomor Induk Kependudukan): 16 digits.
+        # Format: 6 region + 6 DOB (females +40 on day) + 4 serial.
+        # Example (fake): 3204012345670001
+        'Indonesia NIK': re.compile(r'\b\d{16}\b'),
+
+        # NPWP (Tax): old 15-digit format XX.XXX.XXX.X-XXX.XXX.
+        # Example (fake): 01.234.567.8-123.456
+        'Indonesia NPWP': re.compile(
+            r'\b\d{2}\.?\d{3}\.?\d{3}\.?\d[-.]?\d{3}\.?\d{3}\b'
+        ),
+
+        # Passport: 1-2 letters + 6-7 digits (9 chars total).
+        # Example (fake): A1234567
+        'Indonesia Passport': re.compile(r'\b[A-Z]{1,2}\d{6,7}\b'),
+    },
+
+    # =========================================================================
+    # ASIA-PACIFIC — Vietnam
+    # =========================================================================
+    'Asia-Pacific - Vietnam': {
+        # CCCD (Citizen Identification): 12 digits.
+        # Format: 3 province + 1 gender/century + 2 birth year + 6 random.
+        # Example (fake): 001099012345
+        'Vietnam CCCD': re.compile(r'\b\d{12}\b'),
+
+        # Passport: 1 letter (B/C for ordinary) + 8 digits.
+        # Example (fake): B12345678
+        'Vietnam Passport': re.compile(r'\b[A-Z]\d{8}\b'),
+
+        # Tax Code (MST): 10 digits, optionally + hyphen + 3-digit branch.
+        # Example (fake): 0123456789, 0123456789-001
+        'Vietnam Tax Code': re.compile(r'\b\d{10}(?:-\d{3})?\b'),
+    },
+
+    # =========================================================================
+    # ASIA-PACIFIC — Pakistan
+    # =========================================================================
+    'Asia-Pacific - Pakistan': {
+        # CNIC: 13 digits in 5-7-1 format (XXXXX-XXXXXXX-X).
+        # 1st digit: province (1=KP,3=Punjab,4=Sindh,5=Baloch,6=ISB,7=GB).
+        # Last digit: odd=male, even=female.
+        # Example (fake): 61101-1234567-1
+        'Pakistan CNIC': re.compile(
+            r'\b\d{5}[-\s]?\d{7}[-\s]?\d\b'
+        ),
+
+        # NICOP: same 13-digit format as CNIC (for overseas Pakistanis).
+        # Example (fake): 42201-7654321-2
+        'Pakistan NICOP': re.compile(
+            r'\b\d{5}[-\s]?\d{7}[-\s]?\d\b'
+        ),
+
+        # Passport: 2 letters + 7 digits.
+        # Example (fake): AB1234567
+        'Pakistan Passport': re.compile(r'\b[A-Z]{2}\d{7}\b'),
+    },
+
+    # =========================================================================
+    # ASIA-PACIFIC — Bangladesh
+    # =========================================================================
+    'Asia-Pacific - Bangladesh': {
+        # NID: 10 digits (smart card) or 17 digits (old with birth year prefix).
+        # 10-digit: 9 random + 1 check. 17-digit: birth year + codes + serial.
+        # Example (fake): 1234567890, 19751234567890123
+        'Bangladesh NID': re.compile(r'\b(?:\d{10}|\d{17})\b'),
+
+        # Passport: 2 letters + 7 digits (ICAO MRP format).
+        # Example (fake): AB1234567
+        'Bangladesh Passport': re.compile(r'\b[A-Z]{2}\d{7}\b'),
+
+        # TIN: 12 digits, issued by National Board of Revenue.
+        # Example (fake): 123456789012
+        'Bangladesh TIN': re.compile(r'\b\d{12}\b'),
+    },
+
+    # =========================================================================
+    # ASIA-PACIFIC — Sri Lanka
+    # =========================================================================
+    'Asia-Pacific - Sri Lanka': {
+        # NIC Old: 9 digits + V or X (e.g., 722441524V).
+        # First 2 = birth year, next 3 = day-of-year (females +500).
+        'Sri Lanka NIC Old': re.compile(r'\b\d{9}[VXvx]\b'),
+
+        # NIC New: 12 digits (since 2016).
+        # 4-digit birth year + 3-digit day + 4-digit serial + 1 check.
+        # Example (fake): 200125302976
+        'Sri Lanka NIC New': re.compile(r'\b\d{12}\b'),
+
+        # Passport: 1 letter (N/M/P series) + 7 digits.
+        # Example (fake): N1234567
+        'Sri Lanka Passport': re.compile(r'\b[A-Z]\d{7}\b'),
     },
 
     # #########################################################################

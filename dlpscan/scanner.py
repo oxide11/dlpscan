@@ -2,7 +2,7 @@ import re
 from typing import Generator, Tuple
 
 from .patterns import PATTERNS
-from .context_patterns import CONTEXT_KEYWORDS
+from .context import CONTEXT_KEYWORDS
 from .exceptions import (
     EmptyInputError,
     ShortInputError,

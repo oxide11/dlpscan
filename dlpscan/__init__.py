@@ -6,7 +6,7 @@ from .scanner import (
     scan_for_context,
 )
 from .patterns import PATTERNS
-from .context_patterns import CONTEXT_KEYWORDS
+from .context import CONTEXT_KEYWORDS
 from .exceptions import (
     RedactionError,
     EmptyInputError,
@@ -15,4 +15,4 @@ from .exceptions import (
     SubCategoryNotFoundError,
 )
 
-__version__ = '0.2.0'
+__version__ = '0.3.0'
