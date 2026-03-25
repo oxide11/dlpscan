@@ -46,12 +46,15 @@ Matching a regex alone can produce false positives (e.g., a 9-digit number could
 
 ## Coverage
 
-- **445 patterns** across **99 categories**
+- **587 patterns** across **127 categories**
 - **32 European countries** — national IDs, passports, driver's licences, tax numbers
 - **15 Asia-Pacific countries** — Aadhaar, MyKad, My Number, NRIC, and more
-- **10 Latin American countries** — CPF, CURP, RUT, cédulas
+- **10 Latin American countries** — CPF, CURP, RUT, cedulas
 - **10 Middle Eastern countries** — Emirates ID, TC Kimlik, Teudat Zehut
 - **10 African countries** — NIN, BVN, Ghana Card, Kenya ID
 - **US & Canada** — all 50 state DLs, provincial DLs, health cards, SIN/SSN
 - **Credit cards** — PAN, CVV/CVC, track data, expiry, BIN/IIN, masked PAN
-- **Secrets & tokens** — AWS, GitHub, Stripe, Slack, JWT, private keys, and more
+- **Banking** — wire transfers, securities (CUSIP/ISIN/SEDOL), MICR, loans, PCI data
+- **PII** — device IDs, geolocation, postal codes, medical/insurance, social media, biometric
+- **Classification labels** — supervisory, privileged, TOP SECRET, MNPI, HIPAA, GDPR, PCI-DSS
+- **Secrets & tokens** — AWS, GitHub, Stripe, Slack, JWT, private keys, OTP, session IDs

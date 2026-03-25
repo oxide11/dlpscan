@@ -4,13 +4,82 @@ All notable changes to dlpscan will be documented in this file.
 
 ## [0.3.0] - 2026-03-25
 
+### Scanner Hardening & Refactoring
+
+- **Fixed `redact_sensitive_info_with_patterns`**: Now uses `re.sub()` instead of
+  `str.replace()`, preventing false redaction of identical substrings that appear
+  in non-sensitive positions.
+- **Input validation**: All public API functions now validate inputs — reject `None`,
+  non-string types, empty strings, and oversized inputs (>10 MB) with clear exceptions.
+- **ReDoS protection**: Regex matching is wrapped in a SIGALRM timeout guard (5s).
+  Pathological inputs cause the pattern to be skipped instead of hanging the scanner.
+- **`redaction_char` validation**: Must be exactly 1 character.
+- **`is_luhn_valid` type check**: Rejects non-string input.
+
+### New Scanner Features
+
+- **Category filtering**: `enhanced_scan_text(text, categories={'Credit Card Numbers'})`
+  to scan only specific pattern groups instead of all patterns.
+- **Require-context mode**: `enhanced_scan_text(text, require_context=True)` to only
+  return matches that have supporting context keywords nearby.
+- **`input.py` robustness**: Handles KeyboardInterrupt, EOFError, empty input, and
+  scanner exceptions with proper exit codes and stderr output.
+
 ### Modular Architecture
 
 - **Restructured patterns and context keywords** into a modular package layout:
-  - `dlpscan/patterns/{generic,custom,regions}/` — 18 module files
+  - `dlpscan/patterns/{generic,custom,regions}/` — organized module files
   - `dlpscan/context/{generic,custom,regions}/` — mirroring structure
   - `__init__.py` aggregation files merge all sub-modules into unified dicts
 - Removed old monolithic `patterns.py` and `context_patterns.py` files.
+
+### Credit Card Expansion
+
+- **Credit Card Security Codes**: CVV/CVC/CCV (3-digit), Amex CID (4-digit).
+- **Primary Account Numbers**: PAN, Masked/Truncated PAN, BIN/IIN.
+- **Card Track Data**: Track 1 and Track 2 magnetic stripe data.
+- **Card Expiration Dates**: MM/YY and MM/YYYY formats.
+
+### Banking & Financial Expansion (9 new categories, 49 patterns)
+
+- **Wire Transfer Data**: Fedwire IMAD, CHIPS UID, ACH trace/batch, SEPA references.
+- **Check and MICR Data**: MICR magnetic ink lines, check numbers, cashier checks.
+- **Securities Identifiers**: CUSIP, ISIN, SEDOL, FIGI, LEI, ticker symbols.
+- **Loan and Mortgage Data**: Loan numbers, MERS MIN, Universal Loan Identifier, LTV.
+- **Regulatory Identifiers**: SAR/CTR filings, AML case IDs, OFAC SDN, FinCEN reports.
+- **Banking Authentication**: PIN, PIN block, HSM keys, encryption keys.
+- **Customer Financial Data**: Account balances, income amounts, credit scores, DTI.
+- **Internal Banking References**: Customer IDs, branch codes, teller IDs.
+- **PCI Sensitive Data**: Dynamic CVV, PVKI, PVV, service codes, cardholder names.
+
+### PII Expansion (13 new categories, 46 patterns)
+
+- **Personal Identifiers**: Date of birth, age, gender markers.
+- **Geolocation**: GPS coordinates (decimal and DMS), geohash.
+- **Postal Codes**: US ZIP, UK, Canada, Australia, Germany, Japan, India, Brazil.
+- **Device Identifiers**: IMEI, IMEISV, IMSI, MEID, ICCID, Android ID, IDFA/IDFV,
+  serial numbers.
+- **Medical Identifiers**: MRN, health plan ID, DEA, ICD-10, NDC codes.
+- **Insurance Identifiers**: Policy, group, and claim numbers.
+- **Authentication Tokens**: OTP, session ID, CSRF token, refresh token.
+- **Social Media Identifiers**: Twitter handles, hashtags, user IDs.
+- **Education Identifiers**: Student ID, .edu emails, GPA.
+- **Legal Identifiers**: Federal case numbers, docket numbers, bar numbers.
+- **Employment Identifiers**: Employee ID, work permit numbers.
+- **Biometric Identifiers**: Biometric hashes, template IDs.
+- **Property Identifiers**: Parcel/APN numbers, title deeds.
+
+### Classification Labels & Regulatory Markers (6 new categories, 47 patterns)
+
+- **Supervisory Information**: CSI, supervisory controlled/confidential, MRA/MRIA.
+- **Privileged Information**: Attorney-client privilege, work product, litigation hold.
+- **Data Classification Labels**: TOP SECRET, SECRET, FOUO, CUI, SBU, LES, NOFORN.
+- **Corporate Classification**: Internal only, strictly confidential, do not distribute,
+  need to know, eyes only, proprietary, trade secret, embargoed.
+- **Financial Regulatory Labels**: MNPI, inside information, pre-decisional, market
+  sensitive, information barrier, restricted list.
+- **Privacy Classification**: PII, PHI, HIPAA, GDPR, PCI-DSS, FERPA, GLBA, CCPA/CPRA,
+  SOX, NPI.
 
 ### Massive European Expansion (+115 patterns)
 
@@ -26,19 +95,31 @@ All notable changes to dlpscan will be documented in this file.
 
 ### Geographic Pattern Expansion
 
-- **Asia-Pacific**: 66 patterns across 15 countries (Australia, Bangladesh, China/HK/TW,
-  India, Indonesia, Japan, Malaysia, New Zealand, Pakistan, Philippines, Singapore,
-  South Korea, Sri Lanka, Thailand, Vietnam).
-- **Latin America**: 34 patterns across 10 countries (Argentina, Brazil, Chile, Colombia,
-  Costa Rica, Ecuador, Paraguay, Peru, Uruguay, Venezuela).
-- **Middle East**: 21 patterns across 10 countries (Bahrain, Iran, Iraq, Israel, Jordan,
-  Kuwait, Lebanon, Qatar, Saudi Arabia, UAE).
-- **Africa**: 33 patterns across 10 countries (Egypt, Ethiopia, Ghana, Kenya, Morocco,
-  Nigeria, South Africa, Tanzania, Tunisia, Uganda).
+- **Asia-Pacific**: 66 patterns across 15 countries.
+- **Latin America**: 34 patterns across 10 countries.
+- **Middle East**: 21 patterns across 10 countries.
+- **Africa**: 33 patterns across 10 countries.
+
+### Documentation
+
+- **README.md**: Complete rewrite with API reference, detection architecture,
+  security features, usage examples, and pattern coverage summary.
+- **PATTERNS.md**: Regenerated — complete inventory of all 587 patterns.
+- **docs/ reference library**: Language-agnostic markdown files with raw regex
+  patterns and context keywords, organized by category, for integration into
+  any tool or language.
+
+### Tests
+
+- Expanded from 19 to 37 tests.
+- New test classes: `TestRedactWithPatterns`, `TestScanForContext`.
+- Coverage for: input validation (None, non-string, empty, oversized), category
+  filtering, require-context mode, regex-sub vs string-replace, classification
+  label detection, privileged info detection, Luhn type checking.
 
 ### Totals
 
-- **437 patterns** across **95 categories** (up from 111 patterns / 12 categories in v0.2.0).
+- **587 patterns** across **127 categories** (up from 111 patterns / 12 categories in v0.2.0).
 - All patterns have matching context keyword sets for proximity-based detection.
 
 ## [0.2.0] - 2026-03-25
