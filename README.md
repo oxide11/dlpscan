@@ -110,6 +110,31 @@ text: "My credit card number is    4532-0151-...  for payment"
                     keyword search                 keyword search
 ```
 
+### Flexible Delimiter Handling
+
+All multi-group patterns use a standard delimiter class that accepts 9 separator styles. This catches sensitive data regardless of formatting — including invisible characters from copy-paste:
+
+| Delimiter | Example | Source |
+|---|---|---|
+| Dash `-` | `123-45-6789` | Standard formatting |
+| Dot `.` | `123.45.6789` | European formats |
+| Space | `123 45 6789` | Forms, spoken input |
+| Slash `/` | `123/45/6789` | Tax forms, official docs |
+| Backslash `\` | `123\45\6789` | Log files, Windows paths |
+| Underscore `_` | `123_45_6789` | Database exports, CSVs |
+| En dash `–` | `123–45–6789` | PDF/Word copy-paste |
+| Em dash `—` | `123—45—6789` | PDF/Word copy-paste |
+| Non-breaking space | `123 45 6789` | Web page copy-paste |
+| No delimiter | `123456789` | Compact/stripped format |
+
+Redaction preserves whichever delimiter was used:
+
+```python
+redact_sensitive_info("123/45/6789")   # => 'XXX/XX/XXXX'
+redact_sensitive_info("123–45–6789")   # => 'XXX–XX–XXXX'
+redact_sensitive_info("123_45_6789")   # => 'XXX_XX_XXXX'
+```
+
 ### Credit Card Validation
 
 Credit card matches are automatically validated using the **Luhn algorithm** before being returned. Invalid card numbers are silently filtered out.
@@ -140,7 +165,7 @@ Scan text for sensitive data.
 
 ### `redact_sensitive_info(match, redaction_char='X')`
 
-Redact a matched string, preserving separators (`-`, ` `, `.`).
+Redact a matched string, preserving delimiter characters (`-`, `.`, ` `, `/`, `\`, `_`, en dash, em dash, non-breaking space).
 
 **Raises**: `EmptyInputError`, `ShortInputError` (< 4 printable chars)
 

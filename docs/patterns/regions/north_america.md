@@ -14,11 +14,11 @@
 | BC HC | `\b9\d{9}\b` |
 | British Columbia DL | `\b\d{7}\b` |
 | Canada BN | `\b\d{9}[A-Z]{2}\d{4}\b` |
-| Canada Bank Code | `\b\d{5}-\d{3}\b` |
+| Canada Bank Code | `\b\d{5}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}\b` |
 | Canada NEXUS | `\b\d{9}\b` |
 | Canada PR Card | `\b[A-Z]{2}\d{7,10}\b` |
 | Canada Passport | `\b[A-Z]{2}\d{6}\b` |
-| Canada SIN | `\b\d{3}[-\s]?\d{3}[-\s]?\d{3}\b` |
+| Canada SIN | `\b\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}\b` |
 | Manitoba DL | `\b[A-Z]{6}\d{6}\b` |
 | Manitoba HC | `\b\d{9}\b` |
 | NWT DL | `\b\d{6}\b` |
@@ -29,11 +29,11 @@
 | Nova Scotia DL | `\b[A-Z]{5}\d{9}\b` |
 | Nova Scotia HC | `\b\d{10}\b` |
 | Nunavut DL | `\b\d{6}\b` |
-| Ontario DL | `\b[A-Z]\d{4}-\d{5}-\d{5}\b` |
+| Ontario DL | `\b[A-Z]\d{4}[-.\s/\\_\u2013\u2014\u00a0]?\d{5}[-.\s/\\_\u2013\u2014\u00a0]?\d{5}\b` |
 | Ontario HC | `\b\d{10}(?:\s?[A-Z]{2})?\b` |
 | PEI DL | `\b\d{1,6}\b` |
 | PEI HC | `\b\d{8}\b` |
-| Quebec DL | `\b[A-Z]\d{4}-\d{6}-\d{2}\b` |
+| Quebec DL | `\b[A-Z]\d{4}[-.\s/\\_\u2013\u2014\u00a0]?\d{6}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}\b` |
 | Quebec HC | `\b[A-Z]{4}\d{8}\b` |
 | Saskatchewan DL | `\b\d{8}\b` |
 | Saskatchewan HC | `\b\d{9}\b` |
@@ -108,15 +108,15 @@
 | US DEA Number | `\b[A-Z]{2}\d{7}\b` |
 | US DoD ID | `\b\d{10}\b` |
 | US Known Traveler Number | `\b\d{9}\b` |
-| US MBI | `\b[1-9][A-CEGHJ-NP-RT-Y](?:[0-9]\|[A-CEGHJ-NP-RT-Y])[0-9]-?[A-CEGHJ-NP-RT-Y](?:[0-9]\|[A-CEGHJ-NP-RT-Y])[0-9]-?[A-CEGHJ-NP-RT-Y]{2}[0-9]{2}\b` |
+| US MBI | `\b[1-9][A-CEGHJ-NP-RT-Y](?:[0-9]\|[A-CEGHJ-NP-RT-Y])[0-9][-.\s/\\_\u2013\u2014\u00a0]?[A-CEGHJ-NP-RT-Y](?:[0-9]\|[A-CEGHJ-NP-RT-Y])[0-9][-.\s/\\_\u2013\u2014\u00a0]?[A-CEGHJ-NP-RT-Y]{2}[0-9]{2}\b` |
 | US NPI | `\b[12]\d{9}\b` |
 | US Phone Number | `(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}(?!\d)` |
-| USA EIN | `\b\d{2}-\d{7}\b` |
-| USA ITIN | `\b9\d{2}[-\s]?\d{2}[-\s]?\d{4}\b` |
+| USA EIN | `\b\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{7}\b` |
+| USA ITIN | `\b9\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}\b` |
 | USA Passport | `\b\d{9}\b` |
 | USA Passport Card | `\bC\d{8}\b` |
 | USA Routing Number | `\b\d{9}\b` |
-| USA SSN | `\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b` |
+| USA SSN | `\b\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}\b` |
 | Utah DL | `\b\d{4,10}\b` |
 | Vermont DL | `\b(?:\d{8}\|\d{7}[A-Z])\b` |
 | Virginia DL | `\b(?:[A-Z]\d{8,11}\|\d{9})\b` |

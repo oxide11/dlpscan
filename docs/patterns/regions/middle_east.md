@@ -72,6 +72,6 @@
 
 | Pattern Name | Regex |
 |---|---|
-| UAE Emirates ID | `\b784-?\d{4}-?\d{7}-?\d\b` |
+| UAE Emirates ID | `\b784[-.\s/\\_\u2013\u2014\u00a0]?\d{4}[-.\s/\\_\u2013\u2014\u00a0]?\d{7}[-.\s/\\_\u2013\u2014\u00a0]?\d\b` |
 | UAE Passport | `\b[A-Z]?\d{7,9}\b` |
 | UAE Visa Number | `\b[1-7]01/?(?:19\|20)\d{2}/?\d{7}\b` |

@@ -98,11 +98,11 @@
 | Pattern Name | Regex |
 |---|---|
 | Philippines Passport | `\b[A-Z]{1,2}\d{6,7}[A-Z]?\b` |
-| Philippines PhilHealth | `\b\d{2}-?\d{9}-?\d\b` |
+| Philippines PhilHealth | `\b\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{9}[-.\s/\\_\u2013\u2014\u00a0]?\d\b` |
 | Philippines PhilSys | `\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b` |
-| Philippines SSS | `\b\d{2}-?\d{7}-?\d\b` |
-| Philippines TIN | `\b\d{3}-?\d{3}-?\d{3}(?:-?\d{3})?\b` |
-| Philippines UMID | `\b\d{4}-?\d{7}-?\d\b` |
+| Philippines SSS | `\b\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{7}[-.\s/\\_\u2013\u2014\u00a0]?\d\b` |
+| Philippines TIN | `\b\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}(?:[-.\s/\\_\u2013\u2014\u00a0]?\d{3})?\b` |
+| Philippines UMID | `\b\d{4}[-.\s/\\_\u2013\u2014\u00a0]?\d{7}[-.\s/\\_\u2013\u2014\u00a0]?\d\b` |
 
 ## Asia-Pacific - Singapore
 

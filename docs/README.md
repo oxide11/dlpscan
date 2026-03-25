@@ -34,6 +34,16 @@ Each pattern file contains a table of regex patterns:
 
 Copy the regex directly into your language/tool. All patterns use standard syntax — no proprietary extensions.
 
+### Delimiter Handling
+
+Multi-group numeric patterns use a flexible delimiter class that matches 9 separator styles:
+
+```
+[-.\s/\\_\u2013\u2014\u00a0]?
+```
+
+This single character class handles: dash `-`, dot `.`, space, forward slash `/`, backslash `\`, underscore `_`, en dash `–` (U+2013), em dash `—` (U+2014), and non-breaking space (U+00A0). If you are porting these patterns to another language, replace this class with whatever delimiter handling your use case requires.
+
 ### Keywords (Context Detection)
 
 Matching a regex alone can produce false positives (e.g., a 9-digit number could be an SSN or a zip code). The keyword files provide **context keywords** to check for near each match:

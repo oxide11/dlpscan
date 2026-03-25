@@ -11,7 +11,7 @@
 |---|---|
 | Egypt National ID | `\b[23]\d{13}\b` |
 | Egypt Passport | `\b[A-Z]?\d{7,8}\b` |
-| Egypt Tax ID | `\b\d{3}-?\d{3}-?\d{3}\b` |
+| Egypt Tax ID | `\b\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}\b` |
 
 ## Africa - Ethiopia
 

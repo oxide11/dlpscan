@@ -22,6 +22,16 @@ All notable changes to dlpscan will be documented in this file.
   to scan only specific pattern groups instead of all patterns.
 - **Require-context mode**: `enhanced_scan_text(text, require_context=True)` to only
   return matches that have supporting context keywords nearby.
+
+### Flexible Delimiter Handling
+
+- **Standardized delimiter constant** (`_S`) across all 9 pattern files, accepting
+  9 separator styles: dash, dot, space, forward slash, backslash, underscore, en dash
+  (`\u2013`), em dash (`\u2014`), and non-breaking space (`\u00a0`).
+- Catches sensitive data from PDF/Word copy-paste (unicode dashes), web copy-paste
+  (non-breaking spaces), log files (underscores), and tax forms (slashes).
+- `redact_sensitive_info()` preserves whichever delimiter was used in the original
+  match (e.g., `123/45/6789` redacts to `XXX/XX/XXXX`).
 - **`input.py` robustness**: Handles KeyboardInterrupt, EOFError, empty input, and
   scanner exceptions with proper exit codes and stderr output.
 

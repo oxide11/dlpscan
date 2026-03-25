@@ -13,7 +13,7 @@
 | Austria ID Card | `\b\d{8}\b` |
 | Austria Passport | `\b[A-Z]\d{7}\b` |
 | Austria SVN | `\b\d{4}[-\s]?\d{6}\b` |
-| Austria Tax Number | `\b\d{2}-?\d{3}/?\d{4}\b` |
+| Austria Tax Number | `\b\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}\b` |
 
 ## Europe - Belgium
 
@@ -142,7 +142,7 @@
 
 | Pattern Name | Regex |
 |---|---|
-| Ireland DL | `\b\d{3}-?\d{3}-?\d{3}\b` |
+| Ireland DL | `\b\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}\b` |
 | Ireland Eircode | `\b[A-Z]\d{2}\s?[A-Z0-9]{4}\b` |
 | Ireland PPS | `\b\d{7}[A-Z]{1,2}\b` |
 | Ireland Passport | `\b[A-Z]{2}\d{7}\b` |
@@ -218,9 +218,9 @@
 
 | Pattern Name | Regex |
 |---|---|
-| Poland DL | `\b\d{5}/\d{2}/\d{4}\b` |
+| Poland DL | `\b\d{5}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}\b` |
 | Poland ID Card | `\b[A-Z]{3}\d{6}\b` |
-| Poland NIP | `\b\d{3}-?\d{3}-?\d{2}-?\d{2}\b` |
+| Poland NIP | `\b\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}\b` |
 | Poland PESEL | `\b\d{11}\b` |
 | Poland Passport | `\b[A-Z]{2}\d{7}\b` |
 | Poland REGON | `\b\d{9}(?:\d{5})?\b` |
@@ -275,7 +275,7 @@
 | Pattern Name | Regex |
 |---|---|
 | Sweden DL | `\b\d{6}[-]?\d{4}\b` |
-| Sweden Organisation Number | `\b\d{6}-\d{4}\b` |
+| Sweden Organisation Number | `\b\d{6}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}\b` |
 | Sweden PIN | `\b\d{6}[-+]?\d{4}\b` |
 | Sweden Passport | `\b\d{8}\b` |
 
@@ -283,10 +283,10 @@
 
 | Pattern Name | Regex |
 |---|---|
-| Switzerland AHV | `\b756\.\d{4}\.\d{4}\.\d{2}\b` |
+| Switzerland AHV | `\b756[-.\s/\\_\u2013\u2014\u00a0]?\d{4}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}\b` |
 | Switzerland DL | `\b\d{6,7}\b` |
 | Switzerland Passport | `\b[A-Z]\d{7}\b` |
-| Switzerland UID | `\bCHE-?\d{3}\.\d{3}\.\d{3}\b` |
+| Switzerland UID | `\bCHE[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}\b` |
 
 ## Europe - Turkey
 
@@ -306,5 +306,5 @@
 | UK NIN | `\b[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]\b` |
 | UK Passport | `\b\d{9}\b` |
 | UK Phone Number | `(?:\+44[-.\s]?\|0)(?:\d[-.\s]?){9,10}(?!\d)` |
-| UK Sort Code | `\b\d{2}-\d{2}-\d{2}\b` |
+| UK Sort Code | `\b\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}\b` |
 | UK UTR | `\b\d{5}\s?\d{5}\b` |

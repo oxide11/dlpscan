@@ -9,7 +9,7 @@
 
 | Pattern Name | Regex |
 |---|---|
-| Argentina CUIL/CUIT | `\b(?:20\|2[3-7]\|30\|33)-?\d{8}-?\d\b` |
+| Argentina CUIL/CUIT | `\b(?:20\|2[3-7]\|30\|33)[-.\s/\\_\u2013\u2014\u00a0]?\d{8}[-.\s/\\_\u2013\u2014\u00a0]?\d\b` |
 | Argentina DNI | `\b\d{7,8}\b` |
 | Argentina Passport | `\b[A-Z]{3}\d{6}\b` |
 
@@ -18,10 +18,10 @@
 | Pattern Name | Regex |
 |---|---|
 | Brazil CNH | `\b\d{11}\b` |
-| Brazil CNPJ | `\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b` |
-| Brazil CPF | `\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b` |
+| Brazil CNPJ | `\b\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}\b` |
+| Brazil CPF | `\b\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}\b` |
 | Brazil Passport | `\b[A-Z]{2}\d{6}\b` |
-| Brazil RG | `\b\d{1,2}\.?\d{3}\.?\d{3}-?[\dXx]\b` |
+| Brazil RG | `\b\d{1,2}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?[\dXx]\b` |
 | Brazil SUS Card | `\b[1-2]\d{10}00[01]\d\b\|\b[789]\d{14}\b` |
 
 ## Latin America - Chile
@@ -29,14 +29,14 @@
 | Pattern Name | Regex |
 |---|---|
 | Chile Passport | `\b[A-Z]?\d{7,8}\b` |
-| Chile RUN/RUT | `\b\d{1,2}\.?\d{3}\.?\d{3}-?[\dkK]\b` |
+| Chile RUN/RUT | `\b\d{1,2}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?[\dkK]\b` |
 
 ## Latin America - Colombia
 
 | Pattern Name | Regex |
 |---|---|
 | Colombia Cedula | `\b\d{6,10}\b` |
-| Colombia NIT | `\b\d{3}\.?\d{3}\.?\d{3}-?\d\b` |
+| Colombia NIT | `\b\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d\b` |
 | Colombia NUIP | `\b\d{6,10}\b` |
 | Colombia Passport | `\b[A-Z]{2}\d{6,7}\b` |
 
@@ -44,7 +44,7 @@
 
 | Pattern Name | Regex |
 |---|---|
-| Costa Rica Cedula | `\b\d{1}-?\d{4}-?\d{4}\b` |
+| Costa Rica Cedula | `\b\d{1}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}\b` |
 | Costa Rica DIMEX | `\b\d{11,12}\b` |
 | Costa Rica Passport | `\b[A-Z]\d{8}\b` |
 
@@ -62,7 +62,7 @@
 |---|---|
 | Paraguay Cedula | `\b\d{5,7}\b` |
 | Paraguay Passport | `\b[A-Z]\d{6,8}\b` |
-| Paraguay RUC | `\b\d{6,8}-?\d\b` |
+| Paraguay RUC | `\b\d{6,8}[-.\s/\\_\u2013\u2014\u00a0]?\d\b` |
 
 ## Latin America - Peru
 
@@ -77,7 +77,7 @@
 
 | Pattern Name | Regex |
 |---|---|
-| Uruguay Cedula | `\b\d{1}\.?\d{3}\.?\d{3}-?\d\b` |
+| Uruguay Cedula | `\b\d{1}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d\b` |
 | Uruguay Passport | `\b[A-Z]\d{6,8}\b` |
 | Uruguay RUT | `\b\d{12}\b` |
 
@@ -85,6 +85,6 @@
 
 | Pattern Name | Regex |
 |---|---|
-| Venezuela Cedula | `\b[VvEe]-?\d{6,9}\b` |
+| Venezuela Cedula | `\b[VvEe][-.\s/\\_\u2013\u2014\u00a0]?\d{6,9}\b` |
 | Venezuela Passport | `\b[A-Z]\d{7,8}\b` |
-| Venezuela RIF | `\b[VEJGvejg]-?\d{8}-?\d\b` |
+| Venezuela RIF | `\b[VEJGvejg][-.\s/\\_\u2013\u2014\u00a0]?\d{8}[-.\s/\\_\u2013\u2014\u00a0]?\d\b` |
