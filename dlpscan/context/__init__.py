@@ -13,6 +13,7 @@ from .generic.vehicles import VEHICLES_CONTEXT
 from .generic.dates import DATES_CONTEXT
 from .generic.urls import URLS_CONTEXT
 from .generic.secrets import SECRETS_CONTEXT
+from .generic.pii_identifiers import PII_IDENTIFIERS_CONTEXT
 
 from .custom.cloud_providers import CLOUD_PROVIDERS_CONTEXT
 from .custom.code_platforms import CODE_PLATFORMS_CONTEXT
@@ -37,6 +38,7 @@ CONTEXT_KEYWORDS.update(VEHICLES_CONTEXT)
 CONTEXT_KEYWORDS.update(DATES_CONTEXT)
 CONTEXT_KEYWORDS.update(URLS_CONTEXT)
 CONTEXT_KEYWORDS.update(SECRETS_CONTEXT)
+CONTEXT_KEYWORDS.update(PII_IDENTIFIERS_CONTEXT)
 
 # Custom
 CONTEXT_KEYWORDS.update(CLOUD_PROVIDERS_CONTEXT)
