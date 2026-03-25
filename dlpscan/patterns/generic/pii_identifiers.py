@@ -1,5 +1,8 @@
 import re
 
+# Standard optional delimiter: matches dash, dot, space, or nothing.
+_S = r'[-.\s]?'
+
 
 PII_IDENTIFIERS_PATTERNS = {
     'Personal Identifiers': {
@@ -37,16 +40,16 @@ PII_IDENTIFIERS_PATTERNS = {
         'Brazil CEP': re.compile(r'\b\d{5}-?\d{3}\b'),
     },
     'Device Identifiers': {
-        # IMEI: 15 digits (TAC 8 + serial 6 + Luhn check 1), with optional hyphens/spaces
-        'IMEI': re.compile(r'\b\d{2}[-\s]?\d{6}[-\s]?\d{6}[-\s]?\d\b'),
+        # IMEI: 15 digits (TAC 8 + serial 6 + Luhn check 1), with optional delimiters
+        'IMEI': re.compile(rf'\b\d{{2}}{_S}\d{{6}}{_S}\d{{6}}{_S}\d\b'),
         # IMEISV: 16 digits (IMEI without check digit + 2-digit software version)
-        'IMEISV': re.compile(r'\b\d{2}[-\s]?\d{6}[-\s]?\d{6}[-\s]?\d{2}\b'),
+        'IMEISV': re.compile(rf'\b\d{{2}}{_S}\d{{6}}{_S}\d{{6}}{_S}\d{{2}}\b'),
         # IMSI (15 digits, starts with MCC — 3 digit country code)
         'IMSI': re.compile(r'\b\d{15}\b'),
         # MEID (14 hex digits, mobile equipment ID for CDMA)
-        'MEID': re.compile(r'\b[0-9A-F]{2}[-\s]?[0-9A-F]{6}[-\s]?[0-9A-F]{6}\b'),
+        'MEID': re.compile(rf'\b[0-9A-F]{{2}}{_S}[0-9A-F]{{6}}{_S}[0-9A-F]{{6}}\b'),
         # ICCID (SIM card number, 19-20 digits, starts with 89)
-        'ICCID': re.compile(r'\b89\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{3,4}\d?\b'),
+        'ICCID': re.compile(rf'\b89\d{{2}}{_S}\d{{4}}{_S}\d{{4}}{_S}\d{{4}}{_S}\d{{3,4}}\d?\b'),
         # Android Device ID (64-bit hex)
         'Android Device ID': re.compile(r'\b[0-9a-f]{16}\b'),
         # iOS IDFA/IDFV (UUID format)

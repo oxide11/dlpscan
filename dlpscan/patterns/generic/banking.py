@@ -1,5 +1,8 @@
 import re
 
+# Standard optional delimiter: matches dash, dot, space, or nothing.
+_S = r'[-.\s]?'
+
 
 BANKING_PATTERNS = {
     # ── Core Banking ────────────────────────────────────────────────
@@ -11,7 +14,7 @@ BANKING_PATTERNS = {
         # US Bank Account Number (typically 8-17 digits)
         'US Bank Account Number': re.compile(r'\b\d{8,17}\b'),
         # Canadian Transit Number (5 digits - 3 digits)
-        'Canada Transit Number': re.compile(r'\b\d{5}[-\s]?\d{3}\b'),
+        'Canada Transit Number': re.compile(rf'\b\d{{5}}{_S}\d{{3}}\b'),
     },
     # ── Wire Transfers & Payments ───────────────────────────────────
     'Wire Transfer Data': {

@@ -1,15 +1,18 @@
 import re
 
+# Standard optional delimiter: matches dash, dot, space, or nothing.
+_S = r'[-.\s]?'
+
 
 CREDIT_CARDS_PATTERNS = {
     'Credit Card Numbers': {
-        'Visa': re.compile(r'\b4\d{3}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'),
-        'MasterCard': re.compile(r'\b(?:5[1-5]\d{2}|2(?:2[2-9]\d|2[3-9]\d|[3-6]\d{2}|7[01]\d|720))[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'),
-        'Amex': re.compile(r'\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b'),
-        'Discover': re.compile(r'\b6(?:011|5\d{2}|4[4-9]\d)[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'),
-        'JCB': re.compile(r'\b35(?:2[89]|[3-8]\d)[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'),
-        'Diners Club': re.compile(r'\b3(?:0[0-5]|[68]\d)\d[\s-]?\d{6}[\s-]?\d{4}\b'),
-        'UnionPay': re.compile(r'\b62\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}(?:[\s-]?\d{1,3})?\b'),
+        'Visa': re.compile(rf'\b4\d{{3}}{_S}\d{{4}}{_S}\d{{4}}{_S}\d{{4}}\b'),
+        'MasterCard': re.compile(rf'\b(?:5[1-5]\d{{2}}|2(?:2[2-9]\d|2[3-9]\d|[3-6]\d{{2}}|7[01]\d|720)){_S}\d{{4}}{_S}\d{{4}}{_S}\d{{4}}\b'),
+        'Amex': re.compile(rf'\b3[47]\d{{2}}{_S}\d{{6}}{_S}\d{{5}}\b'),
+        'Discover': re.compile(rf'\b6(?:011|5\d{{2}}|4[4-9]\d){_S}\d{{4}}{_S}\d{{4}}{_S}\d{{4}}\b'),
+        'JCB': re.compile(rf'\b35(?:2[89]|[3-8]\d){_S}\d{{4}}{_S}\d{{4}}{_S}\d{{4}}\b'),
+        'Diners Club': re.compile(rf'\b3(?:0[0-5]|[68]\d)\d{_S}\d{{6}}{_S}\d{{4}}\b'),
+        'UnionPay': re.compile(rf'\b62\d{{2}}{_S}\d{{4}}{_S}\d{{4}}{_S}\d{{4}}(?:{_S}\d{{1,3}})?\b'),
     },
     'Credit Card Security Codes': {
         # CVV/CVC/CCV: 3 digits (Visa, MC, Discover, JCB, UnionPay)
@@ -19,9 +22,9 @@ CREDIT_CARDS_PATTERNS = {
     },
     'Primary Account Numbers': {
         # Generic PAN: 13-19 digit card numbers (ISO/IEC 7812)
-        'PAN': re.compile(r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{1,7}\b'),
+        'PAN': re.compile(rf'\b\d{{4}}{_S}\d{{4}}{_S}\d{{4}}{_S}\d{{1,7}}\b'),
         # Truncated/Masked PAN: first 6 and last 4 visible
-        'Masked PAN': re.compile(r'\b\d{4}[\s-]?[Xx*]{4}[\s-]?[Xx*]{4}[\s-]?\d{4}\b'),
+        'Masked PAN': re.compile(rf'\b\d{{4}}{_S}[Xx*]{{4}}{_S}[Xx*]{{4}}{_S}\d{{4}}\b'),
         # BIN/IIN: first 6-8 digits of card number
         'BIN/IIN': re.compile(r'\b\d{6,8}\b'),
     },

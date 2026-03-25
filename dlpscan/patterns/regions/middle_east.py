@@ -1,5 +1,8 @@
 import re
 
+# Standard optional delimiter: matches dash, dot, space, or nothing.
+_S = r'[-.\s]?'
+
 
 MIDDLE_EAST_PATTERNS = {
     'Middle East - Saudi Arabia': {
@@ -7,7 +10,7 @@ MIDDLE_EAST_PATTERNS = {
         'Saudi Arabia Passport': re.compile(r'\b[A-Z]\d{7,8}\b'),
     },
     'Middle East - UAE': {
-        'UAE Emirates ID': re.compile(r'\b784-?\d{4}-?\d{7}-?\d\b'),
+        'UAE Emirates ID': re.compile(rf'\b784{_S}\d{{4}}{_S}\d{{7}}{_S}\d\b'),
         'UAE Visa Number': re.compile(r'\b[1-7]01/?(?:19|20)\d{2}/?\d{7}\b'),
         'UAE Passport': re.compile(r'\b[A-Z]?\d{7,9}\b'),
     },

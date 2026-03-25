@@ -1,5 +1,8 @@
 import re
 
+# Standard optional delimiter: matches dash, dot, space, or nothing.
+_S = r'[-.\s]?'
+
 
 AFRICA_PATTERNS = {
     'Africa - South Africa': {
@@ -23,7 +26,7 @@ AFRICA_PATTERNS = {
     },
     'Africa - Egypt': {
         'Egypt National ID': re.compile(r'\b[23]\d{13}\b'),
-        'Egypt Tax ID': re.compile(r'\b\d{3}-?\d{3}-?\d{3}\b'),
+        'Egypt Tax ID': re.compile(rf'\b\d{{3}}{_S}\d{{3}}{_S}\d{{3}}\b'),
         'Egypt Passport': re.compile(r'\b[A-Z]?\d{7,8}\b'),
     },
     'Africa - Ghana': {

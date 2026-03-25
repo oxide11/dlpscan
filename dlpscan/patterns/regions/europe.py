@@ -1,5 +1,8 @@
 import re
 
+# Standard optional delimiter: matches dash, dot, space, or nothing.
+_S = r'[-.\s]?'
+
 
 EUROPE_PATTERNS = {
     # ── United Kingdom ──────────────────────────────────────────────
@@ -7,7 +10,7 @@ EUROPE_PATTERNS = {
         'UK NIN': re.compile(r'\b[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]\b'),
         'UK UTR': re.compile(r'\b\d{5}\s?\d{5}\b'),
         'UK Passport': re.compile(r'\b\d{9}\b'),
-        'UK Sort Code': re.compile(r'\b\d{2}-\d{2}-\d{2}\b'),
+        'UK Sort Code': re.compile(rf'\b\d{{2}}{_S}\d{{2}}{_S}\d{{2}}\b'),
         'British NHS': re.compile(r'\b\d{3}\s?\d{3}\s?\d{4}\b'),
         'UK Phone Number': re.compile(r'(?:\+44[-.\s]?|0)(?:\d[-.\s]?){9,10}(?!\d)'),
         'UK DL': re.compile(r'\b[A-Z]{5}\d{6}[A-Z0-9]{5}\b'),
@@ -55,18 +58,18 @@ EUROPE_PATTERNS = {
     # ── Poland ──────────────────────────────────────────────────────
     'Europe - Poland': {
         'Poland PESEL': re.compile(r'\b\d{11}\b'),
-        'Poland NIP': re.compile(r'\b\d{3}-?\d{3}-?\d{2}-?\d{2}\b'),
+        'Poland NIP': re.compile(rf'\b\d{{3}}{_S}\d{{3}}{_S}\d{{2}}{_S}\d{{2}}\b'),
         'Poland REGON': re.compile(r'\b\d{9}(?:\d{5})?\b'),
         'Poland ID Card': re.compile(r'\b[A-Z]{3}\d{6}\b'),
         'Poland Passport': re.compile(r'\b[A-Z]{2}\d{7}\b'),
-        'Poland DL': re.compile(r'\b\d{5}/\d{2}/\d{4}\b'),
+        'Poland DL': re.compile(rf'\b\d{{5}}{_S}\d{{2}}{_S}\d{{4}}\b'),
     },
     # ── Sweden ──────────────────────────────────────────────────────
     'Europe - Sweden': {
         'Sweden PIN': re.compile(r'\b\d{6}[-+]?\d{4}\b'),
         'Sweden Passport': re.compile(r'\b\d{8}\b'),
         'Sweden DL': re.compile(r'\b\d{6}[-]?\d{4}\b'),
-        'Sweden Organisation Number': re.compile(r'\b\d{6}-\d{4}\b'),
+        'Sweden Organisation Number': re.compile(rf'\b\d{{6}}{_S}\d{{4}}\b'),
     },
     # ── Portugal ────────────────────────────────────────────────────
     'Europe - Portugal': {
@@ -77,10 +80,10 @@ EUROPE_PATTERNS = {
     },
     # ── Switzerland ─────────────────────────────────────────────────
     'Europe - Switzerland': {
-        'Switzerland AHV': re.compile(r'\b756\.\d{4}\.\d{4}\.\d{2}\b'),
+        'Switzerland AHV': re.compile(rf'\b756{_S}\d{{4}}{_S}\d{{4}}{_S}\d{{2}}\b'),
         'Switzerland Passport': re.compile(r'\b[A-Z]\d{7}\b'),
         'Switzerland DL': re.compile(r'\b\d{6,7}\b'),
-        'Switzerland UID': re.compile(r'\bCHE-?\d{3}\.\d{3}\.\d{3}\b'),
+        'Switzerland UID': re.compile(rf'\bCHE{_S}\d{{3}}{_S}\d{{3}}{_S}\d{{3}}\b'),
     },
     # ── Turkey ──────────────────────────────────────────────────────
     'Europe - Turkey': {
@@ -95,7 +98,7 @@ EUROPE_PATTERNS = {
         'Austria Passport': re.compile(r'\b[A-Z]\d{7}\b'),
         'Austria ID Card': re.compile(r'\b\d{8}\b'),
         'Austria DL': re.compile(r'\b\d{8}\b'),
-        'Austria Tax Number': re.compile(r'\b\d{2}-?\d{3}/?\d{4}\b'),
+        'Austria Tax Number': re.compile(rf'\b\d{{2}}{_S}\d{{3}}{_S}\d{{4}}\b'),
     },
     # ── Belgium ─────────────────────────────────────────────────────
     'Europe - Belgium': {
@@ -108,7 +111,7 @@ EUROPE_PATTERNS = {
     'Europe - Ireland': {
         'Ireland PPS': re.compile(r'\b\d{7}[A-Z]{1,2}\b'),
         'Ireland Passport': re.compile(r'\b[A-Z]{2}\d{7}\b'),
-        'Ireland DL': re.compile(r'\b\d{3}-?\d{3}-?\d{3}\b'),
+        'Ireland DL': re.compile(rf'\b\d{{3}}{_S}\d{{3}}{_S}\d{{3}}\b'),
         'Ireland Eircode': re.compile(r'\b[A-Z]\d{2}\s?[A-Z0-9]{4}\b'),
     },
     # ── Denmark ─────────────────────────────────────────────────────

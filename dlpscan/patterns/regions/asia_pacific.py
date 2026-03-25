@@ -1,5 +1,8 @@
 import re
 
+# Standard optional delimiter: matches dash, dot, space, or nothing.
+_S = r'[-.\s]?'
+
 
 ASIA_PACIFIC_PATTERNS = {
     'Asia-Pacific - India': {
@@ -57,11 +60,11 @@ ASIA_PACIFIC_PATTERNS = {
     },
     'Asia-Pacific - Philippines': {
         'Philippines PhilSys': re.compile(r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'),
-        'Philippines TIN': re.compile(r'\b\d{3}-?\d{3}-?\d{3}(?:-?\d{3})?\b'),
-        'Philippines SSS': re.compile(r'\b\d{2}-?\d{7}-?\d\b'),
-        'Philippines PhilHealth': re.compile(r'\b\d{2}-?\d{9}-?\d\b'),
+        'Philippines TIN': re.compile(rf'\b\d{{3}}{_S}\d{{3}}{_S}\d{{3}}(?:{_S}\d{{3}})?\b'),
+        'Philippines SSS': re.compile(rf'\b\d{{2}}{_S}\d{{7}}{_S}\d\b'),
+        'Philippines PhilHealth': re.compile(rf'\b\d{{2}}{_S}\d{{9}}{_S}\d\b'),
         'Philippines Passport': re.compile(r'\b[A-Z]{1,2}\d{6,7}[A-Z]?\b'),
-        'Philippines UMID': re.compile(r'\b\d{4}-?\d{7}-?\d\b'),
+        'Philippines UMID': re.compile(rf'\b\d{{4}}{_S}\d{{7}}{_S}\d\b'),
     },
     'Asia-Pacific - Thailand': {
         'Thailand National ID': re.compile(r'\b\d[-\s]?\d{4}[-\s]?\d{5}[-\s]?\d{2}[-\s]?\d\b'),
