@@ -34,9 +34,12 @@
 |---|---|
 | Android Device ID | `android id`, `device id`, `android device`, `ssaid` |
 | Device Serial Number | `serial number`, `serial no`, `sn`, `device serial`, `hardware serial`, `serial#` |
+| ICCID | `iccid`, `sim card number`, `sim number`, `integrated circuit card`, `sim id`, `sim serial` |
 | IDFA/IDFV | `idfa`, `idfv`, `advertising identifier`, `identifier for advertisers`, `vendor identifier`, `apple device id` |
-| IMEI | `imei`, `international mobile equipment identity`, `device imei`, `handset id`, `phone imei` |
+| IMEI | `imei`, `international mobile equipment identity`, `device imei`, `handset id`, `phone imei`, `equipment identity` |
+| IMEISV | `imeisv`, `imei software version`, `imei sv`, `software version number` |
 | IMSI | `imsi`, `international mobile subscriber`, `subscriber identity`, `sim id` |
+| MEID | `meid`, `mobile equipment identifier`, `cdma device`, `equipment id` |
 
 ## Education Identifiers
 

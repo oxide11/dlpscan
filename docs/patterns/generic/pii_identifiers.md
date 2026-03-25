@@ -27,9 +27,12 @@
 |---|---|
 | Android Device ID | `\b[0-9a-f]{16}\b` |
 | Device Serial Number | `\b[A-Z0-9]{8,20}\b` |
+| ICCID | `\b89\d{2}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{3,4}\d?\b` |
 | IDFA/IDFV | `\b[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\b` |
-| IMEI | `\b\d{2}[-]?\d{6}[-]?\d{6}[-]?\d\b` |
+| IMEI | `\b\d{2}[-\s]?\d{6}[-\s]?\d{6}[-\s]?\d\b` |
+| IMEISV | `\b\d{2}[-\s]?\d{6}[-\s]?\d{6}[-\s]?\d{2}\b` |
 | IMSI | `\b\d{15}\b` |
+| MEID | `\b[0-9A-F]{2}[-\s]?[0-9A-F]{6}[-\s]?[0-9A-F]{6}\b` |
 
 ## Education Identifiers
 
