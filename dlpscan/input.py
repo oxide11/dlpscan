@@ -1,11 +1,25 @@
-from .scanner import enhanced_scan_text, redact_sensitive_info
+import sys
+
+from .scanner import enhanced_scan_text
+from .exceptions import RedactionError
 
 
 def main():
-    user_input = input("Enter something: ")
-    print("You entered:", user_input)
+    try:
+        user_input = input("Enter something: ")
+    except (EOFError, KeyboardInterrupt):
+        print()
+        sys.exit(0)
 
-    findings = list(enhanced_scan_text(user_input))
+    if not user_input.strip():
+        print("No input provided.")
+        return
+
+    try:
+        findings = list(enhanced_scan_text(user_input))
+    except (RedactionError, TypeError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     if not findings:
         print("No sensitive data detected.")

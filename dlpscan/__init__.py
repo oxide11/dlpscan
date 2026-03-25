@@ -4,6 +4,7 @@ from .scanner import (
     redact_sensitive_info_with_patterns,
     is_luhn_valid,
     scan_for_context,
+    MAX_INPUT_SIZE,
 )
 from .patterns import PATTERNS
 from .context import CONTEXT_KEYWORDS
