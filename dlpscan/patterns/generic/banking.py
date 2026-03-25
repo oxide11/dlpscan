@@ -1,7 +1,7 @@
 import re
 
 # Standard optional delimiter: matches dash, dot, space, or nothing.
-_S = r'[-.\s]?'
+_S = r'[-.\s/\\_\u2013\u2014\u00a0]?'
 
 
 BANKING_PATTERNS = {

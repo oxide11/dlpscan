@@ -86,8 +86,10 @@ def redact_sensitive_info(match: str, redaction_char: str = 'X') -> str:
     if len(match_printable) < 4:
         raise ShortInputError("Input string must have at least 4 printable characters.")
 
+    # Preserve common delimiters in redacted output for readability.
+    _PRESERVED_DELIMITERS = frozenset('-. /\\_\u2013\u2014\u00a0')
     return ''.join(
-        redaction_char if c not in ('-', ' ', '.') else c
+        redaction_char if c not in _PRESERVED_DELIMITERS else c
         for c in match_printable
     )
 
