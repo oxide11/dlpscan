@@ -14,6 +14,7 @@ from .generic.dates import DATES_PATTERNS
 from .generic.urls import URLS_PATTERNS
 from .generic.secrets import SECRETS_PATTERNS
 from .generic.pii_identifiers import PII_IDENTIFIERS_PATTERNS
+from .generic.classification_labels import CLASSIFICATION_LABELS_PATTERNS
 
 from .custom.cloud_providers import CLOUD_PROVIDERS_PATTERNS
 from .custom.code_platforms import CODE_PLATFORMS_PATTERNS
@@ -39,6 +40,7 @@ PATTERNS.update(DATES_PATTERNS)
 PATTERNS.update(URLS_PATTERNS)
 PATTERNS.update(SECRETS_PATTERNS)
 PATTERNS.update(PII_IDENTIFIERS_PATTERNS)
+PATTERNS.update(CLASSIFICATION_LABELS_PATTERNS)
 
 # Custom
 PATTERNS.update(CLOUD_PROVIDERS_PATTERNS)
