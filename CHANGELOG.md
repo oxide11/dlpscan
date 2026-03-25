@@ -2,6 +2,45 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [0.3.0] - 2026-03-25
+
+### Modular Architecture
+
+- **Restructured patterns and context keywords** into a modular package layout:
+  - `dlpscan/patterns/{generic,custom,regions}/` — 18 module files
+  - `dlpscan/context/{generic,custom,regions}/` — mirroring structure
+  - `__init__.py` aggregation files merge all sub-modules into unified dicts
+- Removed old monolithic `patterns.py` and `context_patterns.py` files.
+
+### Massive European Expansion (+115 patterns)
+
+- Expanded from 12 to 34 European categories covering 32 countries.
+- **New countries**: Austria, Belgium, Ireland, Denmark, Finland, Norway, Czech Republic,
+  Hungary, Romania, Greece, Croatia, Bulgaria, Slovakia, Lithuania, Latvia, Estonia,
+  Slovenia, Luxembourg, Malta, Cyprus, Iceland, Liechtenstein.
+- Each country includes national ID, passport, driver's licence, and tax/social
+  security number patterns where applicable.
+- Added country-specific IBANs for Germany, France, and Netherlands.
+- Added EU-wide VAT number pattern covering all member state prefixes.
+- Improved existing UK patterns (added DL, fixed NHS format).
+
+### Geographic Pattern Expansion
+
+- **Asia-Pacific**: 66 patterns across 15 countries (Australia, Bangladesh, China/HK/TW,
+  India, Indonesia, Japan, Malaysia, New Zealand, Pakistan, Philippines, Singapore,
+  South Korea, Sri Lanka, Thailand, Vietnam).
+- **Latin America**: 34 patterns across 10 countries (Argentina, Brazil, Chile, Colombia,
+  Costa Rica, Ecuador, Paraguay, Peru, Uruguay, Venezuela).
+- **Middle East**: 21 patterns across 10 countries (Bahrain, Iran, Iraq, Israel, Jordan,
+  Kuwait, Lebanon, Qatar, Saudi Arabia, UAE).
+- **Africa**: 33 patterns across 10 countries (Egypt, Ethiopia, Ghana, Kenya, Morocco,
+  Nigeria, South Africa, Tanzania, Tunisia, Uganda).
+
+### Totals
+
+- **437 patterns** across **95 categories** (up from 111 patterns / 12 categories in v0.2.0).
+- All patterns have matching context keyword sets for proximity-based detection.
+
 ## [0.2.0] - 2026-03-25
 
 ### Bug Fixes

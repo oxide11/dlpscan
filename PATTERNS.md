@@ -1,6 +1,6 @@
 # Supported Patterns
 
-dlpscan v0.2.0 supports **111 patterns** across **35 categories**, organized into three sections.
+dlpscan v0.3.0 supports **437 patterns** across **95 categories**, organized into three sections.
 
 ---
 
@@ -8,304 +8,748 @@ dlpscan v0.2.0 supports **111 patterns** across **35 categories**, organized int
 
 Universal formats not tied to any specific country or vendor.
 
-### Credit Card Numbers (7 patterns)
+### Banking and Financial (2 patterns)
 
-All credit card matches are validated using the **Luhn algorithm** to reduce false positives.
-
-| # | Pattern | Prefix | Digits | Example |
-|---|---------|--------|--------|---------|
-| 1 | Visa | 4 | 16 | `4111 1111 1111 1111` |
-| 2 | MasterCard | 51-55, 2221-2720 | 16 | `5500 0000 0000 0004` |
-| 3 | Amex | 34, 37 | 15 | `3782 822463 10005` |
-| 4 | Discover | 6011, 644-649, 65 | 16 | `6011 0000 0000 0004` |
-| 5 | JCB | 3528-3589 | 16 | `3530 1113 3330 0000` |
-| 6 | Diners Club | 300-305, 36, 38 | 14 | `3056 930902 5904` |
-| 7 | UnionPay | 62 | 16-19 | `6200 0000 0000 0000` |
+- IBAN Generic
+- SWIFT/BIC
 
 ### Contact Information (5 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 8 | Email Address | user@domain.tld | `john.doe@example.com` |
-| 9 | E.164 Phone Number | +CCCXXXXXXXXX | `+14155552671` |
-| 10 | IPv4 Address | X.X.X.X | `192.168.1.1` |
-| 11 | IPv6 Address | X:X:X:X:X:X:X:X | `2001:0db8:85a3:0000:0000:8a2e:0370:7334` |
-| 12 | MAC Address | XX:XX:XX:XX:XX:XX | `00:1A:2B:3C:4D:5E` |
+- E.164 Phone Number
+- Email Address
+- IPv4 Address
+- IPv6 Address
+- MAC Address
 
-### Banking and Financial (2 patterns)
+### Credit Card Numbers (7 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 13 | IBAN Generic | CC99 XXXX XXXX ... | `GB29 NWBK 6016 1331 9268 19` |
-| 14 | SWIFT/BIC | 8 or 11 characters | `DEUTDEFF` |
+- Amex
+- Diners Club
+- Discover
+- JCB
+- MasterCard
+- UnionPay
+- Visa
 
 ### Cryptocurrency (7 patterns)
 
-| # | Pattern | Prefix | Example |
-|---|---------|--------|---------|
-| 15 | Bitcoin Address (Legacy) | `1` or `3` | `1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa` |
-| 16 | Bitcoin Address (Bech32) | `bc1` | `bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4` |
-| 17 | Ethereum Address | `0x` + 40 hex | `0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18` |
-| 18 | Litecoin Address | `L` or `M` | `LaMT348PWRnrqeeWArpwQPbuanpXDZGEUz` |
-| 19 | Bitcoin Cash Address | `bitcoincash:` / `q`/`p` | `bitcoincash:qpm2qsznhks23z7629...` |
-| 20 | Monero Address | `4` | `4AdUndXHHZ6cfufTMvppY6JwXNouMBzSkb...` |
-| 21 | Ripple Address | `r` | `rN7n3473SaZBCG4dFL83w7p1W9cgZw6w3v` |
-
-### Vehicle Identification (1 pattern)
-
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 22 | VIN | 17 alphanumeric (no I/O/Q) | `1HGCM82633A004352` |
+- Bitcoin Address (Bech32)
+- Bitcoin Address (Legacy)
+- Bitcoin Cash Address
+- Ethereum Address
+- Litecoin Address
+- Monero Address
+- Ripple Address
 
 ### Dates (3 patterns)
 
-Context-gated — most useful when detected near keywords like "date of birth", "DOB", "birthday".
-
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 23 | Date ISO | YYYY-MM-DD | `1990-01-15` |
-| 24 | Date US | MM/DD/YYYY | `01/15/1990` |
-| 25 | Date EU | DD/MM/YYYY | `15/01/1990` |
-
-### URLs with Credentials (2 patterns)
-
-| # | Pattern | Description | Example |
-|---|---------|-------------|---------|
-| 26 | URL with Password | Embedded user:pass in URL | `https://admin:secret@host.com/path` |
-| 27 | URL with Token | Token/key in query string | `https://api.example.com?api_key=abc123` |
+- Date EU
+- Date ISO
+- Date US
 
 ### Generic Secrets (6 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 28 | Bearer Token | `Bearer` + token string | `Bearer eyJhbGciOi...` |
-| 29 | JWT Token | 3 base64url segments | `eyJhbGciOi.eyJzdWIi.SflKxwRJ` |
-| 30 | Private Key | PEM header | `-----BEGIN RSA PRIVATE KEY-----` |
-| 31 | Generic API Key | `api_key=...` | `api_key=abc123def456ghi789` |
-| 32 | Generic Secret Assignment | `password=...` | `password=myS3cretP@ss` |
-| 33 | Database Connection String | `protocol://user:pass@host` | `postgres://admin:pw@localhost/db` |
+- Bearer Token
+- Database Connection String
+- Generic API Key
+- Generic Secret Assignment
+- JWT Token
+- Private Key
 
----
+### URLs with Credentials (2 patterns)
+
+- URL with Password
+- URL with Token
+
+### Vehicle Identification (1 patterns)
+
+- VIN
 
 ## Section 2: Custom Patterns
 
-Vendor and service-specific secrets and tokens.
+Vendor-specific API keys, tokens, and secrets.
 
 ### Cloud Provider Secrets (3 patterns)
 
-| # | Pattern | Prefix/Format | Example |
-|---|---------|---------------|---------|
-| 34 | AWS Access Key | `AKIA` + 16 chars | `AKIAIOSFODNN7EXAMPLE` |
-| 35 | AWS Secret Key | 40 base64 chars | (40-character string) |
-| 36 | Google API Key | `AIza` + 35 chars | `AIzaSyA1234567890abcdefghijklmnopqrst` |
+- AWS Access Key
+- AWS Secret Key
+- Google API Key
 
 ### Code Platform Secrets (5 patterns)
 
-| # | Pattern | Prefix | Example |
-|---|---------|--------|---------|
-| 37 | GitHub Token (Classic) | `ghp_` | `ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345` |
-| 38 | GitHub Token (Fine-Grained) | `github_pat_` | `github_pat_...` |
-| 39 | GitHub OAuth Token | `gho_` | `gho_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345` |
-| 40 | NPM Token | `npm_` | `npm_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345` |
-| 41 | PyPI Token | `pypi-` | `pypi-AgEIcHlwaS5vcmcC...` |
-
-### Payment Service Secrets (2 patterns)
-
-| # | Pattern | Prefix | Example |
-|---|---------|--------|---------|
-| 42 | Stripe Secret Key | `sk_live_` / `sk_test_` | `sk_live_aBcDeFgHiJkLmNoPqRsTuVw` |
-| 43 | Stripe Publishable Key | `pk_live_` / `pk_test_` | `pk_test_aBcDeFgHiJkLmNoPqRsTuVw` |
+- GitHub OAuth Token
+- GitHub Token (Classic)
+- GitHub Token (Fine-Grained)
+- NPM Token
+- PyPI Token
 
 ### Messaging Service Secrets (6 patterns)
 
-| # | Pattern | Prefix | Example |
-|---|---------|--------|---------|
-| 44 | Slack Bot Token | `xoxb-` | `xoxb-123-456-abc` |
-| 45 | Slack User Token | `xoxp-` | `xoxp-123-456-abc` |
-| 46 | Slack Webhook | `https://hooks.slack.com/...` | (full webhook URL) |
-| 47 | SendGrid API Key | `SG.` | `SG.xxxxx.yyyyy` |
-| 48 | Twilio API Key | `SK` + 32 hex | `SK1234abcd5678efgh9012ijkl3456mnop` |
-| 49 | Mailgun API Key | `key-` + 32 chars | `key-1234567890abcdef1234567890abcdef` |
+- Mailgun API Key
+- SendGrid API Key
+- Slack Bot Token
+- Slack User Token
+- Slack Webhook
+- Twilio API Key
 
----
+### Payment Service Secrets (2 patterns)
+
+- Stripe Publishable Key
+- Stripe Secret Key
 
 ## Section 3: Geographic Regions
 
-Country and region-specific identifiers.
+Country and region-specific identity documents, tax numbers, and government IDs.
 
-### North America — United States (12 patterns)
+### Africa
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 50 | USA SSN | XXX-XX-XXXX | `123-45-6789` |
-| 51 | USA ITIN | 9XX-XX-XXXX | `912-34-5678` |
-| 52 | USA EIN | XX-XXXXXXX | `12-3456789` |
-| 53 | USA Passport | 9 digits | `123456789` |
-| 54 | USA Routing Number | 9 digits | `021000021` |
-| 55 | US DEA Number | 2 letters + 7 digits | `AB1234567` |
-| 56 | US NPI | 10 digits (starts 1/2) | `1234567890` |
-| 57 | US MBI | Alphanumeric MBI format | `1A00-A00-AA00` |
-| 58 | US Phone Number | (XXX) XXX-XXXX | `(555) 123-4567` |
-| 59 | California DL | letter + 7 digits | `A1234567` |
-| 60 | New York DL | letter + 7-18 digits | `A1234567` |
-| 61 | Generic DL | 1-2 letters + 4-9 digits | `AB12345` |
+#### Africa - Egypt (3 patterns)
 
-### North America — Canada (13 patterns)
+- Egypt National ID
+- Egypt Passport
+- Egypt Tax ID
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 62 | Canada SIN | XXX-XXX-XXX | `123-456-789` |
-| 63 | Canada BN | 9 digits + 2 letters + 4 digits | `123456789RC0001` |
-| 64 | Canada Passport | 2 letters + 6 digits | `AB123456` |
-| 65 | Canada Bank Code | XXXXX-XXX | `12345-001` |
-| 66 | Ontario DL | X9999-99999-99999 | `A1234-56789-01234` |
-| 67 | Ontario HC | 10 digits | `1234567890` |
-| 68 | British Columbia DL | 7 digits | `1234567` |
-| 69 | Alberta DL | letter + 4-9 digits | `A123456` |
-| 70 | Alberta HC | X9999-99999 | `A1234-56789` |
-| 71 | Quebec DL | 2 letters + 4-9 digits | `AB123456` |
-| 72 | Quebec HC | 12 digits | `123456789012` |
-| 73 | Nova Scotia DL | 2 letters + 4-9 digits | `AB123456` |
-| 74 | Nova Scotia HC | 10 digits | `1234567890` |
+#### Africa - Ethiopia (3 patterns)
 
-### North America — Mexico (2 patterns)
+- Ethiopia National ID
+- Ethiopia Passport
+- Ethiopia TIN
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 75 | Mexico CURP | 18 alphanumeric | `GARC850101HDFRRL09` |
-| 76 | Mexico RFC | 12-13 alphanumeric | `GARC850101AAA` |
+#### Africa - Ghana (4 patterns)
 
-### Europe — United Kingdom (6 patterns)
+- Ghana Card
+- Ghana NHIS
+- Ghana Passport
+- Ghana TIN
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 77 | UK NIN | XX999999X | `AB123456C` |
-| 78 | UK UTR | 10 digits | `1234567890` |
-| 79 | UK Passport | 9 digits | `123456789` |
-| 80 | UK Sort Code | XX-XX-XX | `12-34-56` |
-| 81 | British NHS | 10 digits | `1234567890` |
-| 82 | UK Phone Number | +44 XXXX XXXXXX | `+44 7911 123456` |
+#### Africa - Kenya (4 patterns)
 
-### Europe — Germany (2 patterns)
+- Kenya KRA PIN
+- Kenya NHIF
+- Kenya National ID
+- Kenya Passport
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 83 | Germany ID | 9 alphanumeric | `CFGHJK012` |
-| 84 | Germany Passport | C + 8 alphanumeric | `CABCDEFG1` |
+#### Africa - Morocco (3 patterns)
 
-### Europe — France (2 patterns)
+- Morocco CIN
+- Morocco Passport
+- Morocco Tax ID
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 85 | France NIR | 15 digits | `185073512301234` |
-| 86 | France Passport | 2 digits + 2 letters + 5 digits | `12AB34567` |
+#### Africa - Nigeria (6 patterns)
 
-### Europe — Italy (1 pattern)
+- Nigeria BVN
+- Nigeria Driver Licence
+- Nigeria NIN
+- Nigeria Passport
+- Nigeria TIN
+- Nigeria Voter Card
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 87 | Italy Codice Fiscale | 16 alphanumeric | `RSSMRA85M01H501Z` |
+#### Africa - South Africa (3 patterns)
 
-### Europe — Netherlands (1 pattern)
+- South Africa DL
+- South Africa ID
+- South Africa Passport
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 88 | Netherlands BSN | 8-9 digits | `123456789` |
+#### Africa - Tanzania (3 patterns)
 
-### Europe — Spain (1 pattern)
+- Tanzania NIDA
+- Tanzania Passport
+- Tanzania TIN
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 89 | Spain DNI/NIE | [XYZ]?XXXXXXX[A-Z] | `X1234567L` |
+#### Africa - Tunisia (2 patterns)
 
-### Europe — Poland (1 pattern)
+- Tunisia CIN
+- Tunisia Passport
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 90 | Poland PESEL | 11 digits | `85010112345` |
+#### Africa - Uganda (2 patterns)
 
-### Europe — Sweden (1 pattern)
+- Uganda NIN
+- Uganda Passport
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 91 | Sweden PIN | YYMMDD-XXXX | `850101-1234` |
+### Asia-Pacific
 
-### Europe — Portugal (1 pattern)
+#### Asia-Pacific - Australia (11 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 92 | Portugal NIF | 9 digits | `123456789` |
+- Australia DL ACT
+- Australia DL NSW
+- Australia DL NT
+- Australia DL QLD
+- Australia DL SA
+- Australia DL TAS
+- Australia DL VIC
+- Australia DL WA
+- Australia Medicare
+- Australia Passport
+- Australia TFN
 
-### Europe — Switzerland (1 pattern)
+#### Asia-Pacific - Bangladesh (3 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 93 | Switzerland AHV | 756.XXXX.XXXX.XX | `756.1234.5678.90` |
+- Bangladesh NID
+- Bangladesh Passport
+- Bangladesh TIN
 
-### Europe — Turkey (1 pattern)
+#### Asia-Pacific - China (5 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 94 | Turkey TC Kimlik | 11 digits (non-zero start) | `12345678901` |
+- China Passport
+- China Resident ID
+- Hong Kong ID
+- Macau ID
+- Taiwan National ID
 
-### Europe — EU (1 pattern)
+#### Asia-Pacific - India (6 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 95 | EU ETD | 3 letters + 6 digits | `ABC123456` |
+- India Aadhaar
+- India DL
+- India PAN
+- India Passport
+- India Ration Card
+- India Voter ID
 
-### Asia-Pacific — India (4 patterns)
+#### Asia-Pacific - Indonesia (3 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 96 | India PAN | XXXXX9999X | `ABCDE1234F` |
-| 97 | India Aadhaar | XXXX XXXX XXXX | `1234 5678 9012` |
-| 98 | India Passport | letter + 7 digits | `A1234567` |
-| 99 | India DL | 2 letters + 13 digits | `MH1234567890123` |
+- Indonesia NIK
+- Indonesia NPWP
+- Indonesia Passport
 
-### Asia-Pacific — Singapore (1 pattern)
+#### Asia-Pacific - Japan (6 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 100 | Singapore NIRC | X9999999X | `S1234567A` |
+- Japan DL
+- Japan Health Insurance
+- Japan Juminhyo Code
+- Japan My Number
+- Japan Passport
+- Japan Residence Card
 
-### Asia-Pacific — Australia (3 patterns)
+#### Asia-Pacific - Malaysia (2 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 101 | Australia TFN | 8-9 digits | `12345678` |
-| 102 | Australia Medicare | 11 digits | `12345678901` |
-| 103 | Australia Passport | letter + 7 digits | `A1234567` |
+- Malaysia MyKad
+- Malaysia Passport
 
-### Asia-Pacific — Japan (2 patterns)
+#### Asia-Pacific - New Zealand (4 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 104 | Japan My Number | 12 digits | `123456789012` |
-| 105 | Japan Passport | M/S/R/C + 7 digits | `M1234567` |
+- New Zealand DL
+- New Zealand IRD
+- New Zealand NHI
+- New Zealand Passport
 
-### Asia-Pacific — South Korea (1 pattern)
+#### Asia-Pacific - Pakistan (3 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 106 | South Korea RRN | XXXXXX-XXXXXXX | `850101-1234567` |
+- Pakistan CNIC
+- Pakistan NICOP
+- Pakistan Passport
 
-### Asia-Pacific — China (2 patterns)
+#### Asia-Pacific - Philippines (6 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 107 | China Resident ID | 17 digits + digit/X | `11010119850101001X` |
-| 108 | China Passport | E/G + 8 digits | `E12345678` |
+- Philippines Passport
+- Philippines PhilHealth
+- Philippines PhilSys
+- Philippines SSS
+- Philippines TIN
+- Philippines UMID
 
-### South America — Brazil (2 patterns)
+#### Asia-Pacific - Singapore (4 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 109 | Brazil CPF | XXX.XXX.XXX-XX | `123.456.789-09` |
-| 110 | Brazil Passport | 2 letters + 6 digits | `AB123456` |
+- Singapore DL
+- Singapore FIN
+- Singapore NRIC
+- Singapore Passport
 
-### Africa — South Africa (1 pattern)
+#### Asia-Pacific - South Korea (3 patterns)
 
-| # | Pattern | Format | Example |
-|---|---------|--------|---------|
-| 111 | South Africa ID | 13 digits | `8501015009087` |
+- South Korea DL
+- South Korea Passport
+- South Korea RRN
+
+#### Asia-Pacific - Sri Lanka (3 patterns)
+
+- Sri Lanka NIC New
+- Sri Lanka NIC Old
+- Sri Lanka Passport
+
+#### Asia-Pacific - Thailand (4 patterns)
+
+- Thailand DL
+- Thailand National ID
+- Thailand Passport
+- Thailand Tax ID
+
+#### Asia-Pacific - Vietnam (3 patterns)
+
+- Vietnam CCCD
+- Vietnam Passport
+- Vietnam Tax Code
+
+### Europe
+
+#### Europe - Austria (5 patterns)
+
+- Austria DL
+- Austria ID Card
+- Austria Passport
+- Austria SVN
+- Austria Tax Number
+
+#### Europe - Belgium (4 patterns)
+
+- Belgium DL
+- Belgium NRN
+- Belgium Passport
+- Belgium VAT
+
+#### Europe - Bulgaria (4 patterns)
+
+- Bulgaria EGN
+- Bulgaria ID Card
+- Bulgaria LNC
+- Bulgaria Passport
+
+#### Europe - Croatia (4 patterns)
+
+- Croatia DL
+- Croatia ID Card
+- Croatia OIB
+- Croatia Passport
+
+#### Europe - Cyprus (3 patterns)
+
+- Cyprus ID Card
+- Cyprus Passport
+- Cyprus TIN
+
+#### Europe - Czech Republic (4 patterns)
+
+- Czech Birth Number
+- Czech DL
+- Czech ICO
+- Czech Passport
+
+#### Europe - Denmark (3 patterns)
+
+- Denmark CPR
+- Denmark DL
+- Denmark Passport
+
+#### Europe - EU (2 patterns)
+
+- EU ETD
+- EU VAT Generic
+
+#### Europe - Estonia (3 patterns)
+
+- Estonia DL
+- Estonia Isikukood
+- Estonia Passport
+
+#### Europe - Finland (3 patterns)
+
+- Finland DL
+- Finland HETU
+- Finland Passport
+
+#### Europe - France (5 patterns)
+
+- France CNI
+- France DL
+- France IBAN
+- France NIR
+- France Passport
+
+#### Europe - Germany (6 patterns)
+
+- Germany DL
+- Germany IBAN
+- Germany ID
+- Germany Passport
+- Germany Social Insurance
+- Germany Tax ID
+
+#### Europe - Greece (5 patterns)
+
+- Greece AFM
+- Greece AMKA
+- Greece DL
+- Greece ID Card
+- Greece Passport
+
+#### Europe - Hungary (5 patterns)
+
+- Hungary DL
+- Hungary Passport
+- Hungary Personal ID
+- Hungary TAJ
+- Hungary Tax Number
+
+#### Europe - Iceland (2 patterns)
+
+- Iceland Kennitala
+- Iceland Passport
+
+#### Europe - Ireland (4 patterns)
+
+- Ireland DL
+- Ireland Eircode
+- Ireland PPS
+- Ireland Passport
+
+#### Europe - Italy (5 patterns)
+
+- Italy Codice Fiscale
+- Italy DL
+- Italy Partita IVA
+- Italy Passport
+- Italy SSN
+
+#### Europe - Latvia (3 patterns)
+
+- Latvia DL
+- Latvia Passport
+- Latvia Personas Kods
+
+#### Europe - Liechtenstein (2 patterns)
+
+- Liechtenstein PIN
+- Liechtenstein Passport
+
+#### Europe - Lithuania (3 patterns)
+
+- Lithuania Asmens Kodas
+- Lithuania DL
+- Lithuania Passport
+
+#### Europe - Luxembourg (3 patterns)
+
+- Luxembourg DL
+- Luxembourg NIN
+- Luxembourg Passport
+
+#### Europe - Malta (3 patterns)
+
+- Malta ID Card
+- Malta Passport
+- Malta TIN
+
+#### Europe - Netherlands (4 patterns)
+
+- Netherlands BSN
+- Netherlands DL
+- Netherlands IBAN
+- Netherlands Passport
+
+#### Europe - Norway (4 patterns)
+
+- Norway D-Number
+- Norway DL
+- Norway FNR
+- Norway Passport
+
+#### Europe - Poland (6 patterns)
+
+- Poland DL
+- Poland ID Card
+- Poland NIP
+- Poland PESEL
+- Poland Passport
+- Poland REGON
+
+#### Europe - Portugal (4 patterns)
+
+- Portugal CC
+- Portugal NIF
+- Portugal NISS
+- Portugal Passport
+
+#### Europe - Romania (4 patterns)
+
+- Romania CIF
+- Romania CNP
+- Romania DL
+- Romania Passport
+
+#### Europe - Slovakia (3 patterns)
+
+- Slovakia Birth Number
+- Slovakia DL
+- Slovakia Passport
+
+#### Europe - Slovenia (4 patterns)
+
+- Slovenia DL
+- Slovenia EMSO
+- Slovenia Passport
+- Slovenia Tax Number
+
+#### Europe - Spain (5 patterns)
+
+- Spain DL
+- Spain DNI
+- Spain NIE
+- Spain NSS
+- Spain Passport
+
+#### Europe - Sweden (4 patterns)
+
+- Sweden DL
+- Sweden Organisation Number
+- Sweden PIN
+- Sweden Passport
+
+#### Europe - Switzerland (4 patterns)
+
+- Switzerland AHV
+- Switzerland DL
+- Switzerland Passport
+- Switzerland UID
+
+#### Europe - Turkey (4 patterns)
+
+- Turkey DL
+- Turkey Passport
+- Turkey TC Kimlik
+- Turkey Tax ID
+
+#### Europe - United Kingdom (7 patterns)
+
+- British NHS
+- UK DL
+- UK NIN
+- UK Passport
+- UK Phone Number
+- UK Sort Code
+- UK UTR
+
+### Latin America
+
+#### Latin America - Argentina (3 patterns)
+
+- Argentina CUIL/CUIT
+- Argentina DNI
+- Argentina Passport
+
+#### Latin America - Brazil (6 patterns)
+
+- Brazil CNH
+- Brazil CNPJ
+- Brazil CPF
+- Brazil Passport
+- Brazil RG
+- Brazil SUS Card
+
+#### Latin America - Chile (2 patterns)
+
+- Chile Passport
+- Chile RUN/RUT
+
+#### Latin America - Colombia (4 patterns)
+
+- Colombia Cedula
+- Colombia NIT
+- Colombia NUIP
+- Colombia Passport
+
+#### Latin America - Costa Rica (3 patterns)
+
+- Costa Rica Cedula
+- Costa Rica DIMEX
+- Costa Rica Passport
+
+#### Latin America - Ecuador (3 patterns)
+
+- Ecuador Cedula
+- Ecuador Passport
+- Ecuador RUC
+
+#### Latin America - Paraguay (3 patterns)
+
+- Paraguay Cedula
+- Paraguay Passport
+- Paraguay RUC
+
+#### Latin America - Peru (4 patterns)
+
+- Peru Carnet Extranjeria
+- Peru DNI
+- Peru Passport
+- Peru RUC
+
+#### Latin America - Uruguay (3 patterns)
+
+- Uruguay Cedula
+- Uruguay Passport
+- Uruguay RUT
+
+#### Latin America - Venezuela (3 patterns)
+
+- Venezuela Cedula
+- Venezuela Passport
+- Venezuela RIF
+
+### Middle East
+
+#### Middle East - Bahrain (2 patterns)
+
+- Bahrain CPR
+- Bahrain Passport
+
+#### Middle East - Iran (2 patterns)
+
+- Iran Melli Code
+- Iran Passport
+
+#### Middle East - Iraq (2 patterns)
+
+- Iraq National ID
+- Iraq Passport
+
+#### Middle East - Israel (2 patterns)
+
+- Israel Passport
+- Israel Teudat Zehut
+
+#### Middle East - Jordan (2 patterns)
+
+- Jordan National ID
+- Jordan Passport
+
+#### Middle East - Kuwait (2 patterns)
+
+- Kuwait Civil ID
+- Kuwait Passport
+
+#### Middle East - Lebanon (2 patterns)
+
+- Lebanon ID
+- Lebanon Passport
+
+#### Middle East - Qatar (2 patterns)
+
+- Qatar Passport
+- Qatar QID
+
+#### Middle East - Saudi Arabia (2 patterns)
+
+- Saudi Arabia National ID
+- Saudi Arabia Passport
+
+#### Middle East - UAE (3 patterns)
+
+- UAE Emirates ID
+- UAE Passport
+- UAE Visa Number
+
+### North America
+
+#### North America - Canada (29 patterns)
+
+- Alberta DL
+- Alberta HC
+- BC HC
+- British Columbia DL
+- Canada BN
+- Canada Bank Code
+- Canada NEXUS
+- Canada PR Card
+- Canada Passport
+- Canada SIN
+- Manitoba DL
+- Manitoba HC
+- NWT DL
+- New Brunswick DL
+- New Brunswick HC
+- Newfoundland DL
+- Newfoundland HC
+- Nova Scotia DL
+- Nova Scotia HC
+- Nunavut DL
+- Ontario DL
+- Ontario HC
+- PEI DL
+- PEI HC
+- Quebec DL
+- Quebec HC
+- Saskatchewan DL
+- Saskatchewan HC
+- Yukon DL
+
+#### North America - Mexico (7 patterns)
+
+- Mexico CURP
+- Mexico Clave Elector
+- Mexico INE CIC
+- Mexico INE OCR
+- Mexico NSS
+- Mexico Passport
+- Mexico RFC
+
+#### North America - US Generic DL (1 patterns)
+
+- Generic US DL
+
+#### North America - United States (63 patterns)
+
+- Alabama DL
+- Alaska DL
+- Arizona DL
+- Arkansas DL
+- California DL
+- Colorado DL
+- Connecticut DL
+- DC DL
+- Delaware DL
+- Florida DL
+- Georgia DL
+- Hawaii DL
+- Idaho DL
+- Illinois DL
+- Indiana DL
+- Iowa DL
+- Kansas DL
+- Kentucky DL
+- Louisiana DL
+- Maine DL
+- Maryland DL
+- Massachusetts DL
+- Michigan DL
+- Minnesota DL
+- Mississippi DL
+- Missouri DL
+- Montana DL
+- Nebraska DL
+- Nevada DL
+- New Hampshire DL
+- New Jersey DL
+- New Mexico DL
+- New York DL
+- North Carolina DL
+- North Dakota DL
+- Ohio DL
+- Oklahoma DL
+- Oregon DL
+- Pennsylvania DL
+- Rhode Island DL
+- South Carolina DL
+- South Dakota DL
+- Tennessee DL
+- Texas DL
+- US DEA Number
+- US DoD ID
+- US Known Traveler Number
+- US MBI
+- US NPI
+- US Phone Number
+- USA EIN
+- USA ITIN
+- USA Passport
+- USA Passport Card
+- USA Routing Number
+- USA SSN
+- Utah DL
+- Vermont DL
+- Virginia DL
+- Washington DL
+- West Virginia DL
+- Wisconsin DL
+- Wyoming DL
+
+---
+
+**Total: 437 patterns across 95 categories**
