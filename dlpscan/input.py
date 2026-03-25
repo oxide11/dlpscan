@@ -1,13 +1,21 @@
-from scanner import enhanced_scan_text, redact_sensitive_info
+from .scanner import enhanced_scan_text, redact_sensitive_info
 
-user_input = input("Enter something: ")
-print("You entered : ", user_input)
 
-findings = enhanced_scan_text(user_input)
-# Check if any patterns were detected
-pattern_detected = any(findings)
-# Check if any context was detected
-context_detected = any(finding[2] for finding in findings)
+def main():
+    user_input = input("Enter something: ")
+    print("You entered:", user_input)
 
-print("Pattern Detected : ", pattern_detected)
-print("Context Detected : ", context_detected)
+    findings = list(enhanced_scan_text(user_input))
+
+    if not findings:
+        print("No sensitive data detected.")
+        return
+
+    print(f"\nFound {len(findings)} potential match(es):\n")
+    for match_text, sub_category, has_context, category, _ in findings:
+        context_label = "WITH context" if has_context else "no context"
+        print(f"  [{category} > {sub_category}] '{match_text}' ({context_label})")
+
+
+if __name__ == '__main__':
+    main()
