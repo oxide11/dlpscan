@@ -3430,5 +3430,190 @@ class TestScannerExtractorExtensions(unittest.TestCase):
         self.assertFalse(_is_binary_file('/tmp/test.pdf'))
 
 
+class TestRulesets(unittest.TestCase):
+    """Tests for the YAML-based scan ruleset system."""
+
+    def test_available_baselines(self):
+        from dlpscan.rulesets import available_baselines
+        baselines = available_baselines()
+        self.assertIsInstance(baselines, list)
+        self.assertIn("pci", baselines)
+        self.assertIn("pii", baselines)
+        self.assertIn("phi", baselines)
+        self.assertIn("internal_financial", baselines)
+        self.assertIn("source_code_secrets", baselines)
+        self.assertIn("confidential_documents", baselines)
+
+    def test_available_categories(self):
+        from dlpscan.rulesets import available_categories
+        cats = available_categories()
+        self.assertIsInstance(cats, list)
+        self.assertGreater(len(cats), 0)
+        self.assertIn("Credit Card Numbers", cats)
+
+    def test_available_presets(self):
+        from dlpscan.rulesets import available_presets
+        presets = available_presets()
+        self.assertIsInstance(presets, list)
+        self.assertIn("pci_dss", presets)
+
+    def test_ruleset_from_string_basic(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        yaml_str = '{"name": "test", "baselines": ["pci"], "action": "flag"}'
+        rs = load_ruleset_from_string(yaml_str)
+        self.assertEqual(rs.name, "test")
+        self.assertEqual(rs.action, "flag")
+        self.assertIn("pci", rs.baselines)
+
+    def test_ruleset_resolve_categories_pci(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        yaml_str = '{"name": "test", "baselines": ["pci"]}'
+        rs = load_ruleset_from_string(yaml_str)
+        cats = rs.resolve_categories()
+        self.assertIn("Credit Card Numbers", cats)
+        self.assertIn("Primary Account Numbers", cats)
+
+    def test_ruleset_resolve_categories_pii(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        yaml_str = '{"name": "test", "baselines": ["pii"]}'
+        rs = load_ruleset_from_string(yaml_str)
+        cats = rs.resolve_categories()
+        self.assertIn("Personal Identifiers", cats)
+        self.assertIn("Contact Information", cats)
+
+    def test_ruleset_exclude_categories(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        yaml_str = '{"name": "test", "baselines": ["pci"], "exclude_categories": ["Credit Card Numbers"]}'
+        rs = load_ruleset_from_string(yaml_str)
+        cats = rs.resolve_categories()
+        self.assertNotIn("Credit Card Numbers", cats)
+
+    def test_ruleset_override_disables_category(self):
+        from dlpscan.rulesets import load_ruleset_from_string, CategoryOverride
+        yaml_str = '{"name": "test", "baselines": ["pci"]}'
+        rs = load_ruleset_from_string(yaml_str)
+        rs.overrides.append(CategoryOverride(
+            category="Credit Card Numbers", enabled=False
+        ))
+        cats = rs.resolve_categories()
+        self.assertNotIn("Credit Card Numbers", cats)
+
+    def test_ruleset_to_guard(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        yaml_str = '{"name": "test", "baselines": ["pci"], "action": "flag"}'
+        rs = load_ruleset_from_string(yaml_str)
+        guard = rs.to_guard()
+        self.assertIsNotNone(guard)
+
+    def test_ruleset_scan(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        yaml_str = '{"name": "test", "baselines": ["pci"], "action": "flag"}'
+        rs = load_ruleset_from_string(yaml_str)
+        result = rs.scan("Card: 4111111111111111")
+        self.assertFalse(result.is_clean)
+
+    def test_ruleset_scan_clean(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        yaml_str = '{"name": "test", "baselines": ["pci"], "action": "flag", "min_confidence": 0.5}'
+        rs = load_ruleset_from_string(yaml_str)
+        result = rs.scan("Hello world, this is a normal sentence.")
+        self.assertTrue(result.is_clean)
+
+    def test_ruleset_summary(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        yaml_str = '{"name": "test", "baselines": ["pci"], "action": "reject"}'
+        rs = load_ruleset_from_string(yaml_str)
+        summary = rs.summary()
+        self.assertEqual(summary["name"], "test")
+        self.assertEqual(summary["action"], "reject")
+        self.assertGreater(summary["total_categories"], 0)
+
+    def test_ruleset_custom_pattern(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        config = json.dumps({
+            "name": "custom-test",
+            "categories": [],
+            "action": "flag",
+            "custom_patterns": [{
+                "name": "Test Pattern",
+                "regex": r"TESTID-\d{6}",
+                "category": "Custom Test",
+                "confidence": 0.9,
+            }]
+        })
+        rs = load_ruleset_from_string(config)
+        self.assertEqual(len(rs.custom_patterns), 1)
+        self.assertEqual(rs.custom_patterns[0].name, "Test Pattern")
+
+    def test_ruleset_allowlist(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        config = json.dumps({
+            "name": "al-test",
+            "baselines": ["pci"],
+            "action": "flag",
+            "allowlist": ["4111111111111111"]
+        })
+        rs = load_ruleset_from_string(config)
+        self.assertEqual(len(rs.allowlist), 1)
+        result = rs.scan("Card: 4111111111111111")
+        # The allowlisted value should be ignored
+        cc_findings = [f for f in result.findings
+                       if f.category == "Credit Card Numbers" and "4111111111111111" in f.text]
+        self.assertEqual(len(cc_findings), 0)
+
+    def test_load_ruleset_file_not_found(self):
+        from dlpscan.rulesets import load_ruleset
+        with self.assertRaises(FileNotFoundError):
+            load_ruleset("/nonexistent/path.yaml")
+
+    def test_load_ruleset_from_file(self):
+        from dlpscan.rulesets import load_ruleset
+        # Use one of the built-in rulesets if available
+        ruleset_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "rulesets", "pci-production.yaml"
+        )
+        if os.path.isfile(ruleset_path):
+            rs = load_ruleset(ruleset_path)
+            self.assertEqual(rs.name, "PCI Production")
+            self.assertIn("pci", rs.baselines)
+
+    def test_ruleset_invalid_action(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        yaml_str = '{"name": "test", "baselines": ["pci"], "action": "invalid_action"}'
+        rs = load_ruleset_from_string(yaml_str)
+        with self.assertRaises(ValueError):
+            rs.to_guard()
+
+    def test_ruleset_multiple_baselines(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        yaml_str = '{"name": "multi", "baselines": ["pci", "pii"]}'
+        rs = load_ruleset_from_string(yaml_str)
+        cats = rs.resolve_categories()
+        self.assertIn("Credit Card Numbers", cats)
+        self.assertIn("Personal Identifiers", cats)
+
+    def test_ruleset_confidence_overrides(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        config = json.dumps({
+            "name": "conf-test",
+            "baselines": ["pci"],
+            "action": "flag",
+            "overrides": [{
+                "category": "Credit Card Numbers",
+                "min_confidence": 0.95
+            }]
+        })
+        rs = load_ruleset_from_string(config)
+        guard = rs.to_guard()
+        self.assertIsNotNone(guard)
+
+    def test_ruleset_default_name_from_string(self):
+        from dlpscan.rulesets import load_ruleset_from_string
+        yaml_str = '{"baselines": ["pci"]}'
+        rs = load_ruleset_from_string(yaml_str, name="my-default")
+        self.assertEqual(rs.name, "my-default")
+
+
 if __name__ == '__main__':
     unittest.main()

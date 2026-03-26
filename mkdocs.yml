@@ -41,6 +41,7 @@ nav:
       - Policy Engine: guide/policy.md
       - OCR Scanning: guide/ocr.md
       - Streaming & Webhooks: guide/streaming.md
+      - YAML Rulesets: guide/rulesets.md
   - Enterprise:
       - REST API: enterprise/api.md
       - Audit Logging: enterprise/audit.md
