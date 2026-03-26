@@ -44,6 +44,6 @@ docker-compose.yml
 benchmarks
 tests
 *.md
-LICENSE
+!README.md
 .pre-commit-config.yaml
 .github
