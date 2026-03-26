@@ -31,11 +31,28 @@ detecting content that has been explicitly marked as restricted.
 | CNB_Public | [rbc_classification](../patterns/generic/rbc_classification.md) |
 | Public | [rbc_classification](../patterns/generic/rbc_classification.md) |
 
-### Supervisory Information (CSI)
+### Financial Regulatory Labels
 
 | Category | Source |
 |----------|--------|
+| MNPI | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+| Inside Information | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+| Pre-Decisional | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+| Draft Not for Circulation | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+| Market Sensitive | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+| Information Barrier | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+| Investment Restricted | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+
+### Supervisory Information
+
+| Category | Source |
+|----------|--------|
+| Supervisory Controlled | [supervisory_information](../patterns/generic/supervisory_information.md) |
+| Supervisory Confidential | [supervisory_information](../patterns/generic/supervisory_information.md) |
 | CSI | [supervisory_information](../patterns/generic/supervisory_information.md) |
+| Non-Public Supervisory | [supervisory_information](../patterns/generic/supervisory_information.md) |
+| Restricted Supervisory | [supervisory_information](../patterns/generic/supervisory_information.md) |
+| Examination Findings | [supervisory_information](../patterns/generic/supervisory_information.md) |
 
 ### Legal Privilege Markings
 
@@ -56,7 +73,8 @@ detecting content that has been explicitly marked as restricted.
 | Keyword Source | Proximity | Mapped Patterns |
 |---------------|-----------|-----------------|
 | [rbc_classification](../keywords/generic/rbc_classification.md) | 80 chars | TT_Confidential, TT_MBI, TT_SPI, CNB_Confidential, Sensitive - Business, Sensitive - Personal, CNB_Restricted, CNB_Internal, CNB_Public, Public |
-| [supervisory_information](../keywords/generic/supervisory_information.md) | 80 chars | CSI |
+| [financial_regulatory_labels](../keywords/generic/financial_regulatory_labels.md) | 80 chars | MNPI, Inside Info, Market Sensitive |
+| [supervisory_information](../keywords/generic/supervisory_information.md) | 80 chars | Supervisory, CSI, Examination |
 | [privileged_information](../keywords/generic/privileged_information.md) | 100 chars | Attorney-Client, Work Product, Litigation Hold |
 
 ---
@@ -70,7 +88,7 @@ detecting content that has been explicitly marked as restricted.
 | **Confidential** | TT_Confidential, CNB_Confidential, Sensitive - Business, Sensitive - Personal | Need-to-know, encrypted storage |
 | **Highly Restricted** | TT_MBI, TT_SPI, CNB_Restricted | Strict access control, audit trail |
 | **Legally Protected** | Attorney-Client Privilege, Work Product, Litigation Hold | Legal department control, no external sharing |
-| **Regulatory** | CSI | Information barriers, regulatory compliance |
+| **Regulatory** | MNPI, CSI, Supervisory Controlled | Information barriers, regulatory compliance |
 
 ## Use Cases
 
