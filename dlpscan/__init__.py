@@ -108,4 +108,4 @@ from .siem import (
 from .streaming import StreamScanner, WebhookScanner
 from .webhooks import WebhookNotifier, notify_findings
 
-__version__ = '1.5.0'
+__version__ = '1.6.0'

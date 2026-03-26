@@ -2,6 +2,42 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [1.6.0] - 2026-03-26
+
+### New Features
+
+- **Async API**: All scan endpoints now use `run_in_executor` to avoid blocking
+  the event loop, enabling proper async concurrency under load.
+
+- **Webhook Notifications** (`dlpscan.webhooks`): `WebhookNotifier` sends HTTP
+  POST alerts when findings are detected. Non-blocking fire-and-forget delivery
+  with configurable retry and timeout. Register global notifiers via
+  `register_notifier()` and dispatch with `notify_findings()`.
+
+- **Scan Result Caching** (`dlpscan.cache`): LRU + TTL cache with SHA-256 keying.
+  Enable via `DLPSCAN_CACHE_ENABLED=1` environment variable. Thread-safe with
+  hit/miss stats tracking.
+
+- **Custom Pattern Management API**: New REST endpoints for runtime pattern
+  management: `POST /v1/patterns`, `GET /v1/patterns`, `DELETE /v1/patterns/{name}`.
+
+- **Docker Compose**: Production-ready `docker-compose.yml` with API and batch
+  worker services, health checks, and environment configuration.
+
+- **GitHub Actions Action**: Composite action at `.github/actions/dlpscan/` for
+  CI/CD pipeline scanning with configurable path, format, and fail-on-findings.
+
+### Improvements
+
+- **Drop Python 3.8**: Minimum version is now Python 3.9. Removed all
+  `from __future__ import annotations` imports.
+
+- **CI Enhancements**: Added mypy type checking, test coverage reporting with
+  `coverage.xml` artifacts, and benchmark regression tracking with JSON output.
+
+- **PyPI Publishing**: Workflow now triggers on GitHub releases for automated
+  publishing via trusted publishing.
+
 ## [1.5.0] - 2026-03-26
 
 ### New Features
