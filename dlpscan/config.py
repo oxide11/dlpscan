@@ -182,22 +182,29 @@ def apply_config_to_args(config: Dict[str, Any], args) -> None:
     """Apply config file settings as defaults for CLI args.
 
     CLI args take precedence — only fill in values that weren't
-    explicitly set on the command line.
+    explicitly set on the command line.  Config values are type-checked
+    before assignment to prevent downstream TypeErrors.
     """
-    if getattr(args, 'min_confidence', None) == 0.0 and config.get('min_confidence', 0.0) > 0:
-        args.min_confidence = config['min_confidence']
+    mc = config.get('min_confidence', 0.0)
+    if isinstance(mc, (int, float)) and 0.0 <= mc <= 1.0:
+        if getattr(args, 'min_confidence', None) == 0.0 and mc > 0:
+            args.min_confidence = float(mc)
 
-    if not getattr(args, 'require_context', False) and config.get('require_context', False):
+    if not getattr(args, 'require_context', False) and config.get('require_context') is True:
         args.require_context = True
 
-    if getattr(args, 'no_dedup', False) is False and not config.get('deduplicate', True):
+    if getattr(args, 'no_dedup', False) is False and config.get('deduplicate') is False:
         args.no_dedup = True
 
-    if getattr(args, 'max_matches', 50000) == 50000:
-        args.max_matches = config.get('max_matches', 50000)
+    mm = config.get('max_matches', 50000)
+    if isinstance(mm, int) and mm > 0 and getattr(args, 'max_matches', 50000) == 50000:
+        args.max_matches = mm
 
-    if getattr(args, 'format', 'text') == 'text' and config.get('format', 'text') != 'text':
-        args.format = config['format']
+    fmt = config.get('format', 'text')
+    if isinstance(fmt, str) and fmt in ('text', 'json', 'csv', 'sarif'):
+        if getattr(args, 'format', 'text') == 'text' and fmt != 'text':
+            args.format = fmt
 
-    if getattr(args, 'categories', None) is None and config.get('categories'):
-        args.categories = config['categories']
+    cats = config.get('categories')
+    if isinstance(cats, list) and getattr(args, 'categories', None) is None:
+        args.categories = cats

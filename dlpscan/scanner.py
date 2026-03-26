@@ -170,7 +170,7 @@ def _can_use_sigalrm() -> bool:
     )
 
 
-def _validate_text_input(text) -> str:
+def _validate_text_input(text: object) -> str:
     """Validate and sanitize scanner input text."""
     if text is None:
         raise EmptyInputError("Input text cannot be None.")
@@ -545,8 +545,10 @@ def _scan_chunks(
 
                 if total_yielded >= max_matches:
                     return
-        except (EmptyInputError, ValueError):
-            pass  # Skip empty/oversized chunks
+        except EmptyInputError:
+            pass  # Chunk was empty after preprocessing — expected for sparse files.
+        except ValueError as exc:
+            logger.debug("Chunk skipped (offset %d): %s", chunk_offset, exc)
 
         # Keep tail for overlap with next chunk.
         prev_tail = raw[-chunk_overlap:] if len(raw) >= chunk_overlap else raw
@@ -584,10 +586,11 @@ def scan_file(
     Yields:
         Match objects with span offsets relative to the full file.
     """
-    if not os.path.isfile(file_path):
+    try:
+        file_size = os.path.getsize(file_path)
+    except OSError:
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    file_size = os.path.getsize(file_path)
     if file_size == 0:
         return
 

@@ -21,11 +21,14 @@ Usage:
 """
 
 import argparse
+import logging
 import subprocess
 import sys
 
 from .scanner import enhanced_scan_text
-from .models import Match
+from .exceptions import RedactionError
+
+logger = logging.getLogger(__name__)
 
 
 def get_staged_diff() -> str:
@@ -35,8 +38,13 @@ def get_staged_diff() -> str:
             ['git', 'diff', '--cached', '--diff-filter=ACMR', '-U0'],
             capture_output=True, text=True, timeout=30,
         )
+        if result.returncode != 0:
+            logger.debug("git diff exited with code %d: %s",
+                         result.returncode, result.stderr.strip())
+            return ''
         return result.stdout
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        logger.debug("Could not run git diff: %s", exc)
         return ''
 
 
@@ -105,7 +113,7 @@ def main():
                 require_context=args.require_context,
                 deduplicate=True,
             ))
-        except Exception:
+        except (RedactionError, TypeError, ValueError):
             continue
 
         for m in matches:
