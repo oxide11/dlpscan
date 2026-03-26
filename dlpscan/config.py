@@ -17,10 +17,8 @@ Supported config keys:
 
 import copy
 import json
-import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
+from typing import Any, Dict, Optional
 
 _DEFAULTS: Dict[str, Any] = {
     'min_confidence': 0.0,

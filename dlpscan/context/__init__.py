@@ -5,28 +5,26 @@ Imports all context modules from generic/, custom/, and regions/ sub-packages
 and merges them into a single CONTEXT_KEYWORDS dict consumed by the scanner.
 """
 
-from .generic.credit_cards import CREDIT_CARDS_CONTEXT
-from .generic.contact_info import CONTACT_INFO_CONTEXT
-from .generic.banking import BANKING_CONTEXT
-from .generic.cryptocurrency import CRYPTOCURRENCY_CONTEXT
-from .generic.vehicles import VEHICLES_CONTEXT
-from .generic.dates import DATES_CONTEXT
-from .generic.urls import URLS_CONTEXT
-from .generic.secrets import SECRETS_CONTEXT
-from .generic.pii_identifiers import PII_IDENTIFIERS_CONTEXT
-from .generic.classification_labels import CLASSIFICATION_LABELS_CONTEXT
-
 from .custom.cloud_providers import CLOUD_PROVIDERS_CONTEXT
 from .custom.code_platforms import CODE_PLATFORMS_CONTEXT
-from .custom.payment_services import PAYMENT_SERVICES_CONTEXT
 from .custom.messaging_services import MESSAGING_SERVICES_CONTEXT
-
-from .regions.north_america import NORTH_AMERICA_CONTEXT
-from .regions.europe import EUROPE_CONTEXT
+from .custom.payment_services import PAYMENT_SERVICES_CONTEXT
+from .generic.banking import BANKING_CONTEXT
+from .generic.classification_labels import CLASSIFICATION_LABELS_CONTEXT
+from .generic.contact_info import CONTACT_INFO_CONTEXT
+from .generic.credit_cards import CREDIT_CARDS_CONTEXT
+from .generic.cryptocurrency import CRYPTOCURRENCY_CONTEXT
+from .generic.dates import DATES_CONTEXT
+from .generic.pii_identifiers import PII_IDENTIFIERS_CONTEXT
+from .generic.secrets import SECRETS_CONTEXT
+from .generic.urls import URLS_CONTEXT
+from .generic.vehicles import VEHICLES_CONTEXT
+from .regions.africa import AFRICA_CONTEXT
 from .regions.asia_pacific import ASIA_PACIFIC_CONTEXT
+from .regions.europe import EUROPE_CONTEXT
 from .regions.latin_america import LATIN_AMERICA_CONTEXT
 from .regions.middle_east import MIDDLE_EAST_CONTEXT
-from .regions.africa import AFRICA_CONTEXT
+from .regions.north_america import NORTH_AMERICA_CONTEXT
 
 CONTEXT_KEYWORDS: dict = {}
 

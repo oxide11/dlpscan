@@ -26,14 +26,20 @@ import inspect
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Set, Union
+from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
-from ..models import Match
-from ..scanner import enhanced_scan_text, redact_sensitive_info, register_patterns, unregister_patterns
 from ..allowlist import Allowlist
 from ..exceptions import EmptyInputError, ShortInputError
+from ..models import Match
+from ..scanner import (
+    enhanced_scan_text,
+    redact_sensitive_info,
+    register_patterns,
+    unregister_patterns,
+)
 from .enums import Action, Mode
-from .presets import Preset, PRESET_CATEGORIES
+from .presets import PRESET_CATEGORIES, Preset
+from .transforms import TokenVault, obfuscate_matches, tokenize_matches
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +56,16 @@ class ScanResult:
         text: The original input text.
         is_clean: True if no findings after filtering.
         findings: List of Match objects found.
-        redacted_text: Sanitized text (set only when action=REDACT or via sanitize()).
+        redacted_text: Transformed text (redacted, tokenized, or obfuscated).
         categories_found: Set of unique category names detected.
+        token_vault: TokenVault with mappings (set only when action=TOKENIZE).
     """
     text: str
     is_clean: bool
     findings: List[Match] = field(default_factory=list)
     redacted_text: Optional[str] = None
     categories_found: Set[str] = field(default_factory=set)
+    token_vault: Optional[TokenVault] = None
 
     @property
     def finding_count(self) -> int:
@@ -146,6 +154,7 @@ class InputGuard:
         on_detect: Optional[Callable[['ScanResult'], None]] = None,
         custom_patterns: Optional[Dict[str, Dict[str, str]]] = None,
         confidence_overrides: Optional[Dict[str, float]] = None,
+        token_vault: Optional[TokenVault] = None,
     ):
         # Normalize enum values from strings.
         self.mode = Mode(mode) if isinstance(mode, str) else mode
@@ -157,6 +166,14 @@ class InputGuard:
         self.on_detect = on_detect
         self._confidence_overrides = confidence_overrides or {}
         self._registered_categories: List[str] = []
+
+        # Token vault for TOKENIZE action — auto-create if not provided.
+        if token_vault is not None:
+            self._token_vault = token_vault
+        elif self.action == Action.TOKENIZE:
+            self._token_vault = TokenVault()
+        else:
+            self._token_vault = TokenVault()  # Lazy — available for .tokenize() method
 
         # Register custom patterns if provided.
         if custom_patterns:
@@ -224,10 +241,17 @@ class InputGuard:
         categories_found = {m.category for m in matches}
         is_clean = len(matches) == 0
 
-        # Build redacted text if needed.
+        # Build transformed text if needed.
         redacted_text = None
-        if not is_clean and self.action == Action.REDACT:
-            redacted_text = self._redact_matches(text, matches)
+        vault = None
+        if not is_clean:
+            if self.action == Action.REDACT:
+                redacted_text = self._redact_matches(text, matches)
+            elif self.action == Action.TOKENIZE:
+                redacted_text = tokenize_matches(text, matches, self._token_vault)
+                vault = self._token_vault
+            elif self.action == Action.OBFUSCATE:
+                redacted_text = obfuscate_matches(text, matches)
 
         return ScanResult(
             text=text,
@@ -235,6 +259,7 @@ class InputGuard:
             findings=matches,
             redacted_text=redacted_text,
             categories_found=categories_found,
+            token_vault=vault,
         )
 
     def scan(self, text: str) -> ScanResult:
@@ -280,6 +305,40 @@ class InputGuard:
         if result.is_clean:
             return text
         return self._redact_matches(text, result.findings)
+
+    def tokenize(self, text: str) -> Tuple[str, TokenVault]:
+        """Scan and replace sensitive data with reversible tokens.
+
+        Returns:
+            Tuple of (tokenized_text, TokenVault with mappings).
+            Returns (original_text, empty_vault) if clean.
+        """
+        result = self._do_scan(text)
+        if result.is_clean:
+            return text, self._token_vault
+        tokenized = tokenize_matches(text, result.findings, self._token_vault)
+        return tokenized, self._token_vault
+
+    def obfuscate(self, text: str) -> str:
+        """Scan and replace sensitive data with realistic fake data.
+
+        Returns obfuscated text. Irreversible. Returns original if clean.
+        """
+        result = self._do_scan(text)
+        if result.is_clean:
+            return text
+        return obfuscate_matches(text, result.findings)
+
+    def detokenize(self, text: str) -> str:
+        """Reverse tokenization using the guard's token vault.
+
+        Args:
+            text: Text containing tokens from a previous tokenize/scan call.
+
+        Returns:
+            Text with tokens replaced by their original values.
+        """
+        return self._token_vault.detokenize_text(text)
 
     def protect(
         self,
@@ -337,8 +396,9 @@ class InputGuard:
 
                     result = self.scan(value)
 
-                    # For REDACT mode, replace the argument with sanitized text.
-                    if self.action == Action.REDACT and result.redacted_text is not None:
+                    # For transform actions, replace the argument with transformed text.
+                    if self.action in (Action.REDACT, Action.TOKENIZE, Action.OBFUSCATE) \
+                            and result.redacted_text is not None:
                         bound.arguments[name] = result.redacted_text
 
                 return fn(*bound.args, **bound.kwargs)

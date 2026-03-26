@@ -1,28 +1,28 @@
 import fnmatch
 import io
+import logging
 import os
 import re
 import signal
 import threading
-import logging
 from typing import Generator, List, Optional, Set, Tuple
 
-from .patterns import PATTERNS
 from .context import CONTEXT_KEYWORDS
-from .models import (
-    Match,
-    PATTERN_SPECIFICITY,
-    DEFAULT_SPECIFICITY,
-    CONTEXT_REQUIRED_PATTERNS,
-)
 from .exceptions import (
     EmptyInputError,
-    ShortInputError,
     InvalidCardNumberError,
+    ShortInputError,
     SubCategoryNotFoundError,
 )
 from .metrics import MetricsCollector
-from .plugins import run_validators, run_post_processors
+from .models import (
+    CONTEXT_REQUIRED_PATTERNS,
+    DEFAULT_SPECIFICITY,
+    PATTERN_SPECIFICITY,
+    Match,
+)
+from .patterns import PATTERNS
+from .plugins import run_post_processors, run_validators
 
 logger = logging.getLogger(__name__)
 

@@ -28,7 +28,7 @@ Usage::
 """
 
 import threading
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List
 
 from .models import Match
 

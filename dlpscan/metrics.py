@@ -17,9 +17,9 @@ Usage::
     # All subsequent scans will invoke the callback automatically.
 """
 
-import time
 import threading
-from dataclasses import dataclass, field
+import time
+from dataclasses import dataclass
 from typing import Callable, Optional
 
 

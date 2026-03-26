@@ -1,6 +1,5 @@
 import re
 
-
 CLASSIFICATION_LABELS_PATTERNS = {
     # ── Regulatory & Supervisory Classification ─────────────────────
     'Supervisory Information': {

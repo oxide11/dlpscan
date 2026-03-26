@@ -4,12 +4,12 @@ import json
 import os
 import sys
 
-from .scanner import enhanced_scan_text, scan_file, scan_directory
-from .config import load_config, apply_config_to_args
 from .allowlist import Allowlist
-from .exceptions import RedactionError, ExtractionError
-from .extractors import get_extractor, extract_text
+from .config import apply_config_to_args, load_config
+from .exceptions import ExtractionError, RedactionError
+from .extractors import get_extractor
 from .pipeline import Pipeline
+from .scanner import enhanced_scan_text, scan_file
 
 
 def _display_text(m, redact=False):

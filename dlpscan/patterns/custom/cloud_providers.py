@@ -1,6 +1,5 @@
 import re
 
-
 CLOUD_PROVIDERS_PATTERNS = {
     'Cloud Provider Secrets': {
         'AWS Access Key': re.compile(r'\bAKIA[0-9A-Z]{16}\b'),

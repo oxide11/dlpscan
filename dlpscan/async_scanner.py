@@ -19,18 +19,21 @@ Usage::
 """
 
 import asyncio
-import io
-import os
 from concurrent.futures import ThreadPoolExecutor
 from typing import AsyncGenerator, List, Optional, Set, Tuple
 
 from .models import Match
 from .scanner import (
-    enhanced_scan_text as _sync_scan_text,
-    scan_file as _sync_scan_file,
-    scan_stream as _sync_scan_stream,
-    scan_directory as _sync_scan_directory,
     MAX_MATCHES,
+)
+from .scanner import (
+    enhanced_scan_text as _sync_scan_text,
+)
+from .scanner import (
+    scan_directory as _sync_scan_directory,
+)
+from .scanner import (
+    scan_file as _sync_scan_file,
 )
 
 # Shared thread pool for offloading blocking scans.

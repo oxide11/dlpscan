@@ -1,6 +1,5 @@
 import re
 
-
 CODE_PLATFORMS_PATTERNS = {
     'Code Platform Secrets': {
         'GitHub Token (Classic)': re.compile(r'\bghp_[A-Za-z0-9]{36}\b'),

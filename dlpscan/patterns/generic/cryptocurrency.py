@@ -1,6 +1,5 @@
 import re
 
-
 CRYPTOCURRENCY_PATTERNS = {
     'Cryptocurrency': {
         'Bitcoin Address (Legacy)': re.compile(r'\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b'),
