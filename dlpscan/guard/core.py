@@ -28,13 +28,18 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
-from ..models import Match
-from ..scanner import enhanced_scan_text, redact_sensitive_info, register_patterns, unregister_patterns
 from ..allowlist import Allowlist
 from ..exceptions import EmptyInputError, ShortInputError
+from ..models import Match
+from ..scanner import (
+    enhanced_scan_text,
+    redact_sensitive_info,
+    register_patterns,
+    unregister_patterns,
+)
 from .enums import Action, Mode
-from .presets import Preset, PRESET_CATEGORIES
-from .transforms import TokenVault, tokenize_matches, obfuscate_matches
+from .presets import PRESET_CATEGORIES, Preset
+from .transforms import TokenVault, obfuscate_matches, tokenize_matches
 
 logger = logging.getLogger(__name__)
 

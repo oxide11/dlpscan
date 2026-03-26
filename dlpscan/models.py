@@ -1,7 +1,6 @@
 """Match result dataclass and pattern metadata for dlpscan."""
 
-from dataclasses import dataclass, field, asdict
-from typing import Optional
+from dataclasses import asdict, dataclass
 
 
 @dataclass(frozen=True)

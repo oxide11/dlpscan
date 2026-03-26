@@ -1,6 +1,5 @@
 import re
 
-
 SECRETS_PATTERNS = {
     'Generic Secrets': {
         'Bearer Token': re.compile(r'[Bb]earer\s+[A-Za-z0-9\-._~+/]+=*'),

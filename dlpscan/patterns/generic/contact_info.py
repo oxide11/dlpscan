@@ -1,6 +1,5 @@
 import re
 
-
 CONTACT_INFO_PATTERNS = {
     'Contact Information': {
         'Email Address': re.compile(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b'),

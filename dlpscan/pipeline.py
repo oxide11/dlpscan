@@ -34,20 +34,18 @@ import json
 import logging
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor, Future, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set
 
-from .models import Match
-from .scanner import scan_stream, MAX_MATCHES
-from .extractors import (
-    extract_text,
-    get_extractor,
-    ExtractionResult,
-    MAX_EXTRACT_SIZE,
-)
 from .allowlist import Allowlist
 from .exceptions import ExtractionError
+from .extractors import (
+    MAX_EXTRACT_SIZE,
+    extract_text,
+)
+from .models import Match
+from .scanner import MAX_MATCHES, scan_stream
 
 logger = logging.getLogger(__name__)
 

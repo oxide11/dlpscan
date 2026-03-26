@@ -1,6 +1,5 @@
 import re
 
-
 URLS_PATTERNS = {
     'URLs with Credentials': {
         'URL with Password': re.compile(r'https?://[^:\s]+:[^@\s]+@[^\s]+'),

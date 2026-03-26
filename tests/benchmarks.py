@@ -10,7 +10,6 @@ Run::
     python tests/benchmarks.py
 """
 
-import io
 import os
 import random
 import sys
@@ -24,10 +23,10 @@ _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from dlpscan import enhanced_scan_text, scan_file, scan_stream
-from dlpscan.pipeline import Pipeline
+from dlpscan import enhanced_scan_text, scan_file
 from dlpscan.guard import InputGuard, Preset
 from dlpscan.guard.enums import Action
+from dlpscan.pipeline import Pipeline
 
 # ---------------------------------------------------------------------------
 # Test data generation

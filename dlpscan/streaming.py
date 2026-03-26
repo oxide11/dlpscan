@@ -34,10 +34,10 @@ import logging
 import threading
 from typing import Callable, Dict, List, Optional, Set
 
+from .exceptions import EmptyInputError
+from .guard import Action, InputGuard, Mode, Preset, ScanResult
 from .models import Match
 from .scanner import enhanced_scan_text
-from .exceptions import EmptyInputError
-from .guard import InputGuard, ScanResult, Preset, Action, Mode, InputGuardError
 
 logger = logging.getLogger(__name__)
 

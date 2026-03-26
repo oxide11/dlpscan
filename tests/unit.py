@@ -6,32 +6,31 @@ import re
 import tempfile
 import unittest
 
-from dlpscan.scanner import (
-    redact_sensitive_info,
-    redact_sensitive_info_with_patterns,
-    is_luhn_valid,
-    enhanced_scan_text,
-    scan_for_context,
-    scan_file,
-    scan_stream,
-    scan_directory,
-    register_patterns,
-    unregister_patterns,
-    _is_binary_file,
-    _compute_confidence,
-    _deduplicate_overlapping,
-    MAX_INPUT_SIZE,
-    MAX_MATCHES,
-)
-from dlpscan.models import Match, CONTEXT_REQUIRED_PATTERNS, PATTERN_SPECIFICITY
-from dlpscan.config import load_config, _parse_toml_fallback, apply_config_to_args
 from dlpscan.allowlist import Allowlist, has_inline_ignore
-from dlpscan.hooks import extract_added_lines
+from dlpscan.config import _parse_toml_fallback, apply_config_to_args, load_config
 from dlpscan.exceptions import (
     EmptyInputError,
-    ShortInputError,
     InvalidCardNumberError,
+    ShortInputError,
     SubCategoryNotFoundError,
+)
+from dlpscan.hooks import extract_added_lines
+from dlpscan.models import PATTERN_SPECIFICITY, Match
+from dlpscan.scanner import (
+    MAX_INPUT_SIZE,
+    _compute_confidence,
+    _deduplicate_overlapping,
+    _is_binary_file,
+    enhanced_scan_text,
+    is_luhn_valid,
+    redact_sensitive_info,
+    redact_sensitive_info_with_patterns,
+    register_patterns,
+    scan_directory,
+    scan_file,
+    scan_for_context,
+    scan_stream,
+    unregister_patterns,
 )
 
 
@@ -1051,8 +1050,9 @@ class TestFormatters(unittest.TestCase):
         self.assertEqual(result[0]['file'], 'src/main.py')
 
     def test_format_csv(self):
-        from dlpscan.input import _format_csv
         import io as _io
+
+        from dlpscan.input import _format_csv
         buf = _io.StringIO()
         _format_csv(self._make_matches(), buf)
         output = buf.getvalue()
@@ -1060,8 +1060,9 @@ class TestFormatters(unittest.TestCase):
         self.assertIn('test@example.com', output)
 
     def test_format_csv_with_file_context(self):
-        from dlpscan.input import _format_csv
         import io as _io
+
+        from dlpscan.input import _format_csv
         buf = _io.StringIO()
         findings = [('src/main.py', m) for m in self._make_matches()]
         _format_csv(findings, buf, file_context=True)
@@ -1210,14 +1211,15 @@ class TestMetrics(unittest.TestCase):
     """Test metrics/observability system."""
 
     def test_metrics_collector_records_duration(self):
-        from dlpscan.metrics import MetricsCollector
         import time
+
+        from dlpscan.metrics import MetricsCollector
         with MetricsCollector() as m:
             time.sleep(0.01)
         self.assertGreater(m.duration_ms, 0)
 
     def test_metrics_callback_invoked(self):
-        from dlpscan.metrics import set_metrics_callback, ScanMetrics
+        from dlpscan.metrics import ScanMetrics, set_metrics_callback
         captured = []
         def cb(metrics):
             captured.append(metrics)
@@ -1254,12 +1256,12 @@ class TestPlugins(unittest.TestCase):
     """Test plugin validator and post-processor system."""
 
     def setUp(self):
-        from dlpscan.plugins import unregister_validators, unregister_post_processors
+        from dlpscan.plugins import unregister_post_processors, unregister_validators
         unregister_validators('Email Address')
         unregister_post_processors()
 
     def tearDown(self):
-        from dlpscan.plugins import unregister_validators, unregister_post_processors
+        from dlpscan.plugins import unregister_post_processors, unregister_validators
         unregister_validators('Email Address')
         unregister_post_processors()
 
@@ -1311,7 +1313,7 @@ class TestPlugins(unittest.TestCase):
         self.assertIsInstance(results, list)
 
     def test_register_non_callable_raises(self):
-        from dlpscan.plugins import register_validator, register_post_processor
+        from dlpscan.plugins import register_post_processor, register_validator
         with self.assertRaises(TypeError):
             register_validator('Email Address', "not callable")
         with self.assertRaises(TypeError):
@@ -1322,8 +1324,9 @@ class TestLoggingConfig(unittest.TestCase):
     """Test structured JSON logging."""
 
     def test_json_formatter(self):
-        from dlpscan.logging_config import JSONFormatter
         import logging
+
+        from dlpscan.logging_config import JSONFormatter
         formatter = JSONFormatter()
         record = logging.LogRecord(
             name='dlpscan.test', level=logging.WARNING,
@@ -1337,15 +1340,17 @@ class TestLoggingConfig(unittest.TestCase):
         self.assertIn('timestamp', parsed)
 
     def test_configure_logging_json(self):
-        from dlpscan.logging_config import configure_logging
         import logging
+
+        from dlpscan.logging_config import configure_logging
         configure_logging(level='DEBUG', json_format=True, stream=io.StringIO())
         logger = logging.getLogger('dlpscan')
         self.assertEqual(logger.level, logging.DEBUG)
 
     def test_configure_logging_plain(self):
-        from dlpscan.logging_config import configure_logging
         import logging
+
+        from dlpscan.logging_config import configure_logging
         configure_logging(level='INFO', json_format=False, stream=io.StringIO())
         logger = logging.getLogger('dlpscan')
         self.assertEqual(logger.level, logging.INFO)
@@ -1356,6 +1361,7 @@ class TestAsyncScanner(unittest.TestCase):
 
     def test_async_scan_text(self):
         import asyncio
+
         from dlpscan.async_scanner import async_scan_text
 
         async def run():
@@ -1371,6 +1377,7 @@ class TestAsyncScanner(unittest.TestCase):
 
     def test_async_scan_file(self):
         import asyncio
+
         from dlpscan.async_scanner import async_scan_file
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
@@ -1468,7 +1475,12 @@ class TestExtractors(unittest.TestCase):
         self.assertTrue(callable(ext))
 
     def test_register_custom_extractor(self):
-        from dlpscan.extractors import register_extractor, extract_text, ExtractionResult, _EXTRACTORS
+        from dlpscan.extractors import (
+            _EXTRACTORS,
+            ExtractionResult,
+            extract_text,
+            register_extractor,
+        )
         def my_extractor(path):
             return ExtractionResult(text='custom extracted', format='custom')
         register_extractor('.zzz_test', my_extractor)
@@ -1493,8 +1505,8 @@ class TestExtractors(unittest.TestCase):
             register_extractor('.pdf', 'not callable')
 
     def test_legacy_office_raises(self):
-        from dlpscan.extractors import extract_text
         from dlpscan.exceptions import ExtractionError
+        from dlpscan.extractors import extract_text
         with tempfile.NamedTemporaryFile(suffix='.doc', delete=False) as f:
             f.write(b'\xd0\xcf\x11\xe0')
             path = f.name
@@ -1772,7 +1784,7 @@ class TestInputGuardBasic(unittest.TestCase):
     """Test InputGuard core functionality."""
 
     def test_reject_action_raises(self):
-        from dlpscan.guard import InputGuard, Action, InputGuardError
+        from dlpscan.guard import Action, InputGuard, InputGuardError
         guard = InputGuard(action=Action.REJECT, categories={'Contact Information'})
         with self.assertRaises(InputGuardError) as ctx:
             guard.scan("email: test@example.com")
@@ -1780,7 +1792,7 @@ class TestInputGuardBasic(unittest.TestCase):
         self.assertGreater(ctx.exception.result.finding_count, 0)
 
     def test_flag_action_returns_findings(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         guard = InputGuard(action=Action.FLAG, categories={'Contact Information'})
         result = guard.scan("email: test@example.com")
         self.assertFalse(result.is_clean)
@@ -1788,7 +1800,7 @@ class TestInputGuardBasic(unittest.TestCase):
         self.assertIsNone(result.redacted_text)
 
     def test_redact_action_returns_sanitized(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         guard = InputGuard(action=Action.REDACT, categories={'Contact Information'})
         result = guard.scan("email: test@example.com")
         self.assertFalse(result.is_clean)
@@ -1796,14 +1808,14 @@ class TestInputGuardBasic(unittest.TestCase):
         self.assertNotIn('test@example.com', result.redacted_text)
 
     def test_clean_input_passes(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         guard = InputGuard(action=Action.REJECT)
         result = guard.scan("This is a normal sentence.")
         self.assertTrue(result.is_clean)
         self.assertEqual(result.finding_count, 0)
 
     def test_empty_input_is_clean(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         guard = InputGuard(action=Action.FLAG)
         result = guard.scan("")
         self.assertTrue(result.is_clean)
@@ -1815,7 +1827,7 @@ class TestInputGuardBasic(unittest.TestCase):
         self.assertTrue(guard.check("Normal text."))
 
     def test_sanitize_always_redacts(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         guard = InputGuard(action=Action.REJECT, categories={'Contact Information'})
         result = guard.sanitize("email: test@example.com")
         self.assertNotIn('test@example.com', result)
@@ -1831,7 +1843,7 @@ class TestInputGuardModes(unittest.TestCase):
     """Test denylist and allowlist modes."""
 
     def test_denylist_blocks_specified_categories(self):
-        from dlpscan.guard import InputGuard, Action, Mode
+        from dlpscan.guard import Action, InputGuard, Mode
         guard = InputGuard(
             mode=Mode.DENYLIST,
             categories={'Contact Information'},
@@ -1841,7 +1853,7 @@ class TestInputGuardModes(unittest.TestCase):
         self.assertFalse(result.is_clean)
 
     def test_denylist_ignores_other_categories(self):
-        from dlpscan.guard import InputGuard, Action, Mode
+        from dlpscan.guard import Action, InputGuard, Mode
         guard = InputGuard(
             mode=Mode.DENYLIST,
             categories={'Credit Card Numbers'},
@@ -1852,7 +1864,7 @@ class TestInputGuardModes(unittest.TestCase):
         self.assertTrue(result.is_clean)
 
     def test_allowlist_permits_specified_categories(self):
-        from dlpscan.guard import InputGuard, Action, Mode
+        from dlpscan.guard import Action, InputGuard, Mode
         guard = InputGuard(
             mode=Mode.ALLOWLIST,
             categories={'Contact Information'},
@@ -1864,7 +1876,7 @@ class TestInputGuardModes(unittest.TestCase):
         self.assertEqual(len(email_findings), 0)
 
     def test_allowlist_blocks_non_specified_categories(self):
-        from dlpscan.guard import InputGuard, Action, Mode, InputGuardError
+        from dlpscan.guard import Action, InputGuard, InputGuardError, Mode
         guard = InputGuard(
             mode=Mode.ALLOWLIST,
             categories={'Contact Information'},
@@ -1884,7 +1896,7 @@ class TestInputGuardPresets(unittest.TestCase):
     """Test compliance presets."""
 
     def test_pci_dss_preset(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
         result = guard.scan("credit card 4532015112830366")
         self.assertFalse(result.is_clean)
@@ -1892,7 +1904,7 @@ class TestInputGuardPresets(unittest.TestCase):
         self.assertGreater(len(cc), 0)
 
     def test_ssn_sin_preset(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.SSN_SIN], action=Action.FLAG)
         result = guard.scan("SSN: 123-45-6789")
         self.assertFalse(result.is_clean)
@@ -1900,39 +1912,39 @@ class TestInputGuardPresets(unittest.TestCase):
         self.assertGreater(len(ssn), 0)
 
     def test_credentials_preset(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.CREDENTIALS], action=Action.FLAG)
         result = guard.scan("token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij")
         self.assertFalse(result.is_clean)
 
     def test_contact_info_preset(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.CONTACT_INFO], action=Action.FLAG)
         result = guard.scan("email: test@example.com")
         self.assertFalse(result.is_clean)
 
     def test_healthcare_preset(self):
-        from dlpscan.guard import InputGuard, Preset, PRESET_CATEGORIES
+        from dlpscan.guard import PRESET_CATEGORIES, Preset
         cats = PRESET_CATEGORIES[Preset.HEALTHCARE]
         self.assertIn('Medical Identifiers', cats)
         self.assertIn('Insurance Identifiers', cats)
 
     def test_financial_preset_includes_cards(self):
-        from dlpscan.guard import InputGuard, Preset, PRESET_CATEGORIES
+        from dlpscan.guard import PRESET_CATEGORIES, Preset
         cats = PRESET_CATEGORIES[Preset.FINANCIAL]
         self.assertIn('Credit Card Numbers', cats)
         self.assertIn('Banking and Financial', cats)
         self.assertIn('Cryptocurrency', cats)
 
     def test_pii_strict_includes_regions(self):
-        from dlpscan.guard import Preset, PRESET_CATEGORIES
+        from dlpscan.guard import PRESET_CATEGORIES, Preset
         cats = PRESET_CATEGORIES[Preset.PII_STRICT]
         self.assertIn('North America - United States', cats)
         self.assertIn('Europe - United Kingdom', cats)
         self.assertIn('Asia-Pacific - Japan', cats)
 
     def test_multiple_presets_combined(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(
             presets=[Preset.PCI_DSS, Preset.CONTACT_INFO],
             action=Action.FLAG,
@@ -1945,7 +1957,7 @@ class TestInputGuardPresets(unittest.TestCase):
         self.assertIn('Contact Information', cats)
 
     def test_presets_plus_explicit_categories(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(
             presets=[Preset.PCI_DSS],
             categories={'Contact Information'},
@@ -1959,7 +1971,7 @@ class TestInputGuardFiltering(unittest.TestCase):
     """Test confidence and allowlist filtering."""
 
     def test_min_confidence_filters(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         guard = InputGuard(action=Action.FLAG, min_confidence=0.99)
         result = guard.scan("test@example.com")
         # Very high threshold should filter most matches
@@ -1967,7 +1979,7 @@ class TestInputGuardFiltering(unittest.TestCase):
             self.assertGreaterEqual(f.confidence, 0.99)
 
     def test_allowlist_suppresses_matches(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         al = Allowlist(texts=['test@example.com'])
         guard = InputGuard(
             categories={'Contact Information'},
@@ -1979,7 +1991,7 @@ class TestInputGuardFiltering(unittest.TestCase):
         self.assertEqual(len(emails), 0)
 
     def test_on_detect_callback(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         captured = []
         guard = InputGuard(
             categories={'Contact Information'},
@@ -1990,7 +2002,7 @@ class TestInputGuardFiltering(unittest.TestCase):
         self.assertEqual(len(captured), 1)
 
     def test_on_detect_not_called_when_clean(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         captured = []
         guard = InputGuard(
             action=Action.FLAG,
@@ -2004,7 +2016,7 @@ class TestInputGuardDecorator(unittest.TestCase):
     """Test @guard.protect decorator."""
 
     def test_protect_rejects_sensitive_param(self):
-        from dlpscan.guard import InputGuard, Preset, Action, InputGuardError
+        from dlpscan.guard import Action, InputGuard, InputGuardError, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REJECT)
 
         @guard.protect(param="comment")
@@ -2015,7 +2027,7 @@ class TestInputGuardDecorator(unittest.TestCase):
             save(1, "card: 4532015112830366")
 
     def test_protect_passes_clean_input(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         guard = InputGuard(action=Action.REJECT, categories={'Credit Card Numbers'})
 
         @guard.protect(param="text")
@@ -2026,7 +2038,7 @@ class TestInputGuardDecorator(unittest.TestCase):
         self.assertEqual(result, "Normal text here.")
 
     def test_protect_redacts_param(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         guard = InputGuard(
             categories={'Contact Information'},
             action=Action.REDACT,
@@ -2040,7 +2052,7 @@ class TestInputGuardDecorator(unittest.TestCase):
         self.assertNotIn('test@example.com', result)
 
     def test_protect_scans_all_string_args(self):
-        from dlpscan.guard import InputGuard, Preset, Action, InputGuardError
+        from dlpscan.guard import Action, InputGuard, InputGuardError, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REJECT)
 
         @guard.protect()
@@ -2051,7 +2063,7 @@ class TestInputGuardDecorator(unittest.TestCase):
             process("normal", "card: 4532015112830366")
 
     def test_protect_ignores_non_string_args(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         guard = InputGuard(action=Action.REJECT)
 
         @guard.protect()
@@ -2063,7 +2075,7 @@ class TestInputGuardDecorator(unittest.TestCase):
         self.assertEqual(result, 42)
 
     def test_protect_specific_params_only(self):
-        from dlpscan.guard import InputGuard, Preset, Action, InputGuardError
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REJECT)
 
         @guard.protect(params=["comment"])
@@ -2105,7 +2117,7 @@ class TestInputGuardScanResult(unittest.TestCase):
         self.assertEqual(d['findings'][0]['text'], 'tes...com')
 
     def test_repr(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
         self.assertIn('denylist', repr(guard))
         self.assertIn('flag', repr(guard))
@@ -2119,7 +2131,7 @@ class TestInputGuardCustomPatterns(unittest.TestCase):
     """Test custom pattern registration through InputGuard."""
 
     def test_custom_pattern_detected(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         with InputGuard(
             action=Action.FLAG,
             custom_patterns={
@@ -2134,7 +2146,7 @@ class TestInputGuardCustomPatterns(unittest.TestCase):
             self.assertIn('Internal IDs', cats)
 
     def test_custom_pattern_cleanup_on_close(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         guard = InputGuard(
             action=Action.FLAG,
             custom_patterns={
@@ -2155,7 +2167,7 @@ class TestInputGuardCustomPatterns(unittest.TestCase):
         self.assertTrue(result2.is_clean)
 
     def test_context_manager_cleanup(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         with InputGuard(
             action=Action.FLAG,
             custom_patterns={
@@ -2169,7 +2181,7 @@ class TestInputGuardCustomPatterns(unittest.TestCase):
         # Outside context manager, patterns should be cleaned up.
 
     def test_compiled_regex_accepted(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         with InputGuard(
             action=Action.FLAG,
             custom_patterns={
@@ -2190,7 +2202,7 @@ class TestConfidenceOverrides(unittest.TestCase):
     """Test per-category confidence overrides in InputGuard."""
 
     def test_override_filters_low_confidence(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         guard = InputGuard(
             action=Action.FLAG,
             categories={'Credit Card Numbers', 'Contact Information'},
@@ -2206,7 +2218,7 @@ class TestConfidenceOverrides(unittest.TestCase):
         self.assertIn('Contact Information', cats)
 
     def test_global_fallback_when_no_override(self):
-        from dlpscan.guard import InputGuard, Action
+        from dlpscan.guard import Action, InputGuard
         guard = InputGuard(
             action=Action.FLAG,
             min_confidence=0.99,
@@ -2353,31 +2365,31 @@ class TestWebhookScanner(unittest.TestCase):
     """Test the WebhookScanner."""
 
     def test_scan_json_payload(self):
+        from dlpscan.guard import Action, InputGuardError, Preset
         from dlpscan.streaming import WebhookScanner
-        from dlpscan.guard import Preset, Action, InputGuardError
         scanner = WebhookScanner(presets=[Preset.PCI_DSS], action=Action.REJECT)
         body = json.dumps({"card": "4111111111111111", "name": "Test User"})
         with self.assertRaises(InputGuardError):
             scanner.scan_payload(body, content_type='application/json')
 
     def test_scan_clean_payload(self):
+        from dlpscan.guard import Action, Preset
         from dlpscan.streaming import WebhookScanner
-        from dlpscan.guard import Preset, Action
         scanner = WebhookScanner(presets=[Preset.PCI_DSS], action=Action.REJECT)
         body = json.dumps({"name": "Test User", "age": 30})
         result = scanner.scan_payload(body, content_type='application/json')
         self.assertTrue(result.is_clean)
 
     def test_scan_plain_text(self):
+        from dlpscan.guard import Action, Preset
         from dlpscan.streaming import WebhookScanner
-        from dlpscan.guard import Preset, Action, InputGuardError
         scanner = WebhookScanner(presets=[Preset.CONTACT_INFO], action=Action.FLAG)
         result = scanner.scan_payload("Contact me at test@example.com", content_type='text/plain')
         self.assertFalse(result.is_clean)
 
     def test_scan_headers(self):
+        from dlpscan.guard import Action, Preset
         from dlpscan.streaming import WebhookScanner
-        from dlpscan.guard import Preset, Action
         scanner = WebhookScanner(presets=[Preset.CREDENTIALS], action=Action.FLAG)
         headers = {
             'Content-Type': 'application/json',
@@ -2389,15 +2401,15 @@ class TestWebhookScanner(unittest.TestCase):
         self.assertFalse(result.is_clean)
 
     def test_scan_empty_headers(self):
+        from dlpscan.guard import Action, Preset
         from dlpscan.streaming import WebhookScanner
-        from dlpscan.guard import Preset, Action
         scanner = WebhookScanner(presets=[Preset.CREDENTIALS], action=Action.FLAG)
         result = scanner.scan_headers({})
         self.assertTrue(result.is_clean)
 
     def test_invalid_json_falls_back(self):
+        from dlpscan.guard import Action, Preset
         from dlpscan.streaming import WebhookScanner
-        from dlpscan.guard import Preset, Action
         scanner = WebhookScanner(presets=[Preset.CONTACT_INFO], action=Action.FLAG)
         result = scanner.scan_payload(
             "not json {email: test@example.com}",
@@ -2487,8 +2499,9 @@ class TestTokenVault(unittest.TestCase):
         self.assertTrue(token.startswith("DLP_"))
 
     def test_thread_safety(self):
-        from dlpscan.guard.transforms import TokenVault
         import threading
+
+        from dlpscan.guard.transforms import TokenVault
         vault = TokenVault()
         errors = []
 
@@ -2586,7 +2599,7 @@ class TestTokenizeAction(unittest.TestCase):
     """Test InputGuard with action=TOKENIZE."""
 
     def test_tokenize_via_scan(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.TOKENIZE)
         result = guard.scan("Card: 4111111111111111")
         self.assertFalse(result.is_clean)
@@ -2595,14 +2608,14 @@ class TestTokenizeAction(unittest.TestCase):
         self.assertIsNotNone(result.token_vault)
 
     def test_tokenize_convenience_method(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
         tokenized, vault = guard.tokenize("Card: 4111111111111111")
         self.assertIn('TOK_CC_', tokenized)
         self.assertGreater(vault.size, 0)
 
     def test_detokenize_round_trip(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.TOKENIZE)
         original = "Card: 4111111111111111"
         result = guard.scan(original)
@@ -2610,14 +2623,14 @@ class TestTokenizeAction(unittest.TestCase):
         self.assertEqual(restored, original)
 
     def test_tokenize_clean_text(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.TOKENIZE)
         result = guard.scan("No cards here")
         self.assertTrue(result.is_clean)
         self.assertIsNone(result.redacted_text)
 
     def test_tokenize_multiple_matches(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS, Preset.CONTACT_INFO],
                           action=Action.TOKENIZE)
         text = "Card: 4111111111111111 Email: test@example.com"
@@ -2628,7 +2641,7 @@ class TestTokenizeAction(unittest.TestCase):
         self.assertEqual(restored, text)
 
     def test_tokenize_with_custom_vault(self):
-        from dlpscan.guard import InputGuard, Preset, Action, TokenVault
+        from dlpscan.guard import Action, InputGuard, Preset, TokenVault
         vault = TokenVault(prefix="MYAPP", secret="s3cret")
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.TOKENIZE,
                           token_vault=vault)
@@ -2644,7 +2657,7 @@ class TestObfuscateAction(unittest.TestCase):
     """Test InputGuard with action=OBFUSCATE."""
 
     def test_obfuscate_via_scan(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.OBFUSCATE)
         result = guard.scan("Card: 4111111111111111")
         self.assertFalse(result.is_clean)
@@ -2655,27 +2668,27 @@ class TestObfuscateAction(unittest.TestCase):
         self.assertTrue(fake_part.isdigit())
 
     def test_obfuscate_convenience_method(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.CONTACT_INFO], action=Action.FLAG)
         obfuscated = guard.obfuscate("Email: user@test.com")
         self.assertNotIn('user@test.com', obfuscated)
         self.assertIn('@', obfuscated)
 
     def test_obfuscate_clean_text(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.OBFUSCATE)
         result = guard.scan("No cards here")
         self.assertTrue(result.is_clean)
 
     def test_obfuscate_irreversible(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.OBFUSCATE)
         result = guard.scan("Card: 4111111111111111")
         # Obfuscation should not put tokens — no way to reverse.
         self.assertNotIn('TOK_', result.redacted_text)
 
     def test_obfuscate_decorator(self):
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.CONTACT_INFO], action=Action.OBFUSCATE)
 
         @guard.protect(param='msg')
@@ -2725,7 +2738,7 @@ class TestAuditLogging(unittest.TestCase):
         self.assertEqual(d["action"], "redact")
 
     def test_audit_logger_with_callback(self):
-        from dlpscan.audit import AuditLogger, AuditEvent, CallbackAuditHandler
+        from dlpscan.audit import AuditEvent, AuditLogger, CallbackAuditHandler
         events = []
         handler = CallbackAuditHandler(callback=events.append)
         logger = AuditLogger(handlers=[handler])
@@ -2734,7 +2747,7 @@ class TestAuditLogging(unittest.TestCase):
         self.assertEqual(len(events), 1)
 
     def test_null_handler(self):
-        from dlpscan.audit import AuditLogger, AuditEvent, NullAuditHandler
+        from dlpscan.audit import AuditEvent, AuditLogger, NullAuditHandler
         handler = NullAuditHandler()
         logger = AuditLogger(handlers=[handler])
         event = AuditEvent(event_type="SCAN", action="scan", source="test")
@@ -2742,7 +2755,7 @@ class TestAuditLogging(unittest.TestCase):
         logger.log(event)
 
     def test_file_handler(self):
-        from dlpscan.audit import AuditLogger, AuditEvent, FileAuditHandler
+        from dlpscan.audit import AuditEvent, AuditLogger, FileAuditHandler
         with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
             path = f.name
         try:
@@ -2759,8 +2772,11 @@ class TestAuditLogging(unittest.TestCase):
 
     def test_global_audit_logger(self):
         from dlpscan.audit import (
-            set_audit_logger, get_audit_logger, audit_event,
-            AuditLogger, AuditEvent, CallbackAuditHandler,
+            AuditEvent,
+            AuditLogger,
+            CallbackAuditHandler,
+            audit_event,
+            set_audit_logger,
         )
         events = []
         handler = CallbackAuditHandler(callback=events.append)
@@ -2775,7 +2791,7 @@ class TestAuditLogging(unittest.TestCase):
 
     def test_event_from_scan(self):
         from dlpscan.audit import event_from_scan
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
         result = guard.scan("Card: 4111111111111111")
         event = event_from_scan(result, action="flag", source="test")
@@ -2892,7 +2908,7 @@ class TestSIEMAdapters(unittest.TestCase):
                 os.environ['DLPSCAN_SIEM_TYPE'] = old
 
     def test_create_siem_from_env_syslog(self):
-        from dlpscan.siem import create_siem_from_env, SyslogAdapter
+        from dlpscan.siem import SyslogAdapter, create_siem_from_env
         os.environ['DLPSCAN_SIEM_TYPE'] = 'syslog'
         try:
             adapter = create_siem_from_env()
@@ -2947,7 +2963,7 @@ class TestVaultBackends(unittest.TestCase):
             os.unlink(path)
 
     def test_vault_backend_protocol(self):
-        from dlpscan.guard.vault_backends import VaultBackend, InMemoryBackend
+        from dlpscan.guard.vault_backends import InMemoryBackend, VaultBackend
         backend = InMemoryBackend()
         self.assertIsInstance(backend, VaultBackend)
 
@@ -2956,23 +2972,23 @@ class TestRBAC(unittest.TestCase):
     """Tests for role-based access control."""
 
     def test_admin_can_detokenize(self):
-        from dlpscan.guard.rbac import Role, Permission, RBACPolicy
+        from dlpscan.guard.rbac import Permission, RBACPolicy, Role
         policy = RBACPolicy(default_role=Role.ADMIN)
         self.assertTrue(policy.check("admin_user", Permission.DETOKENIZE))
 
     def test_viewer_cannot_detokenize(self):
-        from dlpscan.guard.rbac import Role, Permission, RBACPolicy
+        from dlpscan.guard.rbac import Permission, RBACPolicy, Role
         policy = RBACPolicy(default_role=Role.VIEWER)
         self.assertFalse(policy.check("viewer_user", Permission.DETOKENIZE))
 
     def test_permission_denied_error(self):
-        from dlpscan.guard.rbac import Role, Permission, RBACPolicy, PermissionDeniedError
+        from dlpscan.guard.rbac import Permission, PermissionDeniedError, RBACPolicy, Role
         policy = RBACPolicy(default_role=Role.VIEWER)
         with self.assertRaises(PermissionDeniedError):
             policy.require("viewer_user", Permission.DETOKENIZE)
 
     def test_role_override(self):
-        from dlpscan.guard.rbac import Role, Permission, RBACPolicy
+        from dlpscan.guard.rbac import Permission, RBACPolicy, Role
         policy = RBACPolicy(
             default_role=Role.VIEWER,
             role_overrides={"special_user": Role.ADMIN},
@@ -2981,14 +2997,14 @@ class TestRBAC(unittest.TestCase):
         self.assertFalse(policy.check("other_user", Permission.DETOKENIZE))
 
     def test_set_role(self):
-        from dlpscan.guard.rbac import Role, Permission, RBACPolicy
+        from dlpscan.guard.rbac import Permission, RBACPolicy, Role
         policy = RBACPolicy(default_role=Role.VIEWER)
         self.assertFalse(policy.check("user1", Permission.DETOKENIZE))
         policy.set_role("user1", Role.OPERATOR)
         self.assertTrue(policy.check("user1", Permission.DETOKENIZE))
 
     def test_secure_token_vault(self):
-        from dlpscan.guard.rbac import Role, RBACPolicy, SecureTokenVault
+        from dlpscan.guard.rbac import RBACPolicy, Role, SecureTokenVault
         from dlpscan.guard.transforms import TokenVault
         vault = TokenVault()
         policy = RBACPolicy(default_role=Role.ADMIN)
@@ -2999,7 +3015,7 @@ class TestRBAC(unittest.TestCase):
         self.assertEqual(original, "4111111111111111")
 
     def test_secure_vault_viewer_blocked(self):
-        from dlpscan.guard.rbac import Role, RBACPolicy, SecureTokenVault, PermissionDeniedError
+        from dlpscan.guard.rbac import PermissionDeniedError, RBACPolicy, Role, SecureTokenVault
         from dlpscan.guard.transforms import TokenVault
         vault = TokenVault()
         policy = RBACPolicy(default_role=Role.VIEWER)
@@ -3009,12 +3025,12 @@ class TestRBAC(unittest.TestCase):
             secure.detokenize(token, "viewer_user")
 
     def test_analyst_can_export(self):
-        from dlpscan.guard.rbac import Role, Permission, RBACPolicy
+        from dlpscan.guard.rbac import Permission, RBACPolicy, Role
         policy = RBACPolicy(default_role=Role.ANALYST)
         self.assertTrue(policy.check("analyst_user", Permission.EXPORT_VAULT))
 
     def test_operator_cannot_export(self):
-        from dlpscan.guard.rbac import Role, Permission, RBACPolicy
+        from dlpscan.guard.rbac import Permission, RBACPolicy, Role
         policy = RBACPolicy(default_role=Role.OPERATOR)
         self.assertFalse(policy.check("op_user", Permission.EXPORT_VAULT))
 
@@ -3031,7 +3047,7 @@ class TestComplianceReporting(unittest.TestCase):
 
     def test_add_scan_result(self):
         from dlpscan.compliance import ComplianceReporter
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
         result = guard.scan("Card: 4111111111111111")
         reporter = ComplianceReporter()
@@ -3042,7 +3058,7 @@ class TestComplianceReporting(unittest.TestCase):
 
     def test_compliance_status_pci(self):
         from dlpscan.compliance import ComplianceReporter
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
         result = guard.scan("Card: 4111111111111111")
         reporter = ComplianceReporter()
@@ -3053,7 +3069,7 @@ class TestComplianceReporting(unittest.TestCase):
 
     def test_clean_compliance(self):
         from dlpscan.compliance import ComplianceReporter
-        from dlpscan.guard import InputGuard, Preset, Action
+        from dlpscan.guard import Action, InputGuard, Preset
         guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
         result = guard.scan("Nothing sensitive here at all")
         reporter = ComplianceReporter()
@@ -3089,7 +3105,7 @@ class TestObfuscationSeeds(unittest.TestCase):
     """Tests for custom obfuscation seeds (reproducible fake data)."""
 
     def test_seeded_obfuscation_deterministic(self):
-        from dlpscan.guard.transforms import set_obfuscation_seed, obfuscate_match
+        from dlpscan.guard.transforms import obfuscate_match, set_obfuscation_seed
         from dlpscan.models import Match
 
         match = Match(
@@ -3111,7 +3127,7 @@ class TestObfuscationSeeds(unittest.TestCase):
         set_obfuscation_seed(None)
 
     def test_different_seeds_different_output(self):
-        from dlpscan.guard.transforms import set_obfuscation_seed, obfuscate_match
+        from dlpscan.guard.transforms import obfuscate_match, set_obfuscation_seed
         from dlpscan.models import Match
 
         match = Match(
@@ -3132,15 +3148,16 @@ class TestObfuscationSeeds(unittest.TestCase):
         set_obfuscation_seed(None)
 
     def test_get_obfuscation_rng(self):
-        from dlpscan.guard.transforms import set_obfuscation_seed, get_obfuscation_rng
         import random
+
+        from dlpscan.guard.transforms import get_obfuscation_rng, set_obfuscation_seed
         set_obfuscation_seed(99)
         rng = get_obfuscation_rng()
         self.assertIsInstance(rng, random.Random)
         set_obfuscation_seed(None)
 
     def test_seeded_obfuscate_matches(self):
-        from dlpscan.guard.transforms import set_obfuscation_seed, obfuscate_matches
+        from dlpscan.guard.transforms import obfuscate_matches, set_obfuscation_seed
         from dlpscan.models import Match
 
         matches = [Match(

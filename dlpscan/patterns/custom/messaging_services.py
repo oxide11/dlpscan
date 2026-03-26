@@ -1,6 +1,5 @@
 import re
 
-
 MESSAGING_SERVICES_PATTERNS = {
     'Messaging Service Secrets': {
         'Slack Bot Token': re.compile(r'\bxoxb-[0-9A-Za-z\-]+\b'),
