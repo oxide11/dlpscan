@@ -13,11 +13,12 @@ Usage::
     app = create_app()
 """
 
-from __future__ import annotations
-
+import asyncio
+import functools
 import hmac
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -42,11 +43,34 @@ except ImportError:
 
 from . import __version__
 from .audit import audit_event, event_from_scan
+from .cache import ScanCache, get_default_cache, set_default_cache
 from .guard.core import InputGuard
 from .guard.enums import Action
 from .guard.transforms import TokenVault, set_obfuscation_seed
 
 logger = logging.getLogger(__name__)
+
+
+def _cache_enabled() -> bool:
+    """Return True if scan result caching is enabled via env var."""
+    return os.environ.get("DLPSCAN_CACHE_ENABLED", "").lower() in ("1", "true")
+
+
+def _get_cache() -> Optional[ScanCache]:
+    """Return the default cache if caching is enabled, initialising on first use."""
+    if not _cache_enabled():
+        return None
+    cache = get_default_cache()
+    if cache is None:
+        cache = ScanCache()
+        set_default_cache(cache)
+    return cache
+
+
+async def _run_sync(func, *args):
+    """Run a synchronous function in the default executor."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, functools.partial(func, *args))
 
 # ---------------------------------------------------------------------------
 # Pydantic request/response models
@@ -116,6 +140,20 @@ class BatchScanRequest(BaseModel):
 
 class BatchScanResponse(BaseModel):
     results: List[ScanResponse]
+
+
+class PatternCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    pattern: str = Field(..., min_length=1)
+    category: str = Field(..., min_length=1)
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+
+class PatternResponse(BaseModel):
+    name: str
+    pattern: str
+    category: str
+    confidence: float
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +347,13 @@ def create_app() -> FastAPI:
     )
     async def scan(req: ScanRequest):
         """Scan text for sensitive data."""
+        # Check cache first
+        cache = _get_cache()
+        if cache is not None:
+            cached_result = cache.get(req.text)
+            if cached_result is not None:
+                return _scan_to_response(cached_result)
+
         start = time.monotonic()
         guard = _build_guard(
             presets=req.presets,
@@ -318,7 +363,7 @@ def create_app() -> FastAPI:
             require_context=req.require_context,
         )
         try:
-            result = guard.scan(req.text)
+            result = await _run_sync(guard.scan, req.text)
         except Exception as exc:
             # InputGuardError (action=reject) — return findings as a normal response
             if hasattr(exc, "result"):
@@ -328,6 +373,10 @@ def create_app() -> FastAPI:
                 raise HTTPException(status_code=500, detail="Internal scan error")
 
         elapsed_ms = (time.monotonic() - start) * 1000
+
+        # Store result in cache
+        if cache is not None:
+            cache.put(req.text, result)
 
         # Emit audit event
         try:
@@ -353,7 +402,7 @@ def create_app() -> FastAPI:
             action="tokenize",
             min_confidence=req.min_confidence,
         )
-        tokenized_text, vault = guard.tokenize(req.text)
+        tokenized_text, vault = await _run_sync(guard.tokenize, req.text)
         vault_id = _store_vault(vault)
         return TokenizeResponse(
             tokenized_text=tokenized_text,
@@ -393,7 +442,7 @@ def create_app() -> FastAPI:
             action="obfuscate",
             min_confidence=req.min_confidence,
         )
-        result = guard.scan(req.text)
+        result = await _run_sync(guard.scan, req.text)
 
         # Reset seed to non-deterministic after use
         if req.seed is not None:
@@ -421,7 +470,7 @@ def create_app() -> FastAPI:
                 require_context=item.require_context,
             )
             try:
-                result = guard.scan(item.text)
+                result = await _run_sync(guard.scan, item.text)
             except Exception as exc:
                 if hasattr(exc, "result"):
                     result = exc.result
@@ -431,6 +480,103 @@ def create_app() -> FastAPI:
             results.append(_scan_to_response(result))
 
         return BatchScanResponse(results=results)
+
+    # -- Custom pattern management endpoints --------------------------------
+
+    @app.post(
+        "/v1/patterns",
+        response_model=PatternResponse,
+        status_code=201,
+        dependencies=[Depends(_verify_api_key), Depends(_check_rate_limit)],
+    )
+    async def create_pattern(req: PatternCreateRequest):
+        """Register a new custom regex pattern."""
+        from .scanner import _custom_patterns, register_patterns
+
+        try:
+            compiled = re.compile(req.pattern)
+        except re.error as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid regex pattern: {exc}",
+            )
+
+        await _run_sync(
+            register_patterns,
+            req.category,
+            {req.name: compiled},
+            None,
+            {req.name: req.confidence},
+            None,
+        )
+
+        return PatternResponse(
+            name=req.name,
+            pattern=req.pattern,
+            category=req.category,
+            confidence=req.confidence,
+        )
+
+    @app.get(
+        "/v1/patterns",
+        response_model=List[PatternResponse],
+        dependencies=[Depends(_verify_api_key), Depends(_check_rate_limit)],
+    )
+    async def list_patterns():
+        """List all registered custom patterns."""
+        from .models import DEFAULT_SPECIFICITY, PATTERN_SPECIFICITY
+        from .scanner import _custom_patterns, _registry_lock
+
+        results: List[PatternResponse] = []
+        with _registry_lock:
+            for category, sub_patterns in _custom_patterns.items():
+                for name, compiled_re in sub_patterns.items():
+                    results.append(PatternResponse(
+                        name=name,
+                        pattern=compiled_re.pattern,
+                        category=category,
+                        confidence=PATTERN_SPECIFICITY.get(name, DEFAULT_SPECIFICITY),
+                    ))
+        return results
+
+    @app.delete(
+        "/v1/patterns/{name}",
+        status_code=204,
+        dependencies=[Depends(_verify_api_key), Depends(_check_rate_limit)],
+    )
+    async def delete_pattern(name: str):
+        """Remove a custom pattern by name."""
+        from .models import PATTERN_SPECIFICITY
+        from .scanner import (
+            _custom_patterns,
+            _custom_specificity_keys,
+            _registry_lock,
+            unregister_patterns,
+        )
+
+        with _registry_lock:
+            target_category = None
+            for category, sub_patterns in _custom_patterns.items():
+                if name in sub_patterns:
+                    target_category = category
+                    break
+
+            if target_category is None:
+                raise HTTPException(
+                    status_code=404, detail=f"Pattern not found: {name}",
+                )
+
+            is_sole = len(_custom_patterns[target_category]) == 1
+            if not is_sole:
+                _custom_patterns[target_category].pop(name)
+                PATTERN_SPECIFICITY.pop(name, None)
+                if target_category in _custom_specificity_keys:
+                    _custom_specificity_keys[target_category].discard(name)
+
+        if is_sole:
+            await _run_sync(unregister_patterns, target_category)
+
+        return Response(status_code=204)
 
     return app
 

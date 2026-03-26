@@ -1,0 +1,46 @@
+name: "DLP Scan"
+description: "Scan files for sensitive data using dlpscan"
+
+inputs:
+  path:
+    description: "Path to scan"
+    required: false
+    default: "."
+  config:
+    description: "Path to config file"
+    required: false
+  format:
+    description: "Output format"
+    required: false
+    default: "text"
+  fail-on-findings:
+    description: "Fail the step if findings are detected"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install dlpscan
+      shell: bash
+      run: pip install dlpscan
+
+    - name: Run dlpscan
+      shell: bash
+      run: |
+        set +e
+        ARGS="--format ${{ inputs.format }}"
+        if [ -n "${{ inputs.config }}" ]; then
+          ARGS="$ARGS --config ${{ inputs.config }}"
+        fi
+        dlpscan $ARGS ${{ inputs.path }}
+        EXIT_CODE=$?
+        if [ "${{ inputs.fail-on-findings }}" = "true" ] && [ $EXIT_CODE -ne 0 ]; then
+          echo "::error::dlpscan detected sensitive data findings"
+          exit 1
+        fi

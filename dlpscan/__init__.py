@@ -12,6 +12,7 @@ from .audit import (
     get_audit_logger,
     set_audit_logger,
 )
+from .cache import ScanCache, get_default_cache, set_default_cache
 from .compliance import ComplianceReport, ComplianceReporter
 from .config import load_config
 from .context import CONTEXT_KEYWORDS
@@ -105,5 +106,6 @@ from .siem import (
     create_siem_from_env,
 )
 from .streaming import StreamScanner, WebhookScanner
+from .webhooks import WebhookNotifier, notify_findings
 
-__version__ = '1.5.0'
+__version__ = '1.6.0'

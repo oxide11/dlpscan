@@ -16,8 +16,6 @@ Backends
 All backends satisfy the :class:`VaultBackend` protocol.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 import logging

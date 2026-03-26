@@ -1,10 +1,31 @@
 services:
-  dlpscan:
+  dlpscan-api:
     build: .
     image: dlpscan:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - DLPSCAN_API_KEY=${DLPSCAN_API_KEY:-}
+      - DLPSCAN_API_HOST=${DLPSCAN_API_HOST:-0.0.0.0}
+      - DLPSCAN_API_PORT=${DLPSCAN_API_PORT:-8000}
+      - DLPSCAN_API_RATE_LIMIT=${DLPSCAN_API_RATE_LIMIT:-100}
+    entrypoint: ["python", "-m", "dlpscan.api"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  dlpscan-worker:
+    build: .
+    image: dlpscan:latest
+    profiles:
+      - batch
+    environment:
+      - DLPSCAN_API_KEY=${DLPSCAN_API_KEY:-}
+    entrypoint: ["python", "-m", "dlpscan"]
     volumes:
-      # Mount a host directory to scan.
-      # Replace ./scan-target with the path to your files.
       - ./scan-target:/data:ro
-    # Override CMD to scan everything under /data
     command: ["/data"]

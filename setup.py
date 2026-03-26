@@ -5,11 +5,11 @@ long_description = Path('README.md').read_text(encoding='utf-8')
 
 setup(
     name='dlpscan',
-    version='1.5.0',
+    version='1.6.0',
     author='Moussa Noun',
     author_email='moussa@polygoncyber.com',
     packages=find_packages(),
-    python_requires='>=3.8',
+    python_requires='>=3.9',
     install_requires=[],
     description='A tool for scanning and redacting sensitive information.',
     long_description=long_description,

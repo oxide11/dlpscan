@@ -10,11 +10,13 @@ Run::
     python tests/benchmarks.py
 """
 
+import json
 import os
 import random
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 
 # ---------------------------------------------------------------------------
 # Ensure the project root is importable when run as a standalone script.
@@ -538,7 +540,38 @@ def main() -> int:
     else:
         print("\n  RESULT: SOME BENCHMARKS FAILED -- review results above\n")
 
+    # --- Write machine-readable JSON summary ---
+    all_results = (
+        text_results
+        + file_results
+        + pipeline_results
+        + guard_results
+        + pattern_results
+    )
+    _write_json_summary(all_results)
+
     return 0 if all_passed else 1
+
+
+def _write_json_summary(results: list[BenchmarkResult]) -> None:
+    """Write a JSON summary of all benchmark results to *benchmark-results.json*."""
+    summary = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "benchmarks": [
+            {
+                "name": r.name,
+                "iterations": r.iterations,
+                "total_seconds": round(r.total_seconds, 6),
+                "ops_per_second": round(r.ops_per_sec, 2),
+            }
+            for r in results
+        ],
+    }
+    path = os.path.join(os.getcwd(), "benchmark-results.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(summary, fh, indent=2)
+        fh.write("\n")
+    print(f"  Benchmark results written to {path}")
 
 
 if __name__ == "__main__":

@@ -23,8 +23,6 @@ Usage::
     setup_opentelemetry(service_name="dlpscan")
 """
 
-from __future__ import annotations
-
 import logging
 import math
 import threading
