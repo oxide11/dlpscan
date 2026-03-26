@@ -5,7 +5,7 @@ long_description = Path('README.md').read_text(encoding='utf-8')
 
 setup(
     name='dlpscan',
-    version='0.3.0',
+    version='0.4.0',
     author='Moussa Noun',
     author_email='moussa@polygoncyber.com',
     packages=find_packages(),
@@ -27,4 +27,9 @@ setup(
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
     keywords='dlp data-loss-prevention sensitive-data redaction pii regex scanner',
+    entry_points={
+        'console_scripts': [
+            'dlpscan=dlpscan.input:main',
+        ],
+    },
 )

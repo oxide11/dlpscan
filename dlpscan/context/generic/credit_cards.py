@@ -1,10 +1,11 @@
 
 
+
 CREDIT_CARDS_CONTEXT = {
     'Credit Card Numbers': {
         'Identifiers': {
-            'Visa': ['visa', 'cc', 'credit card', 'card number', 'card no', 'pan', 'primary account'],
-            'MasterCard': ['mastercard', 'mc', 'credit card', 'card number', 'card no', 'pan', 'primary account'],
+            'Visa': ['visa', 'credit card', 'card number', 'card no', 'pan', 'primary account'],
+            'MasterCard': ['mastercard', 'credit card', 'card number', 'card no', 'pan', 'primary account'],
             'Amex': ['amex', 'american express', 'credit card', 'card number', 'pan', 'primary account'],
             'Discover': ['discover', 'credit card', 'card number', 'pan', 'primary account'],
             'JCB': ['jcb', 'credit card', 'card number', 'pan', 'primary account'],
@@ -13,18 +14,10 @@ CREDIT_CARDS_CONTEXT = {
         },
         'distance': 50,
     },
-    'Credit Card Security Codes': {
-        'Identifiers': {
-            'CVV/CVC/CCV': ['cvv', 'cvc', 'ccv', 'cvv2', 'cvc2', 'security code', 'card verification', 'verification value', 'verification code', 'csv'],
-            'Amex CID': ['cid', 'card identification', 'amex security', 'amex cvv', 'four digit', '4 digit security'],
-        },
-        'distance': 30,
-    },
     'Primary Account Numbers': {
         'Identifiers': {
             'PAN': ['pan', 'primary account number', 'account number', 'card number', 'cardholder number', 'full card'],
             'Masked PAN': ['masked pan', 'truncated pan', 'masked card', 'truncated card', 'last four', 'first six'],
-            'BIN/IIN': ['bin', 'iin', 'bank identification number', 'issuer identification', 'card prefix', 'bin number'],
         },
         'distance': 50,
     },

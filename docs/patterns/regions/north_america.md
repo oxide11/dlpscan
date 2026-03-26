@@ -1,66 +1,21 @@
-# North America — Regex Patterns
-
-> Language-agnostic regex patterns for sensitive data detection.
-> All patterns use standard regex syntax compatible with PCRE, Python `re`, JavaScript, Go, Java, etc.
-
----
-
-## North America - Canada
-
-| Pattern Name | Regex |
-|---|---|
-| Alberta DL | `\b\d{6,9}\b` |
-| Alberta HC | `\b\d{9}\b` |
-| BC HC | `\b9\d{9}\b` |
-| British Columbia DL | `\b\d{7}\b` |
-| Canada BN | `\b\d{9}[A-Z]{2}\d{4}\b` |
-| Canada Bank Code | `\b\d{5}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}\b` |
-| Canada NEXUS | `\b\d{9}\b` |
-| Canada PR Card | `\b[A-Z]{2}\d{7,10}\b` |
-| Canada Passport | `\b[A-Z]{2}\d{6}\b` |
-| Canada SIN | `\b\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}\b` |
-| Manitoba DL | `\b[A-Z]{6}\d{6}\b` |
-| Manitoba HC | `\b\d{9}\b` |
-| NWT DL | `\b\d{6}\b` |
-| New Brunswick DL | `\b\d{5,7}\b` |
-| New Brunswick HC | `\b\d{9}\b` |
-| Newfoundland DL | `\b[A-Z]\d{9,10}\b` |
-| Newfoundland HC | `\b\d{12}\b` |
-| Nova Scotia DL | `\b[A-Z]{5}\d{9}\b` |
-| Nova Scotia HC | `\b\d{10}\b` |
-| Nunavut DL | `\b\d{6}\b` |
-| Ontario DL | `\b[A-Z]\d{4}[-.\s/\\_\u2013\u2014\u00a0]?\d{5}[-.\s/\\_\u2013\u2014\u00a0]?\d{5}\b` |
-| Ontario HC | `\b\d{10}(?:\s?[A-Z]{2})?\b` |
-| PEI DL | `\b\d{1,6}\b` |
-| PEI HC | `\b\d{8}\b` |
-| Quebec DL | `\b[A-Z]\d{4}[-.\s/\\_\u2013\u2014\u00a0]?\d{6}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}\b` |
-| Quebec HC | `\b[A-Z]{4}\d{8}\b` |
-| Saskatchewan DL | `\b\d{8}\b` |
-| Saskatchewan HC | `\b\d{9}\b` |
-| Yukon DL | `\b\d{6}\b` |
-
-## North America - Mexico
-
-| Pattern Name | Regex |
-|---|---|
-| Mexico CURP | `\b[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d\b` |
-| Mexico Clave Elector | `\b[A-Z]{6}\d{8}[HM]\d{3}\b` |
-| Mexico INE CIC | `\b\d{9}\b` |
-| Mexico INE OCR | `\b\d{13}\b` |
-| Mexico NSS | `\b\d{11}\b` |
-| Mexico Passport | `\b[A-Z]\d{8}\b` |
-| Mexico RFC | `\b[A-Z&]{3,4}\d{6}[A-Z0-9]{3}\b` |
-
-## North America - US Generic DL
-
-| Pattern Name | Regex |
-|---|---|
-| Generic US DL | `\b[A-Z]{1,2}\d{4,14}\b` |
+# Patterns: North America
 
 ## North America - United States
 
 | Pattern Name | Regex |
 |---|---|
+| USA SSN | `\b\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}\b` |
+| USA ITIN | `\b9\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}\b` |
+| USA EIN | `\b\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{7}\b` |
+| USA Passport | `\b\d{9}\b` |
+| USA Passport Card | `\bC\d{8}\b` |
+| USA Routing Number | `\b\d{9}\b` |
+| US DEA Number | `\b[A-Z]{2}\d{7}\b` |
+| US NPI | `\b[12]\d{9}\b` |
+| US MBI | `\b[1-9][A-CEGHJ-NP-RT-Y](?:[0-9]\|[A-CEGHJ-NP-RT-Y])[0-9][-.\s/\\_\u2013\u2014\u00a0]?[A-CEGHJ-NP-RT-Y](?:[0-9]\|[A-CEGHJ-NP-RT-Y])[0-9][-.\s/\\_\u2013\u2014\u00a0]?[A-CEGHJ-NP-RT-Y]{2}[0-9]{2}\b` |
+| US DoD ID | `\b\d{10}\b` |
+| US Known Traveler Number | `\b\d{9}\b` |
+| US Phone Number | `(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}(?!\d)` |
 | Alabama DL | `\b\d{7}\b` |
 | Alaska DL | `\b\d{7}\b` |
 | Arizona DL | `\b(?:[A-Z]\d{8}\|\d{9})\b` |
@@ -68,8 +23,8 @@
 | California DL | `\b[A-Z]\d{7}\b` |
 | Colorado DL | `\b(?:\d{9}\|[A-Z]\d{3,6})\b` |
 | Connecticut DL | `\b\d{9}\b` |
-| DC DL | `\b(?:\d{7}\|\d{9})\b` |
 | Delaware DL | `\b\d{1,7}\b` |
+| DC DL | `\b(?:\d{7}\|\d{9})\b` |
 | Florida DL | `\b[A-Z]\d{12}\b` |
 | Georgia DL | `\b\d{7,9}\b` |
 | Hawaii DL | `\b(?:[A-Z]\d{8}\|\d{9})\b` |
@@ -105,18 +60,6 @@
 | South Dakota DL | `\b(?:\d{8,10}\|\d{12})\b` |
 | Tennessee DL | `\b\d{7,9}\b` |
 | Texas DL | `\b\d{8}\b` |
-| US DEA Number | `\b[A-Z]{2}\d{7}\b` |
-| US DoD ID | `\b\d{10}\b` |
-| US Known Traveler Number | `\b\d{9}\b` |
-| US MBI | `\b[1-9][A-CEGHJ-NP-RT-Y](?:[0-9]\|[A-CEGHJ-NP-RT-Y])[0-9][-.\s/\\_\u2013\u2014\u00a0]?[A-CEGHJ-NP-RT-Y](?:[0-9]\|[A-CEGHJ-NP-RT-Y])[0-9][-.\s/\\_\u2013\u2014\u00a0]?[A-CEGHJ-NP-RT-Y]{2}[0-9]{2}\b` |
-| US NPI | `\b[12]\d{9}\b` |
-| US Phone Number | `(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}(?!\d)` |
-| USA EIN | `\b\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{7}\b` |
-| USA ITIN | `\b9\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}\b` |
-| USA Passport | `\b\d{9}\b` |
-| USA Passport Card | `\bC\d{8}\b` |
-| USA Routing Number | `\b\d{9}\b` |
-| USA SSN | `\b\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}[-.\s/\\_\u2013\u2014\u00a0]?\d{4}\b` |
 | Utah DL | `\b\d{4,10}\b` |
 | Vermont DL | `\b(?:\d{8}\|\d{7}[A-Z])\b` |
 | Virginia DL | `\b(?:[A-Z]\d{8,11}\|\d{9})\b` |
@@ -124,3 +67,55 @@
 | West Virginia DL | `\b(?:\d{7}\|[A-Z]\d{6})\b` |
 | Wisconsin DL | `\b[A-Z]\d{13}\b` |
 | Wyoming DL | `\b\d{9,10}\b` |
+
+## North America - US Generic DL
+
+| Pattern Name | Regex |
+|---|---|
+| Generic US DL | `\b[A-Z]{1,2}\d{4,14}\b` |
+
+## North America - Canada
+
+| Pattern Name | Regex |
+|---|---|
+| Canada SIN | `\b\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}\b` |
+| Canada BN | `\b\d{9}[A-Z]{2}\d{4}\b` |
+| Canada Passport | `\b[A-Z]{2}\d{6}\b` |
+| Canada Bank Code | `\b\d{5}[-.\s/\\_\u2013\u2014\u00a0]?\d{3}\b` |
+| Canada PR Card | `\b[A-Z]{2}\d{7,10}\b` |
+| Canada NEXUS | `\b\d{9}\b` |
+| Ontario DL | `\b[A-Z]\d{4}[-.\s/\\_\u2013\u2014\u00a0]?\d{5}[-.\s/\\_\u2013\u2014\u00a0]?\d{5}\b` |
+| Ontario HC | `\b\d{10}(?:\s?[A-Z]{2})?\b` |
+| Quebec DL | `\b[A-Z]\d{4}[-.\s/\\_\u2013\u2014\u00a0]?\d{6}[-.\s/\\_\u2013\u2014\u00a0]?\d{2}\b` |
+| Quebec HC | `\b[A-Z]{4}\d{8}\b` |
+| British Columbia DL | `\b\d{7}\b` |
+| BC HC | `\b9\d{9}\b` |
+| Alberta DL | `\b\d{6,9}\b` |
+| Alberta HC | `\b\d{9}\b` |
+| Saskatchewan DL | `\b\d{8}\b` |
+| Saskatchewan HC | `\b\d{9}\b` |
+| Manitoba DL | `\b[A-Z]{6}\d{6}\b` |
+| Manitoba HC | `\b\d{9}\b` |
+| New Brunswick DL | `\b\d{5,7}\b` |
+| New Brunswick HC | `\b\d{9}\b` |
+| Nova Scotia DL | `\b[A-Z]{5}\d{9}\b` |
+| Nova Scotia HC | `\b\d{10}\b` |
+| PEI DL | `\b\d{1,6}\b` |
+| PEI HC | `\b\d{8}\b` |
+| Newfoundland DL | `\b[A-Z]\d{9,10}\b` |
+| Newfoundland HC | `\b\d{12}\b` |
+| Yukon DL | `\b\d{6}\b` |
+| NWT DL | `\b\d{6}\b` |
+| Nunavut DL | `\b\d{6}\b` |
+
+## North America - Mexico
+
+| Pattern Name | Regex |
+|---|---|
+| Mexico CURP | `\b[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d\b` |
+| Mexico RFC | `\b[A-Z&]{3,4}\d{6}[A-Z0-9]{3}\b` |
+| Mexico Clave Elector | `\b[A-Z]{6}\d{8}[HM]\d{3}\b` |
+| Mexico INE CIC | `\b\d{9}\b` |
+| Mexico INE OCR | `\b\d{13}\b` |
+| Mexico Passport | `\b[A-Z]\d{8}\b` |
+| Mexico NSS | `\b\d{11}\b` |

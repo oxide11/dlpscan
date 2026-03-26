@@ -1,7 +1,8 @@
 
 
+
 BANKING_CONTEXT = {
-    # ── Core Banking ────────────────────────────────────────────────
+    # -- Core Banking ----------------------------------------------------
     'Banking and Financial': {
         'Identifiers': {
             'IBAN Generic': ['iban', 'international bank account number', 'bank account'],
@@ -12,7 +13,7 @@ BANKING_CONTEXT = {
         },
         'distance': 50,
     },
-    # ── Wire Transfers & Payments ───────────────────────────────────
+    # -- Wire Transfers & Payments ----------------------------------------
     'Wire Transfer Data': {
         'Identifiers': {
             'Fedwire IMAD': ['imad', 'input message accountability', 'fedwire', 'fed reference', 'wire reference'],
@@ -24,7 +25,7 @@ BANKING_CONTEXT = {
         },
         'distance': 50,
     },
-    # ── Check/Cheque Data ───────────────────────────────────────────
+    # -- Check/Cheque Data ------------------------------------------------
     'Check and MICR Data': {
         'Identifiers': {
             'MICR Line': ['micr', 'magnetic ink', 'check bottom', 'cheque line', 'micr line', 'e13b'],
@@ -33,7 +34,7 @@ BANKING_CONTEXT = {
         },
         'distance': 50,
     },
-    # ── Securities Identifiers ──────────────────────────────────────
+    # -- Securities Identifiers -------------------------------------------
     'Securities Identifiers': {
         'Identifiers': {
             'CUSIP': ['cusip', 'committee on uniform securities', 'security identifier', 'bond cusip', 'cusip number'],
@@ -45,7 +46,7 @@ BANKING_CONTEXT = {
         },
         'distance': 50,
     },
-    # ── Loan & Mortgage ─────────────────────────────────────────────
+    # -- Loan & Mortgage --------------------------------------------------
     'Loan and Mortgage Data': {
         'Identifiers': {
             'Loan Number': ['loan number', 'loan no', 'loan id', 'loan account', 'loan#', 'lending number'],
@@ -55,7 +56,7 @@ BANKING_CONTEXT = {
         },
         'distance': 50,
     },
-    # ── Regulatory & Compliance ─────────────────────────────────────
+    # -- Regulatory & Compliance ------------------------------------------
     'Regulatory Identifiers': {
         'Identifiers': {
             'SAR Filing Number': ['sar', 'suspicious activity report', 'sar filing', 'sar number', 'suspicious activity'],
@@ -67,44 +68,36 @@ BANKING_CONTEXT = {
         },
         'distance': 50,
     },
-    # ── Authentication & Access ─────────────────────────────────────
+    # -- Authentication & Access ------------------------------------------
     'Banking Authentication': {
         'Identifiers': {
-            'PIN': ['pin', 'personal identification number', 'atm pin', 'debit pin', 'pin number', 'pin code', 'card pin'],
             'PIN Block': ['pin block', 'encrypted pin', 'pin encryption', 'iso 9564', 'pin format'],
             'HSM Key': ['hsm', 'hardware security module', 'hsm key', 'master key', 'key material'],
             'Encryption Key': ['kek', 'zmk', 'tmk', 'zone master key', 'key encrypting', 'terminal master key', 'transport key', 'working key'],
         },
         'distance': 50,
     },
-    # ── Customer Data ───────────────────────────────────────────────
+    # -- Customer Data ----------------------------------------------------
     'Customer Financial Data': {
         'Identifiers': {
             'Account Balance': ['balance', 'account balance', 'available balance', 'current balance', 'ledger balance', 'closing balance'],
             'Balance with Currency Code': ['balance', 'amount', 'total', 'funds', 'available', 'ledger'],
             'Income Amount': ['income', 'salary', 'annual income', 'monthly income', 'gross income', 'net income', 'compensation', 'wages', 'earnings'],
-            'Credit Score': ['credit score', 'fico', 'fico score', 'credit rating', 'vantagescore', 'credit bureau', 'experian', 'equifax', 'transunion'],
             'DTI Ratio': ['dti', 'debt-to-income', 'debt to income', 'dti ratio', 'debt ratio'],
         },
         'distance': 50,
     },
-    # ── Internal Banking References ─────────────────────────────────
+    # -- Internal Banking References --------------------------------------
     'Internal Banking References': {
         'Identifiers': {
-            'Customer ID': ['customer id', 'cif', 'cid', 'customer number', 'client id', 'customer identification', 'client number'],
             'Internal Account Ref': ['internal reference', 'account reference', 'internal id', 'system id', 'core banking id'],
-            'Branch Code': ['branch code', 'branch number', 'branch id', 'cost center', 'branch no', 'office code'],
             'Teller ID': ['teller id', 'teller number', 'officer id', 'banker id', 'employee id', 'user id'],
         },
         'distance': 50,
     },
-    # ── Payment Card Industry (PCI) ─────────────────────────────────
+    # -- Payment Card Industry (PCI) --------------------------------------
     'PCI Sensitive Data': {
         'Identifiers': {
-            'Dynamic CVV': ['icvv', 'dcvv', 'dynamic cvv', 'chip cvv', 'dynamic verification', 'cavv'],
-            'PVKI': ['pvki', 'pin verification key indicator', 'key indicator'],
-            'PVV': ['pvv', 'pin verification value', 'pin value'],
-            'Service Code': ['service code', 'svc code', 'magstripe service', 'card service code'],
             'Cardholder Name Pattern': ['cardholder', 'cardholder name', 'name on card', 'card holder', 'card member'],
         },
         'distance': 30,

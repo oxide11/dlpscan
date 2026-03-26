@@ -2,12 +2,18 @@
 
 A Python package for detecting and redacting sensitive information in text. Uses regex pattern matching with context-aware keyword proximity to minimize false positives.
 
-**587 patterns** across **127 categories** covering credit cards, government IDs, passports, driver's licences, tax numbers, banking data, securities, authentication tokens, classification labels, and more — spanning 80+ countries.
+**560 patterns** across **126 categories** covering credit cards, government IDs, passports, driver's licences, tax numbers, banking data, securities, authentication tokens, classification labels, and more — spanning 80+ countries.
 
 ## Installation
 
 ```bash
 pip install dlpscan
+```
+
+After installation, the `dlpscan` CLI command is available:
+
+```bash
+dlpscan
 ```
 
 ## Quick Start
@@ -19,7 +25,7 @@ from dlpscan import enhanced_scan_text
 
 text = "My SSN is 123-45-6789 and credit card is 4532015112830366"
 
-for match_text, sub_category, has_context, category, _ in enhanced_scan_text(text):
+for match_text, sub_category, has_context, category in enhanced_scan_text(text):
     context = "WITH context" if has_context else "no context"
     print(f"[{category} > {sub_category}] '{match_text}' ({context})")
 ```
@@ -103,7 +109,7 @@ dlpscan uses a two-layer detection approach:
 Each result includes a `has_context` flag indicating whether context keywords were found, allowing callers to make confidence-based decisions.
 
 ```
-                    ◄── distance ──►              ◄── distance ──►
+                    <-- distance -->              <-- distance -->
                     [  pre-text    ] [ match     ] [  post-text   ]
 text: "My credit card number is    4532-0151-...  for payment"
                     ^^^^^^^^^^^^^^^^               ^^^^^^^^^^^^^^
@@ -122,8 +128,8 @@ All multi-group patterns use a standard delimiter class that accepts 9 separator
 | Slash `/` | `123/45/6789` | Tax forms, official docs |
 | Backslash `\` | `123\45\6789` | Log files, Windows paths |
 | Underscore `_` | `123_45_6789` | Database exports, CSVs |
-| En dash `–` | `123–45–6789` | PDF/Word copy-paste |
-| Em dash `—` | `123—45—6789` | PDF/Word copy-paste |
+| En dash `--` | `123--45--6789` | PDF/Word copy-paste |
+| Em dash `---` | `123---45---6789` | PDF/Word copy-paste |
 | Non-breaking space | `123 45 6789` | Web page copy-paste |
 | No delimiter | `123456789` | Compact/stripped format |
 
@@ -131,7 +137,7 @@ Redaction preserves whichever delimiter was used:
 
 ```python
 redact_sensitive_info("123/45/6789")   # => 'XXX/XX/XXXX'
-redact_sensitive_info("123–45–6789")   # => 'XXX–XX–XXXX'
+redact_sensitive_info("123-45-6789")   # => 'XXX-XX-XXXX'
 redact_sensitive_info("123_45_6789")   # => 'XXX_XX_XXXX'
 ```
 
@@ -141,17 +147,26 @@ Credit card matches are automatically validated using the **Luhn algorithm** bef
 
 ### ReDoS Protection
 
-All regex matching is wrapped in a timeout guard (`SIGALRM` on Unix). If a pattern takes longer than 5 seconds on a given input, it is skipped — preventing pathological regex backtracking from hanging the scanner.
+All regex matching is wrapped in a timeout guard (`SIGALRM` on Unix, main thread only). If a pattern takes longer than 5 seconds on a given input, it is skipped. A global scan timeout of 120 seconds prevents unbounded total scan time. On Windows or in non-main threads, timeouts are unavailable and matching runs unguarded.
+
+### Match Limits
+
+`enhanced_scan_text` caps output at 50,000 matches by default (configurable via `max_matches`). This prevents memory exhaustion on dense or pathological inputs.
 
 ### Input Safety
 
-- **Type validation**: Rejects `None`, non-string, and empty inputs with clear exceptions.
+- **Type validation**: All public functions reject `None`, non-string, and empty inputs with clear exceptions.
 - **Size limits**: Inputs larger than 10 MB are rejected to prevent resource exhaustion.
+- **Bounds checking**: `scan_for_context` validates all index parameters.
 - **Safe redaction**: Uses `re.sub()` (not `str.replace()`) to only redact actual pattern matches.
+
+### Thread Safety
+
+The SIGALRM-based timeout only works in the main thread on Unix. When called from background threads, regex timeouts are automatically disabled. The scanner is safe to call from any thread, but ReDoS protection is only active in the main thread.
 
 ## API Reference
 
-### `enhanced_scan_text(text, categories=None, require_context=False)`
+### `enhanced_scan_text(text, categories=None, require_context=False, max_matches=50000)`
 
 Scan text for sensitive data.
 
@@ -160,14 +175,15 @@ Scan text for sensitive data.
 | `text` | `str` | Input text to scan |
 | `categories` | `set[str]` or `None` | Category names to scan. `None` scans all. |
 | `require_context` | `bool` | If `True`, only return matches with nearby keywords. |
+| `max_matches` | `int` | Maximum matches to return (default 50,000). |
 
-**Yields**: `(matched_text, sub_category, has_context, category, sub_category)`
+**Yields**: `(matched_text, sub_category, has_context, category)`
 
 ### `redact_sensitive_info(match, redaction_char='X')`
 
 Redact a matched string, preserving delimiter characters (`-`, `.`, ` `, `/`, `\`, `_`, en dash, em dash, non-breaking space).
 
-**Raises**: `EmptyInputError`, `ShortInputError` (< 4 printable chars)
+**Raises**: `EmptyInputError`, `TypeError`, `ShortInputError` (< 4 printable chars)
 
 ### `redact_sensitive_info_with_patterns(text, category, sub_category)`
 
@@ -187,6 +203,17 @@ Check for contextual keywords within the configured proximity distance of a matc
 
 **Returns**: `bool`
 
+**Raises**: `TypeError`, `ValueError` (invalid indices)
+
+## Constants
+
+| Constant | Default | Description |
+|---|---|---|
+| `MAX_INPUT_SIZE` | 10 MB | Maximum text size accepted by the scanner |
+| `MAX_MATCHES` | 50,000 | Maximum matches per scan |
+| `MAX_SCAN_SECONDS` | 120 | Global scan timeout in seconds |
+| `REGEX_TIMEOUT_SECONDS` | 5 | Per-pattern regex timeout |
+
 ## Exceptions
 
 All exceptions inherit from `RedactionError`:
@@ -200,17 +227,17 @@ All exceptions inherit from `RedactionError`:
 
 ## Pattern Coverage
 
-**587 patterns** across **127 categories** in three tiers:
+**560 patterns** across **126 categories** in three tiers:
 
-### Generic Patterns (183 patterns)
+### Generic Patterns
 
 Universal formats not tied to any country or vendor:
 
-- **Credit Cards**: Visa, MasterCard, Amex, Discover, JCB, Diners Club, UnionPay, CVV/CVC, PAN, masked PAN, BIN/IIN, track data, expiry
-- **Banking & Financial**: IBAN, SWIFT/BIC, ABA routing, wire transfers (Fedwire, ACH, SEPA), check/MICR data, securities (CUSIP, ISIN, SEDOL, FIGI, LEI), loans/mortgages, regulatory (SAR, CTR, AML), PCI data
+- **Credit Cards**: Visa, MasterCard, Amex, Discover, JCB, Diners Club, UnionPay, PAN, masked PAN, track data, expiry
+- **Banking & Financial**: IBAN, SWIFT/BIC, ABA routing, wire transfers (Fedwire, ACH, SEPA), check/MICR data, securities (CUSIP, ISIN, SEDOL, FIGI, LEI, ticker), loans/mortgages, regulatory (SAR, CTR, AML), authentication, customer data
 - **Contact Info**: Email, phone (E.164), IPv4, IPv6, MAC address
-- **PII**: Date of birth, age, gender, GPS coordinates, postal codes (8 countries), device IDs (IMEI, IMSI, ICCID), medical records, insurance, social media, education, legal, employment, biometric, property
-- **Secrets & Tokens**: Bearer, JWT, private keys, API keys, database connection strings, OTP, session IDs, CSRF tokens
+- **PII**: Date of birth, gender, GPS coordinates, postal codes, device IDs (IMEI, ICCID, MEID), medical records, insurance, social media, education, legal, employment, biometric, property
+- **Secrets & Tokens**: Bearer, JWT, private keys, API keys, database connection strings, session IDs
 - **Classification Labels**: Supervisory controlled/confidential (CSI, MRA/MRIA), attorney-client privilege, TOP SECRET/SECRET/FOUO/CUI, corporate confidential, MNPI, PII/PHI/HIPAA/GDPR/PCI-DSS labels
 - **Cryptocurrency**: Bitcoin, Ethereum, Litecoin, Bitcoin Cash, Monero, Ripple
 - **Other**: VIN, dates (ISO/US/EU), URLs with credentials
@@ -224,18 +251,18 @@ Vendor-specific tokens and secrets:
 - **Payments**: Stripe secret/publishable keys
 - **Messaging**: Slack (bot, user, webhook), SendGrid, Twilio, Mailgun
 
-### Geographic Patterns (388 patterns, 80+ countries)
+### Geographic Patterns (80+ countries)
 
 Country-specific IDs, passports, driver's licences, tax numbers, and health cards:
 
 | Region | Countries | Patterns |
 |---|---|---|
 | **North America** | US (all 50 state DLs), Canada (all provinces), Mexico | 100 |
-| **Europe** | 32 countries (UK, DE, FR, IT, NL, ES, PL, SE, PT, CH, TR, AT, BE, IE, DK, FI, NO, CZ, HU, RO, GR, HR, BG, SK, LT, LV, EE, SI, LU, MT, CY, IS, LI + EU-wide) | 134 |
-| **Asia-Pacific** | 15 countries (AU, BD, CN/HK/TW, IN, ID, JP, MY, NZ, PK, PH, SG, KR, LK, TH, VN) | 66 |
-| **Latin America** | 10 countries (AR, BR, CL, CO, CR, EC, PY, PE, UY, VE) | 34 |
-| **Middle East** | 10 countries (BH, IR, IQ, IL, JO, KW, LB, QA, SA, AE) | 21 |
-| **Africa** | 10 countries (EG, ET, GH, KE, MA, NG, ZA, TZ, TN, UG) | 33 |
+| **Europe** | 32 countries | 134 |
+| **Asia-Pacific** | 15 countries | 66 |
+| **Latin America** | 10 countries | 34 |
+| **Middle East** | 10 countries | 21 |
+| **Africa** | 10 countries | 33 |
 
 See [PATTERNS.md](PATTERNS.md) for the complete list, or browse the [docs/](docs/) folder for language-agnostic regex and keyword references.
 
@@ -283,7 +310,7 @@ dlpscan/
 python -m unittest tests.unit -v
 ```
 
-37 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification label detection, and edge cases.
+68 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, and edge cases.
 
 ## License
 

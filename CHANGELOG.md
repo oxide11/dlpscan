@@ -2,6 +2,76 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [0.4.0] - 2026-03-25
+
+### Breaking Changes
+
+- **`enhanced_scan_text()` return tuple changed**: Now yields 4-element tuples
+  `(matched_text, sub_category, has_context, category)` instead of 5-element
+  tuples with a redundant `sub_category` at the end. Update any code that
+  unpacks 5 elements (e.g., change `for text, sub, ctx, cat, _ in ...` to
+  `for text, sub, ctx, cat in ...`).
+
+### Scanner Hardening
+
+- **Input validation on all public functions**: `redact_sensitive_info()` now
+  properly rejects `None` and non-string inputs with `EmptyInputError`/`TypeError`
+  (previously raised `AttributeError`). `scan_for_context()` validates text type,
+  index bounds, and index ordering.
+- **Fixed SIGALRM handler restoration order**: Signal handler is now restored
+  before the alarm is cancelled, closing a race condition window.
+- **Thread-safety guard**: SIGALRM timeout only activates in the main thread.
+  Non-main threads fall back to unguarded matching automatically.
+- **Global scan timeout**: New `MAX_SCAN_SECONDS` (default 120s) limits total
+  scan time across all patterns, preventing worst-case 5s x 560 patterns.
+- **Match count limit**: New `max_matches` parameter (default 50,000) on
+  `enhanced_scan_text()` prevents memory exhaustion from dense inputs.
+- **Logging for timeouts**: Pattern timeouts and scan truncations are logged
+  via Python `logging` instead of silently swallowed.
+
+### False Positive Reduction (27 patterns removed/tightened)
+
+Removed or tightened patterns that matched bare digit sequences with no
+structural constraints, causing excessive false positives in normal text:
+
+- **Removed**: PIN (`\d{4,6}`), PVKI (`\d{1}`), PVV (`\d{4}`),
+  Service Code (`\d{3}`), Dynamic CVV (`\d{3}`), CVV/CVC/CCV (`\d{3}`),
+  Amex CID (`\d{4}`), BIN/IIN (`\d{6,8}`), Credit Score (`\d{3}`),
+  Customer ID (`\d{6,12}`), Branch Code (`\d{4,6}`),
+  Age Value, Australia/Germany Postcode (`\d{4}`/`\d{5}`),
+  India PIN Code, US ZIP (plain 5-digit), MRN, Insurance Group Number,
+  OTP Code, Social Media User ID, Student ID, Bar Number, GPA,
+  IMSI, Android Device ID, Device Serial Number, CSRF Token, Refresh Token.
+- **Tightened**: Ticker Symbol now requires `$` prefix (`$AAPL` not `AAPL`).
+  Wire Reference/SEPA Reference require mixed letters+digits.
+  ACH Trace Number requires valid routing prefix. CHIPS UID given structure.
+  Loan Number/ULI require mixed alphanumeric. ICD-10 excludes ambiguous prefixes.
+  US ZIP requires +4 suffix. Title Deed requires hyphen.
+
+### Packaging
+
+- **CLI entry point**: `pip install dlpscan` now creates a `dlpscan` console
+  command via `entry_points` in `setup.py`.
+- **New exports**: `MAX_MATCHES`, `MAX_SCAN_SECONDS`, `REGEX_TIMEOUT_SECONDS`
+  available from `dlpscan` package.
+
+### Tests
+
+- Expanded from 37 to 68 tests.
+- New test classes: `TestRegionalPatterns` (IBAN, SWIFT, UK NHS, Canada SIN,
+  India Aadhaar, Brazil CPF), `TestSecrets` (GitHub tokens, JWT, Stripe),
+  `TestFalsePositiveReduction` (plain text, ticker, short numbers),
+  `TestDelimiterHandling` (slash, underscore, space, redaction preservation).
+- Added validation tests for `scan_for_context()` (type errors, bounds errors).
+- Added `max_matches` limit test, empty categories test, tuple length test.
+- Removed orphaned test files (`test.py`, `test2.py`, `test5.py`).
+
+### Totals
+
+- **560 patterns** across **126 categories** (down from 587/127 — false-positive
+  patterns removed).
+- **68 tests** (up from 37).
+
 ## [0.3.0] - 2026-03-25
 
 ### Scanner Hardening & Refactoring

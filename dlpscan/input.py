@@ -26,7 +26,7 @@ def main():
         return
 
     print(f"\nFound {len(findings)} potential match(es):\n")
-    for match_text, sub_category, has_context, category, _ in findings:
+    for match_text, sub_category, has_context, category in findings:
         context_label = "WITH context" if has_context else "no context"
         print(f"  [{category} > {sub_category}] '{match_text}' ({context_label})")
 
