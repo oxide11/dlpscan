@@ -481,6 +481,111 @@ scan_for_context(text, start_index=25, end_index=41,
 # True — "credit card" keyword found within proximity distance
 ```
 
+## Enterprise Features
+
+### Audit logging
+
+```python
+from dlpscan.audit import (
+    AuditLogger, FileAuditHandler, set_audit_logger, event_from_scan,
+)
+from dlpscan.guard import InputGuard, Preset, Action
+
+# Set up file-based audit logging
+logger = AuditLogger(handlers=[FileAuditHandler("/var/log/dlp-audit.jsonl")])
+set_audit_logger(logger)
+
+guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REDACT)
+result = guard.scan("Card: 4111111111111111")
+event = event_from_scan(result, action="redact", source="api")
+```
+
+### Rate limiting
+
+```python
+from dlpscan.rate_limit import RateLimiter, rate_limited
+
+limiter = RateLimiter(max_requests=100, window_seconds=60)
+
+@rate_limited(limiter)
+def scan_input(text):
+    return guard.scan(text)
+```
+
+### SIEM integration
+
+```python
+from dlpscan.siem import SplunkHECAdapter, create_siem_from_env
+
+# Direct configuration
+adapter = SplunkHECAdapter(url="https://splunk:8088", token="my-token")
+adapter.send({"action": "redact", "categories": ["Credit Card Numbers"]})
+
+# Or from environment variables (DLPSCAN_SIEM_TYPE, DLPSCAN_SIEM_URL, etc.)
+adapter = create_siem_from_env()
+```
+
+### Role-based detokenization
+
+```python
+from dlpscan.guard import TokenVault
+from dlpscan.guard.rbac import Role, RBACPolicy, SecureTokenVault
+
+vault = TokenVault()
+policy = RBACPolicy(default_role=Role.VIEWER, role_overrides={"admin": Role.ADMIN})
+secure = SecureTokenVault(vault=vault, policy=policy)
+
+token = secure.tokenize("4111111111111111", "Credit Card Numbers")
+original = secure.detokenize(token, user_id="admin")  # Works
+# secure.detokenize(token, user_id="viewer")  # Raises PermissionDeniedError
+```
+
+### Compliance reporting
+
+```python
+from dlpscan.compliance import ComplianceReporter
+from dlpscan.guard import InputGuard, Preset, Action
+
+guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
+reporter = ComplianceReporter(title="Q1 2026 DLP Report")
+
+for text in scan_targets:
+    result = guard.scan(text)
+    reporter.add_scan_result(result, source="batch")
+
+report = reporter.generate()
+print(report.compliance_status)  # {"PCI-DSS": False, "HIPAA": True, ...}
+html = reporter.to_html()        # Full HTML report
+```
+
+### Environment variable configuration
+
+```bash
+export DLPSCAN_ACTION=redact
+export DLPSCAN_PRESETS=pci_dss,ssn_sin
+export DLPSCAN_MIN_CONFIDENCE=0.5
+export DLPSCAN_AUDIT_FILE=/var/log/dlp.jsonl
+export DLPSCAN_SIEM_TYPE=splunk
+export DLPSCAN_SIEM_URL=https://splunk:8088
+export DLPSCAN_SIEM_TOKEN=my-token
+```
+
+```python
+from dlpscan.env_config import configure_from_env
+configure_from_env()  # One-call setup
+```
+
+### Reproducible obfuscation
+
+```python
+from dlpscan.guard import InputGuard, Preset, Action, set_obfuscation_seed
+
+set_obfuscation_seed(42)  # Deterministic output
+guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.OBFUSCATE)
+result = guard.scan("Card: 4111111111111111")
+# Same seed → same fake data every time
+```
+
 ## How Detection Works
 
 dlpscan uses a two-layer detection approach:
@@ -748,12 +853,19 @@ dlpscan/
 ├── extractors.py                  # Text extraction from binary formats
 ├── pipeline.py                    # Queue-based file processing pipeline
 ├── streaming.py                   # Real-time stream & webhook scanners
+├── audit.py                       # Enterprise audit logging framework
+├── rate_limit.py                  # Token bucket rate limiter
+├── env_config.py                  # DLPSCAN_* environment variable configuration
+├── siem.py                        # SIEM integration (Splunk, ES, Syslog, Datadog)
+├── compliance.py                  # Compliance reporting (PCI-DSS, HIPAA, SOC2, GDPR)
 ├── guard/                         # Developer input guard subpackage
 │   ├── __init__.py                # Subpackage exports
 │   ├── core.py                    # InputGuard class, ScanResult, InputGuardError
 │   ├── enums.py                   # Action, Mode enums
 │   ├── presets.py                 # Preset enum, PRESET_CATEGORIES mappings
-│   └── transforms.py              # TokenVault, obfuscation generators
+│   ├── transforms.py              # TokenVault, obfuscation generators
+│   ├── rbac.py                    # Role-based access control for detokenization
+│   └── vault_backends.py          # Pluggable vault storage backends
 ├── exceptions.py                  # Exception hierarchy
 ├── py.typed                       # PEP 561 type marker
 ├── patterns/                      # Regex pattern definitions
@@ -771,7 +883,7 @@ dlpscan/
 ## Testing
 
 ```bash
-python -m unittest tests.unit -v          # Unit tests (288 tests)
+python -m unittest tests.unit -v          # Unit tests (335 tests)
 python -m unittest tests.test_integration  # Integration tests
 python tests/benchmarks.py                 # Performance benchmarks
 

@@ -2,6 +2,64 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [1.3.0] - 2026-03-26
+
+### Enterprise Features
+
+- **Audit Logging** (`dlpscan.audit`): Structured audit trail for every DLP operation.
+  `AuditEvent` dataclass with ISO 8601 timestamps. Pluggable handlers: `StderrAuditHandler`,
+  `FileAuditHandler` (JSON-lines), `CallbackAuditHandler`, `NullAuditHandler`. Global logger
+  via `set_audit_logger()` / `audit_event()`. Helper `event_from_scan()` for ScanResult integration.
+
+- **Vault Persistence** (`dlpscan.guard.vault_backends`): Pluggable storage backends for
+  TokenVault. `InMemoryBackend` (default), `FileBackend` (append-only JSON-lines with optional
+  AES-256-GCM encryption), `EncryptedVault` (transparent encryption wrapper), `RedisBackend`
+  (with optional TTL). All satisfy the `VaultBackend` protocol.
+
+- **Rate Limiting** (`dlpscan.rate_limit`): Thread-safe token bucket `RateLimiter` with
+  configurable max requests, time window, and payload size limits. `rate_limited()` decorator.
+  Global default limiter via `set_default_limiter()`.
+
+- **Environment Variable Configuration** (`dlpscan.env_config`): Configure dlpscan entirely
+  via `DLPSCAN_*` environment variables. `configure_from_env()` one-call setup.
+  `apply_env_to_guard_kwargs()` for InputGuard construction.
+
+- **SIEM Integration** (`dlpscan.siem`): Ship scan events to security platforms. Adapters for
+  Splunk HEC, Elasticsearch/OpenSearch, Syslog (RFC 5424), generic webhooks, and Datadog Logs.
+  All thread-safe. Factory `create_siem_from_env()` reads `DLPSCAN_SIEM_*` env vars.
+
+- **Role-Based Detokenization** (`dlpscan.guard.rbac`): `Role` enum (ADMIN, ANALYST, OPERATOR,
+  VIEWER) with `Permission` enum. `RBACPolicy` for access control with per-user role overrides.
+  `SecureTokenVault` wraps TokenVault with permission checks on detokenize/export/import/clear.
+
+- **Compliance Reporting** (`dlpscan.compliance`): `ComplianceReporter` accumulates scan results
+  and generates `ComplianceReport` with category breakdowns and framework compliance checks
+  (PCI-DSS, HIPAA, SOC2, GDPR). Export to JSON, HTML, or plain text.
+
+- **Custom Obfuscation Seeds**: `set_obfuscation_seed(seed)` enables deterministic, reproducible
+  obfuscation output for testing and audit stability.
+
+- **Pre-commit Hook Hardening**: `.dlpscanignore` file support, `--categories` filter,
+  `--allowlist` file, `--format json` for CI, `--baseline` for known-finding suppression.
+
+### New Files
+
+- `dlpscan/audit.py` — Audit logging framework
+- `dlpscan/guard/vault_backends.py` — Pluggable vault storage backends
+- `dlpscan/rate_limit.py` — Token bucket rate limiter
+- `dlpscan/env_config.py` — Environment variable configuration
+- `dlpscan/siem.py` — SIEM integration adapters
+- `dlpscan/guard/rbac.py` — Role-based access control
+- `dlpscan/compliance.py` — Compliance reporting
+
+### Tests
+
+- Expanded from 288 to 335 unit tests.
+- New test classes: `TestAuditLogging`, `TestRateLimiter`, `TestEnvConfig`, `TestSIEMAdapters`,
+  `TestVaultBackends`, `TestRBAC`, `TestComplianceReporting`, `TestObfuscationSeeds`.
+
+---
+
 ## [1.2.0] - 2026-03-26
 
 ### New Features

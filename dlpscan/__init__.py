@@ -61,6 +61,36 @@ from .guard import (
     tokenize_matches,
     obfuscate_matches,
     obfuscate_match,
+    set_obfuscation_seed,
+    get_obfuscation_rng,
+    Role,
+    Permission,
+    PermissionDeniedError,
+    RBACPolicy,
+    SecureTokenVault,
 )
+from .audit import (
+    AuditEvent,
+    AuditLogger,
+    StderrAuditHandler,
+    FileAuditHandler,
+    CallbackAuditHandler,
+    NullAuditHandler,
+    set_audit_logger,
+    get_audit_logger,
+    audit_event,
+    event_from_scan,
+)
+from .rate_limit import RateLimiter, RateLimitExceeded, rate_limited
+from .env_config import configure_from_env, apply_env_to_guard_kwargs
+from .siem import (
+    SplunkHECAdapter,
+    ElasticsearchAdapter,
+    SyslogAdapter,
+    WebhookAdapter,
+    DatadogAdapter,
+    create_siem_from_env,
+)
+from .compliance import ComplianceReporter, ComplianceReport
 
-__version__ = '1.2.0'
+__version__ = '1.3.0'

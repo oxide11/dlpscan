@@ -26,6 +26,15 @@ from .transforms import (
     tokenize_matches,
     obfuscate_matches,
     obfuscate_match,
+    set_obfuscation_seed,
+    get_obfuscation_rng,
+)
+from .rbac import (
+    Role,
+    Permission,
+    PermissionDeniedError,
+    RBACPolicy,
+    SecureTokenVault,
 )
 
 __all__ = [
@@ -40,4 +49,11 @@ __all__ = [
     'tokenize_matches',
     'obfuscate_matches',
     'obfuscate_match',
+    'set_obfuscation_seed',
+    'get_obfuscation_rng',
+    'Role',
+    'Permission',
+    'PermissionDeniedError',
+    'RBACPolicy',
+    'SecureTokenVault',
 ]

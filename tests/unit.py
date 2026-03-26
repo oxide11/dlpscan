@@ -2698,5 +2698,469 @@ class TestObfuscateAction(unittest.TestCase):
         self.assertNotIn('4111111111111111', result.redacted_text)
 
 
+# ===========================================================================
+# Enterprise Feature Tests (v1.3.0)
+# ===========================================================================
+
+
+class TestAuditLogging(unittest.TestCase):
+    """Tests for dlpscan.audit module."""
+
+    def test_audit_event_creation(self):
+        from dlpscan.audit import AuditEvent
+        event = AuditEvent(
+            event_type="SCAN", action="scan", source="test",
+            categories_found=["Credit Card Numbers"],
+        )
+        self.assertEqual(event.action, "scan")
+        self.assertEqual(event.source, "test")
+        self.assertIn("Credit Card Numbers", event.categories_found)
+
+    def test_audit_event_to_dict(self):
+        from dlpscan.audit import AuditEvent
+        event = AuditEvent(event_type="REDACT", action="redact", source="api")
+        d = event.to_dict()
+        self.assertIn("action", d)
+        self.assertIn("timestamp", d)
+        self.assertEqual(d["action"], "redact")
+
+    def test_audit_logger_with_callback(self):
+        from dlpscan.audit import AuditLogger, AuditEvent, CallbackAuditHandler
+        events = []
+        handler = CallbackAuditHandler(callback=events.append)
+        logger = AuditLogger(handlers=[handler])
+        event = AuditEvent(event_type="SCAN", action="scan", source="test")
+        logger.log(event)
+        self.assertEqual(len(events), 1)
+
+    def test_null_handler(self):
+        from dlpscan.audit import AuditLogger, AuditEvent, NullAuditHandler
+        handler = NullAuditHandler()
+        logger = AuditLogger(handlers=[handler])
+        event = AuditEvent(event_type="SCAN", action="scan", source="test")
+        # Should not raise
+        logger.log(event)
+
+    def test_file_handler(self):
+        from dlpscan.audit import AuditLogger, AuditEvent, FileAuditHandler
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
+            path = f.name
+        try:
+            handler = FileAuditHandler(path)
+            logger = AuditLogger(handlers=[handler])
+            event = AuditEvent(event_type="TOKENIZE", action="tokenize", source="test")
+            logger.log(event)
+            with open(path) as f:
+                line = f.readline()
+            data = json.loads(line)
+            self.assertEqual(data["action"], "tokenize")
+        finally:
+            os.unlink(path)
+
+    def test_global_audit_logger(self):
+        from dlpscan.audit import (
+            set_audit_logger, get_audit_logger, audit_event,
+            AuditLogger, AuditEvent, CallbackAuditHandler,
+        )
+        events = []
+        handler = CallbackAuditHandler(callback=events.append)
+        logger = AuditLogger(handlers=[handler])
+        set_audit_logger(logger)
+        try:
+            event = AuditEvent(event_type="SCAN", action="scan", source="global_test")
+            audit_event(event)
+            self.assertEqual(len(events), 1)
+        finally:
+            set_audit_logger(None)
+
+    def test_event_from_scan(self):
+        from dlpscan.audit import event_from_scan
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
+        result = guard.scan("Card: 4111111111111111")
+        event = event_from_scan(result, action="flag", source="test")
+        self.assertEqual(event.action, "flag")
+        self.assertTrue(len(event.categories_found) > 0)
+
+
+class TestRateLimiter(unittest.TestCase):
+    """Tests for dlpscan.rate_limit module."""
+
+    def test_basic_rate_limit(self):
+        from dlpscan.rate_limit import RateLimiter
+        limiter = RateLimiter(max_requests=3, window_seconds=60)
+        self.assertTrue(limiter.check())
+        self.assertTrue(limiter.check())
+        self.assertTrue(limiter.check())
+        self.assertFalse(limiter.check())
+
+    def test_rate_limit_check_returns_false(self):
+        from dlpscan.rate_limit import RateLimiter
+        limiter = RateLimiter(max_requests=1, window_seconds=60)
+        self.assertTrue(limiter.check())
+        self.assertFalse(limiter.check())
+
+    def test_remaining(self):
+        from dlpscan.rate_limit import RateLimiter
+        limiter = RateLimiter(max_requests=5, window_seconds=60)
+        self.assertEqual(limiter.remaining, 5)
+        limiter.check()
+        self.assertEqual(limiter.remaining, 4)
+
+    def test_reset(self):
+        from dlpscan.rate_limit import RateLimiter
+        limiter = RateLimiter(max_requests=2, window_seconds=60)
+        limiter.check()
+        limiter.check()
+        self.assertFalse(limiter.check())
+        limiter.reset()
+        self.assertTrue(limiter.check())
+
+    def test_rate_limited_decorator(self):
+        from dlpscan.rate_limit import RateLimiter, rate_limited
+        limiter = RateLimiter(max_requests=2, window_seconds=60)
+
+        @rate_limited(limiter)
+        def scan_text(text):
+            return f"scanned: {text}"
+
+        self.assertEqual(scan_text("hello"), "scanned: hello")
+        self.assertEqual(scan_text("world"), "scanned: world")
+
+
+class TestEnvConfig(unittest.TestCase):
+    """Tests for dlpscan.env_config module."""
+
+    def test_load_env_config_empty(self):
+        from dlpscan.env_config import load_env_config
+        config = load_env_config()
+        self.assertIsInstance(config, dict)
+
+    def test_apply_env_to_guard_kwargs(self):
+        from dlpscan.env_config import apply_env_to_guard_kwargs
+        # With no env vars set, should return empty-ish dict
+        kwargs = apply_env_to_guard_kwargs()
+        self.assertIsInstance(kwargs, dict)
+
+    def test_env_bool_parsing(self):
+        from dlpscan.env_config import _env_bool
+        os.environ['DLPSCAN_TEST_BOOL'] = 'true'
+        try:
+            result = _env_bool('DLPSCAN_TEST_BOOL')
+            self.assertTrue(result)
+        finally:
+            del os.environ['DLPSCAN_TEST_BOOL']
+
+    def test_env_float_parsing(self):
+        from dlpscan.env_config import _env_float
+        os.environ['DLPSCAN_TEST_FLOAT'] = '0.75'
+        try:
+            result = _env_float('DLPSCAN_TEST_FLOAT')
+            self.assertAlmostEqual(result, 0.75)
+        finally:
+            del os.environ['DLPSCAN_TEST_FLOAT']
+
+    def test_configure_from_env(self):
+        from dlpscan.env_config import configure_from_env
+        # Should not raise with no env vars
+        configure_from_env()
+
+
+class TestSIEMAdapters(unittest.TestCase):
+    """Tests for dlpscan.siem module."""
+
+    def test_siem_adapter_protocol(self):
+        from dlpscan.siem import SIEMAdapter, SplunkHECAdapter
+        self.assertTrue(isinstance(
+            SplunkHECAdapter(url="http://x", token="t"), SIEMAdapter
+        ))
+
+    def test_elasticsearch_adapter_repr(self):
+        from dlpscan.siem import ElasticsearchAdapter
+        adapter = ElasticsearchAdapter(url="http://es:9200")
+        self.assertIn("es:9200", repr(adapter))
+
+    def test_create_siem_from_env_none(self):
+        from dlpscan.siem import create_siem_from_env
+        # No DLPSCAN_SIEM_TYPE set → None
+        old = os.environ.pop('DLPSCAN_SIEM_TYPE', None)
+        try:
+            result = create_siem_from_env()
+            self.assertIsNone(result)
+        finally:
+            if old is not None:
+                os.environ['DLPSCAN_SIEM_TYPE'] = old
+
+    def test_create_siem_from_env_syslog(self):
+        from dlpscan.siem import create_siem_from_env, SyslogAdapter
+        os.environ['DLPSCAN_SIEM_TYPE'] = 'syslog'
+        try:
+            adapter = create_siem_from_env()
+            self.assertIsInstance(adapter, SyslogAdapter)
+        finally:
+            del os.environ['DLPSCAN_SIEM_TYPE']
+
+    def test_enrich_event(self):
+        from dlpscan.siem import _enrich_event
+        event = {"action": "scan"}
+        enriched = _enrich_event(event)
+        self.assertIn("timestamp", enriched)
+        self.assertIn("host", enriched)
+        self.assertIn("source", enriched)
+
+
+class TestVaultBackends(unittest.TestCase):
+    """Tests for dlpscan.guard.vault_backends module."""
+
+    def test_inmemory_backend(self):
+        from dlpscan.guard.vault_backends import InMemoryBackend
+        backend = InMemoryBackend()
+        backend.store("TOK_CC_abc", "4111111111111111", "Credit Card Numbers")
+        self.assertEqual(backend.lookup_by_token("TOK_CC_abc"), "4111111111111111")
+
+    def test_inmemory_backend_all(self):
+        from dlpscan.guard.vault_backends import InMemoryBackend
+        backend = InMemoryBackend()
+        backend.store("tok1", "val1", "cat1")
+        backend.store("tok2", "val2", "cat2")
+        mapping = backend.export_all()
+        self.assertEqual(len(mapping), 2)
+
+    def test_inmemory_backend_clear(self):
+        from dlpscan.guard.vault_backends import InMemoryBackend
+        backend = InMemoryBackend()
+        backend.store("tok1", "val1", "cat1")
+        backend.clear()
+        self.assertIsNone(backend.lookup_by_token("tok1"))
+
+    def test_file_backend(self):
+        from dlpscan.guard.vault_backends import FileBackend
+        with tempfile.NamedTemporaryFile(suffix='.jsonl', delete=False) as f:
+            path = f.name
+        try:
+            backend = FileBackend(path)
+            backend.store("TOK_CC_abc", "4111111111111111", "Credit Card Numbers")
+            # Create fresh instance to test persistence
+            backend2 = FileBackend(path)
+            self.assertEqual(backend2.lookup_by_token("TOK_CC_abc"), "4111111111111111")
+        finally:
+            os.unlink(path)
+
+    def test_vault_backend_protocol(self):
+        from dlpscan.guard.vault_backends import VaultBackend, InMemoryBackend
+        backend = InMemoryBackend()
+        self.assertIsInstance(backend, VaultBackend)
+
+
+class TestRBAC(unittest.TestCase):
+    """Tests for role-based access control."""
+
+    def test_admin_can_detokenize(self):
+        from dlpscan.guard.rbac import Role, Permission, RBACPolicy
+        policy = RBACPolicy(default_role=Role.ADMIN)
+        self.assertTrue(policy.check("admin_user", Permission.DETOKENIZE))
+
+    def test_viewer_cannot_detokenize(self):
+        from dlpscan.guard.rbac import Role, Permission, RBACPolicy
+        policy = RBACPolicy(default_role=Role.VIEWER)
+        self.assertFalse(policy.check("viewer_user", Permission.DETOKENIZE))
+
+    def test_permission_denied_error(self):
+        from dlpscan.guard.rbac import Role, Permission, RBACPolicy, PermissionDeniedError
+        policy = RBACPolicy(default_role=Role.VIEWER)
+        with self.assertRaises(PermissionDeniedError):
+            policy.require("viewer_user", Permission.DETOKENIZE)
+
+    def test_role_override(self):
+        from dlpscan.guard.rbac import Role, Permission, RBACPolicy
+        policy = RBACPolicy(
+            default_role=Role.VIEWER,
+            role_overrides={"special_user": Role.ADMIN},
+        )
+        self.assertTrue(policy.check("special_user", Permission.DETOKENIZE))
+        self.assertFalse(policy.check("other_user", Permission.DETOKENIZE))
+
+    def test_set_role(self):
+        from dlpscan.guard.rbac import Role, Permission, RBACPolicy
+        policy = RBACPolicy(default_role=Role.VIEWER)
+        self.assertFalse(policy.check("user1", Permission.DETOKENIZE))
+        policy.set_role("user1", Role.OPERATOR)
+        self.assertTrue(policy.check("user1", Permission.DETOKENIZE))
+
+    def test_secure_token_vault(self):
+        from dlpscan.guard.rbac import Role, RBACPolicy, SecureTokenVault
+        from dlpscan.guard.transforms import TokenVault
+        vault = TokenVault()
+        policy = RBACPolicy(default_role=Role.ADMIN)
+        secure = SecureTokenVault(vault=vault, policy=policy)
+        token = secure.tokenize("4111111111111111", "Credit Card Numbers")
+        self.assertIn("TOK_", token)
+        original = secure.detokenize(token, "admin_user")
+        self.assertEqual(original, "4111111111111111")
+
+    def test_secure_vault_viewer_blocked(self):
+        from dlpscan.guard.rbac import Role, RBACPolicy, SecureTokenVault, PermissionDeniedError
+        from dlpscan.guard.transforms import TokenVault
+        vault = TokenVault()
+        policy = RBACPolicy(default_role=Role.VIEWER)
+        secure = SecureTokenVault(vault=vault, policy=policy)
+        token = secure.tokenize("4111111111111111", "Credit Card Numbers")
+        with self.assertRaises(PermissionDeniedError):
+            secure.detokenize(token, "viewer_user")
+
+    def test_analyst_can_export(self):
+        from dlpscan.guard.rbac import Role, Permission, RBACPolicy
+        policy = RBACPolicy(default_role=Role.ANALYST)
+        self.assertTrue(policy.check("analyst_user", Permission.EXPORT_VAULT))
+
+    def test_operator_cannot_export(self):
+        from dlpscan.guard.rbac import Role, Permission, RBACPolicy
+        policy = RBACPolicy(default_role=Role.OPERATOR)
+        self.assertFalse(policy.check("op_user", Permission.EXPORT_VAULT))
+
+
+class TestComplianceReporting(unittest.TestCase):
+    """Tests for compliance reporting module."""
+
+    def test_empty_report(self):
+        from dlpscan.compliance import ComplianceReporter
+        reporter = ComplianceReporter()
+        report = reporter.generate()
+        self.assertEqual(report.scan_summary['total_scans'], 0)
+        self.assertEqual(report.scan_summary['total_findings'], 0)
+
+    def test_add_scan_result(self):
+        from dlpscan.compliance import ComplianceReporter
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
+        result = guard.scan("Card: 4111111111111111")
+        reporter = ComplianceReporter()
+        reporter.add_scan_result(result, source="test")
+        report = reporter.generate()
+        self.assertEqual(report.scan_summary['total_scans'], 1)
+        self.assertTrue(report.scan_summary['total_findings'] > 0)
+
+    def test_compliance_status_pci(self):
+        from dlpscan.compliance import ComplianceReporter
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
+        result = guard.scan("Card: 4111111111111111")
+        reporter = ComplianceReporter()
+        reporter.add_scan_result(result, source="test")
+        report = reporter.generate()
+        self.assertIn("PCI-DSS", report.compliance_status)
+        self.assertFalse(report.compliance_status["PCI-DSS"])
+
+    def test_clean_compliance(self):
+        from dlpscan.compliance import ComplianceReporter
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
+        result = guard.scan("Nothing sensitive here at all")
+        reporter = ComplianceReporter()
+        reporter.add_scan_result(result, source="test")
+        report = reporter.generate()
+        # With no findings, all frameworks should pass
+        for framework, passed in report.compliance_status.items():
+            self.assertTrue(passed, f"{framework} should pass with no findings")
+
+    def test_to_json(self):
+        from dlpscan.compliance import ComplianceReporter
+        reporter = ComplianceReporter()
+        json_str = reporter.to_json()
+        data = json.loads(json_str)
+        self.assertIn("title", data)
+
+    def test_to_html(self):
+        from dlpscan.compliance import ComplianceReporter
+        reporter = ComplianceReporter()
+        html = reporter.to_html()
+        self.assertIn("<html", html.lower())
+        self.assertIn("compliance", html.lower())
+
+    def test_to_text(self):
+        from dlpscan.compliance import ComplianceReporter
+        reporter = ComplianceReporter()
+        text = reporter.to_text()
+        self.assertIsInstance(text, str)
+        self.assertTrue(len(text) > 0)
+
+
+class TestObfuscationSeeds(unittest.TestCase):
+    """Tests for custom obfuscation seeds (reproducible fake data)."""
+
+    def test_seeded_obfuscation_deterministic(self):
+        from dlpscan.guard.transforms import set_obfuscation_seed, obfuscate_match
+        from dlpscan.models import Match
+
+        match = Match(
+            text='4111111111111111',
+            category='Credit Card Numbers',
+            sub_category='Visa',
+            confidence=1.0,
+            has_context=False,
+            span=(0, 16),
+        )
+
+        set_obfuscation_seed(42)
+        result1 = obfuscate_match(match)
+        set_obfuscation_seed(42)
+        result2 = obfuscate_match(match)
+        self.assertEqual(result1, result2)
+
+        # Reset to non-deterministic
+        set_obfuscation_seed(None)
+
+    def test_different_seeds_different_output(self):
+        from dlpscan.guard.transforms import set_obfuscation_seed, obfuscate_match
+        from dlpscan.models import Match
+
+        match = Match(
+            text='user@example.com',
+            category='Contact Information',
+            sub_category='Email Address',
+            confidence=1.0,
+            has_context=False,
+            span=(0, 16),
+        )
+
+        set_obfuscation_seed(1)
+        result1 = obfuscate_match(match)
+        set_obfuscation_seed(2)
+        result2 = obfuscate_match(match)
+        self.assertNotEqual(result1, result2)
+
+        set_obfuscation_seed(None)
+
+    def test_get_obfuscation_rng(self):
+        from dlpscan.guard.transforms import set_obfuscation_seed, get_obfuscation_rng
+        import random
+        set_obfuscation_seed(99)
+        rng = get_obfuscation_rng()
+        self.assertIsInstance(rng, random.Random)
+        set_obfuscation_seed(None)
+
+    def test_seeded_obfuscate_matches(self):
+        from dlpscan.guard.transforms import set_obfuscation_seed, obfuscate_matches
+        from dlpscan.models import Match
+
+        matches = [Match(
+            text='123-45-6789',
+            category='Personal Identifiers',
+            sub_category='USA SSN',
+            confidence=1.0,
+            has_context=False,
+            span=(5, 16),
+        )]
+
+        set_obfuscation_seed(42)
+        result1 = obfuscate_matches("SSN: 123-45-6789", matches)
+        set_obfuscation_seed(42)
+        result2 = obfuscate_matches("SSN: 123-45-6789", matches)
+        self.assertEqual(result1, result2)
+        self.assertNotIn('123-45-6789', result1)
+
+        set_obfuscation_seed(None)
+
+
 if __name__ == '__main__':
     unittest.main()

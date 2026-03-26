@@ -34,6 +34,31 @@ from typing import Dict, List, Optional, Tuple
 from ..models import Match
 
 # ---------------------------------------------------------------------------
+# Obfuscation RNG (supports custom seeds for reproducible fake data)
+# ---------------------------------------------------------------------------
+
+_rng: random.Random = random.Random()
+
+
+def set_obfuscation_seed(seed: Optional[int] = None) -> None:
+    """Set the seed for obfuscation random number generation.
+
+    When a seed is set, obfuscation output becomes deterministic and
+    reproducible — useful for testing and audit-stable fake data.
+
+    Args:
+        seed: Integer seed. Pass ``None`` to reset to non-deterministic.
+    """
+    global _rng
+    _rng = random.Random(seed)
+
+
+def get_obfuscation_rng() -> random.Random:
+    """Return the current obfuscation RNG instance."""
+    return _rng
+
+
+# ---------------------------------------------------------------------------
 # Category abbreviation map for token prefixes
 # ---------------------------------------------------------------------------
 
@@ -225,7 +250,7 @@ def _generate_luhn_number(length: int, prefix: str = '') -> str:
     digits = list(prefix)
     # Fill with random digits, leaving last for check digit.
     while len(digits) < length - 1:
-        digits.append(str(random.randint(0, 9)))
+        digits.append(str(_rng.randint(0, 9)))
 
     # Calculate Luhn check digit.
     total = 0
@@ -249,14 +274,14 @@ def _obfuscate_credit_card(match: Match) -> str:
     # Preserve the general card type prefix but change it.
     prefix_map = {
         'Visa': '4',
-        'MasterCard': '5' + str(random.randint(1, 5)),
-        'Amex': '3' + random.choice(['4', '7']),
+        'MasterCard': '5' + str(_rng.randint(1, 5)),
+        'Amex': '3' + _rng.choice(['4', '7']),
         'Discover': '6011',
         'JCB': '35',
         'Diners Club': '36',
         'UnionPay': '62',
     }
-    prefix = prefix_map.get(match.sub_category, str(random.randint(3, 6)))
+    prefix = prefix_map.get(match.sub_category, str(_rng.randint(3, 6)))
     fake = _generate_luhn_number(length, prefix)
 
     # Reapply original formatting (dashes, spaces).
@@ -273,8 +298,8 @@ def _obfuscate_credit_card(match: Match) -> str:
 
 def _obfuscate_email(match: Match) -> str:
     """Generate a fake email address."""
-    user = ''.join(random.choices(string.ascii_lowercase, k=8))
-    domain = random.choice(['example.net', 'example.org', 'test.invalid', 'sample.test'])
+    user = ''.join(_rng.choices(string.ascii_lowercase, k=8))
+    domain = _rng.choice(['example.net', 'example.org', 'test.invalid', 'sample.test'])
     return f"{user}@{domain}"
 
 
@@ -282,7 +307,7 @@ def _obfuscate_phone(match: Match) -> str:
     """Generate a fake phone number preserving format."""
     # Replace digits with random ones, keeping format characters.
     return ''.join(
-        str(random.randint(0, 9)) if c.isdigit() else c
+        str(_rng.randint(0, 9)) if c.isdigit() else c
         for c in match.text
     )
 
@@ -290,7 +315,7 @@ def _obfuscate_phone(match: Match) -> str:
 def _obfuscate_ssn(match: Match) -> str:
     """Generate a fake SSN/SIN preserving format."""
     return ''.join(
-        str(random.randint(0, 9)) if c.isdigit() else c
+        str(_rng.randint(0, 9)) if c.isdigit() else c
         for c in match.text
     )
 
@@ -301,8 +326,8 @@ def _obfuscate_iban(match: Match) -> str:
     if len(text) >= 2 and text[:2].isalpha():
         country = text[:2]
         rest = ''.join(
-            str(random.randint(0, 9)) if c.isdigit() else
-            random.choice(string.ascii_uppercase) if c.isalpha() else c
+            str(_rng.randint(0, 9)) if c.isdigit() else
+            _rng.choice(string.ascii_uppercase) if c.isalpha() else c
             for c in text[2:]
         )
         return country + rest
@@ -311,13 +336,13 @@ def _obfuscate_iban(match: Match) -> str:
 
 def _obfuscate_ip4(match: Match) -> str:
     """Generate a fake IPv4 address."""
-    return f"{random.randint(10, 223)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}"
+    return f"{_rng.randint(10, 223)}.{_rng.randint(0, 255)}.{_rng.randint(0, 255)}.{_rng.randint(1, 254)}"
 
 
 def _obfuscate_mac(match: Match) -> str:
     """Generate a fake MAC address preserving delimiter."""
     delim = ':' if ':' in match.text else '-'
-    octets = [f"{random.randint(0, 255):02x}" for _ in range(6)]
+    octets = [f"{_rng.randint(0, 255):02x}" for _ in range(6)]
     return delim.join(octets)
 
 
@@ -326,7 +351,7 @@ def _obfuscate_secret(match: Match) -> str:
     text = match.text
     charset = string.ascii_letters + string.digits
     return ''.join(
-        random.choice(charset) if c.isalnum() else c
+        _rng.choice(charset) if c.isalnum() else c
         for c in text
     )
 
@@ -334,9 +359,9 @@ def _obfuscate_secret(match: Match) -> str:
 def _obfuscate_generic(match: Match) -> str:
     """Fallback: replace alphanumeric chars with random ones, keep format."""
     return ''.join(
-        random.choice(string.digits) if c.isdigit() else
-        random.choice(string.ascii_uppercase) if c.isupper() else
-        random.choice(string.ascii_lowercase) if c.islower() else c
+        _rng.choice(string.digits) if c.isdigit() else
+        _rng.choice(string.ascii_uppercase) if c.isupper() else
+        _rng.choice(string.ascii_lowercase) if c.islower() else c
         for c in match.text
     )
 
