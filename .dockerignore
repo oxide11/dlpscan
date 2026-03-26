@@ -1,0 +1,49 @@
+# Version control
+.git
+.gitignore
+
+# Python artifacts
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+dist
+build
+.eggs
+
+# Virtual environments
+.venv
+venv
+env
+
+# IDE / editor files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Testing and CI
+.tox
+.nox
+.coverage
+htmlcov
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Documentation build
+docs/_build
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Misc
+benchmarks
+tests
+*.md
+LICENSE
+.pre-commit-config.yaml
+.github

@@ -2,6 +2,527 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [1.1.0] - 2026-03-26
+
+### New Features
+
+- **Custom pattern registration via InputGuard**: Define custom regex patterns
+  directly in the `InputGuard` constructor via `custom_patterns={}`. Patterns
+  are auto-compiled and registered, auto-cleaned on `close()` or context manager exit.
+- **Per-category confidence tuning**: New `confidence_overrides` parameter on
+  `InputGuard` allows setting different confidence thresholds per category
+  (e.g., `{'Credit Card Numbers': 0.9, 'Contact Information': 0.5}`).
+- **Streaming scanner** (`dlpscan.streaming.StreamScanner`): Stateful scanner for
+  real-time text streams (chat, logs, tails). Buffer-based with configurable
+  flush intervals and overlap for boundary match detection. Thread-safe.
+- **Webhook scanner** (`dlpscan.streaming.WebhookScanner`): Scan HTTP webhook
+  payloads (JSON, form data, plain text) and headers. Extracts nested JSON string
+  values. Skips standard auth headers automatically.
+- **Pipeline structured output**: New `results_to_json()`, `results_to_csv()`,
+  and `results_to_sarif()` helper functions for exporting pipeline results.
+- **Dockerfile**: Multi-stage production build with non-root user, all-formats
+  support, and Docker Compose example.
+- **CI/CD pipeline**: GitHub Actions workflows for testing (Python 3.9–3.13 matrix),
+  PyPI publishing (trusted publisher OIDC), and Docker image builds (multi-arch).
+- **Examples directory**: Integration examples for Flask, FastAPI, Django, and
+  standalone usage with InputGuard.
+- **Integration tests**: End-to-end tests covering the full pipeline, InputGuard,
+  streaming scanner, and webhook scanner.
+- **Performance benchmarks**: Configurable benchmarks for text scanning, file
+  processing, pipeline throughput, and InputGuard latency.
+- **PyPI publishing setup**: MANIFEST.in, version bump to 1.1.0, all packaging
+  metadata complete.
+
+### New Files
+
+- `dlpscan/streaming.py` — StreamScanner, WebhookScanner
+- `dlpscan/guard/core.py` — Added custom_patterns, confidence_overrides, close(), context manager
+- `Dockerfile`, `.dockerignore`, `docker-compose.yml`
+- `.github/workflows/ci.yml`, `publish.yml`, `docker.yml`
+- `examples/basic_usage.py`, `flask_example.py`, `fastapi_example.py`, `django_example.py`
+- `tests/test_integration.py`, `tests/benchmarks.py`
+- `MANIFEST.in`
+
+### Tests
+
+- Expanded from 234 to 257 unit tests.
+- New test classes: `TestInputGuardCustomPatterns`, `TestConfidenceOverrides`,
+  `TestPipelineOutput`, `TestStreamScanner`, `TestWebhookScanner`.
+- Added integration test suite (`tests/test_integration.py`).
+
+---
+
+## [1.0.0] - 2026-03-26
+
+### Enterprise Features
+
+- **Output redaction** (`--redact`): CLI flag redacts matched text in all output
+  formats (text, JSON, CSV). Shows first/last 3 characters for matches >8 chars,
+  otherwise `***`. Recommended for production use. SARIF output never includes
+  matched text (safe by design).
+- **Structured JSON logging**: `configure_logging(level, json_format=True)` emits
+  JSON log lines compatible with ELK, Splunk, Datadog, and other log aggregation
+  platforms. Includes scan duration, match count, file path, and exception info.
+- **Metrics/observability**: Callback-based `ScanMetrics` system. Register a
+  callback via `set_metrics_callback()` to receive duration, match count, bytes
+  scanned, files scanned/skipped, and timeout stats after each scan. Wire into
+  Prometheus, StatsD, or any monitoring backend.
+- **Plugin system**: Register custom validators (`register_validator()`) that
+  run after regex matching to accept/reject individual matches. Register
+  post-processors (`register_post_processor()`) that transform the full match
+  list after scanning. Fail-closed semantics: validator errors discard matches.
+- **Async scanning**: `async_scan_text()`, `async_scan_file()`,
+  `async_scan_directory()` for asyncio-based applications (FastAPI, aiohttp).
+  Uses ThreadPoolExecutor for Python 3.8+ compatibility.
+
+### Packaging & Deployment
+
+- **Dockerfile**: Python 3.12-slim image with non-root user. Entrypoint is
+  `dlpscan` CLI.
+- **PyPI trusted publishing**: GitHub Actions workflow (`.github/workflows/publish.yml`)
+  publishes to PyPI via OIDC on tag push. No API tokens needed.
+- **MIT License**: Standalone `LICENSE` file added.
+- **Version bump**: v1.0.0 — stable API with backward-compatible guarantees.
+
+### Scanner Integration
+
+- Metrics collection wired into `enhanced_scan_text()` — every scan automatically
+  records duration, bytes scanned, match count, categories scanned, and timeout stats.
+- Plugin validators run inline during scanning (before match is appended).
+- Plugin post-processors run after deduplication on the full match list.
+
+### New Exports
+
+- `ScanMetrics`, `set_metrics_callback`, `MetricsCollector`
+- `register_validator`, `unregister_validators`, `register_post_processor`,
+  `unregister_post_processors`, `run_validators`, `run_post_processors`
+- `configure_logging`
+- `async_scan_text`, `async_scan_file`, `async_scan_directory`
+
+### New Files
+
+- `dlpscan/metrics.py` — Callback-based observability system
+- `dlpscan/plugins.py` — Plugin validators and post-processors
+- `dlpscan/logging_config.py` — Structured JSON logging
+- `dlpscan/async_scanner.py` — Async scanning wrappers
+- `Dockerfile` — Container image
+- `.github/workflows/publish.yml` — PyPI publishing workflow
+- `LICENSE` — MIT License
+
+### Tests
+
+- Expanded from 148 to 178+ tests.
+- New test classes: `TestRedactedOutput`, `TestMetrics`, `TestPlugins`,
+  `TestLoggingConfig`, `TestAsyncScanner`.
+
+### Totals
+
+- **560 patterns** across **126 categories** (unchanged).
+- **178+ tests** (up from 148).
+
+## [1.0.2] - 2026-03-26
+
+### New Features
+
+- **InputGuard**: Developer-facing module for scanning and sanitizing application
+  inputs. Import into any Python app to protect against sensitive data ingestion.
+- **Denylist/Allowlist modes**: DENYLIST blocks specified categories (default: all).
+  ALLOWLIST permits only listed categories, blocking everything else detected.
+- **Compliance presets**: Pre-configured category bundles for common use cases:
+  - `Preset.PCI_DSS` — Credit card numbers, PANs, track data, card expiry
+  - `Preset.SSN_SIN` — US SSN/ITIN, Canada SIN
+  - `Preset.PII` — Personal identifiers, geolocation, device IDs, contact info
+  - `Preset.PII_STRICT` — All PII + all 80+ regional ID/passport/DL categories
+  - `Preset.CREDENTIALS` — API keys, tokens, secrets, webhooks
+  - `Preset.FINANCIAL` — Banking, credit cards, securities, crypto, wire transfers
+  - `Preset.HEALTHCARE` — Medical identifiers, insurance
+  - `Preset.CONTACT_INFO` — Email, phone, IP, MAC
+- **Actions**: `REJECT` (raise InputGuardError), `REDACT` (return sanitized text),
+  `FLAG` (return findings without modifying input).
+- **Decorator support**: `@guard.protect(param="user_input")` scans function
+  arguments before execution. Supports targeted params or all string args.
+- **Quick methods**: `guard.check(text)` returns bool, `guard.sanitize(text)`
+  always returns redacted text regardless of configured action.
+- **Detection callback**: `on_detect` callback invoked when sensitive data is found.
+- **Thread-safe**: InputGuard instances are immutable after init, safe to share.
+
+### New Files
+
+- `dlpscan/guard/` — InputGuard subpackage:
+  - `__init__.py` — Public exports (InputGuard, ScanResult, Preset, Action, Mode, InputGuardError, PRESET_CATEGORIES)
+  - `core.py` — InputGuard class, ScanResult, InputGuardError
+  - `enums.py` — Action and Mode enums
+  - `presets.py` — Preset enum and PRESET_CATEGORIES mapping
+
+### Tests
+
+- Expanded from 199 to 234 tests.
+- New test classes: `TestInputGuardBasic`, `TestInputGuardModes`,
+  `TestInputGuardPresets`, `TestInputGuardFiltering`, `TestInputGuardDecorator`,
+  `TestInputGuardScanResult`.
+
+### Totals
+
+- **560 patterns** across **126 categories** (unchanged).
+- **234 tests** (up from 199).
+
+## [1.0.1] - 2026-03-26
+
+### New Features
+
+- **File processing pipeline**: Queue-based concurrent pipeline that ingests files
+  of any supported format, extracts text, runs DLP scanning, and returns structured
+  results. Supports batch processing, directory scanning, async submission via
+  futures, and per-file error isolation.
+- **Text extraction from binary formats**: New `extractors` module extracts plain
+  text from PDF, DOCX, XLSX, PPTX, EML, and MSG files. All extraction libraries
+  are optional dependencies — clear error messages guide installation.
+- **EML support**: Email files parsed via stdlib `email` module (no extra deps).
+  Extracts headers (From, To, Subject) and body parts (text/plain and text/html).
+- **MSG support**: Outlook `.msg` files via `extract-msg` library.
+- **Legacy Office detection**: `.doc`, `.xls`, `.ppt` files raise clear errors
+  with guidance on conversion options.
+- **CLI auto-detection**: When a file with a binary format extension is passed to
+  the CLI, it automatically routes through the pipeline extractor instead of the
+  plain-text scanner. Directory scanning also uses the pipeline.
+- **Custom extractor registration**: `register_extractor('.rtf', my_func)` to
+  add support for additional formats.
+
+### Pipeline API
+
+- `Pipeline(max_workers, max_file_size, categories, min_confidence, allowlist, on_result)`
+- `pipe.process_file(path)` — single file, synchronous
+- `pipe.process_files([paths])` — batch, concurrent, ordered results
+- `pipe.process_directory(dir_path)` — recursive directory scan
+- `pipe.submit(path)` — returns `Future[PipelineResult]`
+- `PipelineResult` — `.success`, `.matches`, `.match_count`, `.format_detected`,
+  `.extraction_metadata`, `.duration_ms`, `.to_dict(redact=True)`
+
+### New Optional Dependencies
+
+```
+pip install dlpscan[pdf]          # pdfplumber
+pip install dlpscan[office]       # python-docx, openpyxl, python-pptx
+pip install dlpscan[email]        # extract-msg
+pip install dlpscan[all-formats]  # Everything
+```
+
+### New Files
+
+- `dlpscan/extractors.py` — Text extraction registry and format handlers
+- `dlpscan/pipeline.py` — Queue-based concurrent processing pipeline
+
+### Tests
+
+- Expanded from 170 to 199 tests.
+- New test classes: `TestExtractors`, `TestPipeline`, `TestFileJob`.
+
+### Totals
+
+- **560 patterns** across **126 categories** (unchanged).
+- **199 tests** (up from 170).
+
+## [0.6.0] - 2026-03-26
+
+### New Features
+
+- **Configuration file support**: Loads settings from `pyproject.toml [tool.dlpscan]`
+  or `.dlpscanrc` (JSON). Auto-discovers config files by walking up from the current
+  directory. CLI arguments override config file settings.
+- **Allowlist/ignore rules**: Suppress known false positives via:
+  - `allowlist` — exact text values to skip
+  - `ignore_patterns` — sub_category names to skip entirely
+  - `ignore_paths` — file path globs to skip in directory scanning
+  - Inline `# dlpscan:ignore` directive on source lines
+- **SARIF output**: `--format sarif` produces SARIF 2.1.0 JSON, compatible with
+  GitHub Code Scanning, Azure DevOps, and other security platforms.
+- **Recursive directory scanning**: `dlpscan ./src/` scans all text files in a
+  directory tree. Automatically skips binary files, `.git`, `node_modules`,
+  `__pycache__`, and other common non-text directories.
+- **GitHub Actions CI**: Workflow runs tests on Python 3.8–3.13 across Linux,
+  macOS, and Windows. Includes ruff linting, mypy type checking, and coverage
+  reporting via codecov.
+
+### Packaging & Tooling
+
+- **pyproject.toml**: Migrated from legacy `setup.py` to modern PEP 621
+  packaging with `[project]` metadata, `[project.optional-dependencies]` for
+  dev tools, and tool configurations for ruff, mypy, and coverage.
+- **py.typed marker**: PEP 561 compliance — type checkers now recognize dlpscan
+  as a typed package.
+- **.pre-commit-config.yaml**: Development workflow hooks for ruff, mypy, and
+  dlpscan itself.
+- **`[dev]` extras**: `pip install dlpscan[dev]` installs ruff, mypy, coverage,
+  and pre-commit.
+
+### New Files
+
+- `dlpscan/config.py` — Configuration file discovery and loading
+- `dlpscan/allowlist.py` — Allowlist filtering and inline ignore support
+- `dlpscan/py.typed` — PEP 561 marker
+- `pyproject.toml` — Modern Python packaging
+- `.github/workflows/ci.yml` — GitHub Actions CI pipeline
+- `.pre-commit-config.yaml` — Pre-commit hooks
+
+### Tests
+
+- Expanded from 92 to 114 tests.
+- New test classes: `TestDirectoryScanning`, `TestAllowlist`, `TestInlineIgnore`,
+  `TestConfig`, `TestSARIFOutput`.
+
+### Totals
+
+- **560 patterns** across **126 categories** (unchanged).
+- **114 tests** (up from 92).
+
+## [0.5.0] - 2026-03-26
+
+### New Features
+
+- **Match dataclass**: `enhanced_scan_text()` now yields `Match` objects with
+  `.text`, `.category`, `.sub_category`, `.has_context`, `.confidence`, `.span`,
+  and `.context_required` attributes. Full backward compatibility preserved via
+  `__iter__`/`__getitem__`/`__len__` — existing tuple unpacking still works.
+- **Confidence scoring**: Each match gets a 0.0–1.0 confidence score based on
+  pattern specificity and context keyword proximity. Context boosts score by +0.20.
+- **Per-pattern context requirements**: 12 overly-broad patterns (e.g., Gender
+  Marker, US Bank Account Number, Cardholder Name) are automatically filtered
+  when no context keywords are nearby, regardless of the caller's `require_context`
+  setting.
+- **Overlap deduplication**: Overlapping matches on the same span are deduplicated,
+  keeping the highest-confidence match. Controlled via `deduplicate=True` (default).
+- **File scanning**: New `scan_file()` processes files in configurable chunks with
+  overlap for boundary matches. Span offsets are relative to the full file.
+- **Stream scanning**: New `scan_stream()` accepts any `TextIO` (StringIO, stdin).
+- **Custom pattern registration**: `register_patterns()` / `unregister_patterns()`
+  allow runtime injection of custom regex patterns, context keywords, and specificity
+  scores.
+- **CLI rewrite**: Full argparse CLI with `-f/--format` (text/json/csv),
+  `--min-confidence`, `--categories`, `--require-context`, `--no-dedup`,
+  `--max-matches`, file argument, and piped stdin support.
+- **Pre-commit hook**: `dlpscan/hooks.py` scans staged git diffs for sensitive data.
+  Supports `--min-confidence` and `--require-context` flags.
+- **Performance benchmarks**: `benchmarks/bench.py` measures throughput, category
+  filtering speedup, deduplication overhead, and stream scanning performance.
+
+### New Files
+
+- `dlpscan/models.py` — Match dataclass, PATTERN_SPECIFICITY, CONTEXT_REQUIRED_PATTERNS
+- `dlpscan/hooks.py` — Pre-commit hook for git
+- `benchmarks/bench.py` — Performance benchmark suite
+
+### Tests
+
+- Expanded from 68 to 92 tests.
+- New test classes: `TestMatchDataclass`, `TestConfidenceScoring`,
+  `TestContextRequired`, `TestOverlapDeduplication`, `TestFileScanming`,
+  `TestCustomPatterns`.
+
+### Totals
+
+- **560 patterns** across **126 categories** (unchanged).
+- **92 tests** (up from 68).
+
+## [0.4.0] - 2026-03-25
+
+### Breaking Changes
+
+- **`enhanced_scan_text()` return tuple changed**: Now yields 4-element tuples
+  `(matched_text, sub_category, has_context, category)` instead of 5-element
+  tuples with a redundant `sub_category` at the end. Update any code that
+  unpacks 5 elements (e.g., change `for text, sub, ctx, cat, _ in ...` to
+  `for text, sub, ctx, cat in ...`).
+
+### Scanner Hardening
+
+- **Input validation on all public functions**: `redact_sensitive_info()` now
+  properly rejects `None` and non-string inputs with `EmptyInputError`/`TypeError`
+  (previously raised `AttributeError`). `scan_for_context()` validates text type,
+  index bounds, and index ordering.
+- **Fixed SIGALRM handler restoration order**: Signal handler is now restored
+  before the alarm is cancelled, closing a race condition window.
+- **Thread-safety guard**: SIGALRM timeout only activates in the main thread.
+  Non-main threads fall back to unguarded matching automatically.
+- **Global scan timeout**: New `MAX_SCAN_SECONDS` (default 120s) limits total
+  scan time across all patterns, preventing worst-case 5s x 560 patterns.
+- **Match count limit**: New `max_matches` parameter (default 50,000) on
+  `enhanced_scan_text()` prevents memory exhaustion from dense inputs.
+- **Logging for timeouts**: Pattern timeouts and scan truncations are logged
+  via Python `logging` instead of silently swallowed.
+
+### False Positive Reduction (27 patterns removed/tightened)
+
+Removed or tightened patterns that matched bare digit sequences with no
+structural constraints, causing excessive false positives in normal text:
+
+- **Removed**: PIN (`\d{4,6}`), PVKI (`\d{1}`), PVV (`\d{4}`),
+  Service Code (`\d{3}`), Dynamic CVV (`\d{3}`), CVV/CVC/CCV (`\d{3}`),
+  Amex CID (`\d{4}`), BIN/IIN (`\d{6,8}`), Credit Score (`\d{3}`),
+  Customer ID (`\d{6,12}`), Branch Code (`\d{4,6}`),
+  Age Value, Australia/Germany Postcode (`\d{4}`/`\d{5}`),
+  India PIN Code, US ZIP (plain 5-digit), MRN, Insurance Group Number,
+  OTP Code, Social Media User ID, Student ID, Bar Number, GPA,
+  IMSI, Android Device ID, Device Serial Number, CSRF Token, Refresh Token.
+- **Tightened**: Ticker Symbol now requires `$` prefix (`$AAPL` not `AAPL`).
+  Wire Reference/SEPA Reference require mixed letters+digits.
+  ACH Trace Number requires valid routing prefix. CHIPS UID given structure.
+  Loan Number/ULI require mixed alphanumeric. ICD-10 excludes ambiguous prefixes.
+  US ZIP requires +4 suffix. Title Deed requires hyphen.
+
+### Packaging
+
+- **CLI entry point**: `pip install dlpscan` now creates a `dlpscan` console
+  command via `entry_points` in `setup.py`.
+- **New exports**: `MAX_MATCHES`, `MAX_SCAN_SECONDS`, `REGEX_TIMEOUT_SECONDS`
+  available from `dlpscan` package.
+
+### Tests
+
+- Expanded from 37 to 68 tests.
+- New test classes: `TestRegionalPatterns` (IBAN, SWIFT, UK NHS, Canada SIN,
+  India Aadhaar, Brazil CPF), `TestSecrets` (GitHub tokens, JWT, Stripe),
+  `TestFalsePositiveReduction` (plain text, ticker, short numbers),
+  `TestDelimiterHandling` (slash, underscore, space, redaction preservation).
+- Added validation tests for `scan_for_context()` (type errors, bounds errors).
+- Added `max_matches` limit test, empty categories test, tuple length test.
+- Removed orphaned test files (`test.py`, `test2.py`, `test5.py`).
+
+### Totals
+
+- **560 patterns** across **126 categories** (down from 587/127 — false-positive
+  patterns removed).
+- **68 tests** (up from 37).
+
+## [0.3.0] - 2026-03-25
+
+### Scanner Hardening & Refactoring
+
+- **Fixed `redact_sensitive_info_with_patterns`**: Now uses `re.sub()` instead of
+  `str.replace()`, preventing false redaction of identical substrings that appear
+  in non-sensitive positions.
+- **Input validation**: All public API functions now validate inputs — reject `None`,
+  non-string types, empty strings, and oversized inputs (>10 MB) with clear exceptions.
+- **ReDoS protection**: Regex matching is wrapped in a SIGALRM timeout guard (5s).
+  Pathological inputs cause the pattern to be skipped instead of hanging the scanner.
+- **`redaction_char` validation**: Must be exactly 1 character.
+- **`is_luhn_valid` type check**: Rejects non-string input.
+
+### New Scanner Features
+
+- **Category filtering**: `enhanced_scan_text(text, categories={'Credit Card Numbers'})`
+  to scan only specific pattern groups instead of all patterns.
+- **Require-context mode**: `enhanced_scan_text(text, require_context=True)` to only
+  return matches that have supporting context keywords nearby.
+
+### Flexible Delimiter Handling
+
+- **Standardized delimiter constant** (`_S`) across all 9 pattern files, accepting
+  9 separator styles: dash, dot, space, forward slash, backslash, underscore, en dash
+  (`\u2013`), em dash (`\u2014`), and non-breaking space (`\u00a0`).
+- Catches sensitive data from PDF/Word copy-paste (unicode dashes), web copy-paste
+  (non-breaking spaces), log files (underscores), and tax forms (slashes).
+- `redact_sensitive_info()` preserves whichever delimiter was used in the original
+  match (e.g., `123/45/6789` redacts to `XXX/XX/XXXX`).
+- **`input.py` robustness**: Handles KeyboardInterrupt, EOFError, empty input, and
+  scanner exceptions with proper exit codes and stderr output.
+
+### Modular Architecture
+
+- **Restructured patterns and context keywords** into a modular package layout:
+  - `dlpscan/patterns/{generic,custom,regions}/` — organized module files
+  - `dlpscan/context/{generic,custom,regions}/` — mirroring structure
+  - `__init__.py` aggregation files merge all sub-modules into unified dicts
+- Removed old monolithic `patterns.py` and `context_patterns.py` files.
+
+### Credit Card Expansion
+
+- **Credit Card Security Codes**: CVV/CVC/CCV (3-digit), Amex CID (4-digit).
+- **Primary Account Numbers**: PAN, Masked/Truncated PAN, BIN/IIN.
+- **Card Track Data**: Track 1 and Track 2 magnetic stripe data.
+- **Card Expiration Dates**: MM/YY and MM/YYYY formats.
+
+### Banking & Financial Expansion (9 new categories, 49 patterns)
+
+- **Wire Transfer Data**: Fedwire IMAD, CHIPS UID, ACH trace/batch, SEPA references.
+- **Check and MICR Data**: MICR magnetic ink lines, check numbers, cashier checks.
+- **Securities Identifiers**: CUSIP, ISIN, SEDOL, FIGI, LEI, ticker symbols.
+- **Loan and Mortgage Data**: Loan numbers, MERS MIN, Universal Loan Identifier, LTV.
+- **Regulatory Identifiers**: SAR/CTR filings, AML case IDs, OFAC SDN, FinCEN reports.
+- **Banking Authentication**: PIN, PIN block, HSM keys, encryption keys.
+- **Customer Financial Data**: Account balances, income amounts, credit scores, DTI.
+- **Internal Banking References**: Customer IDs, branch codes, teller IDs.
+- **PCI Sensitive Data**: Dynamic CVV, PVKI, PVV, service codes, cardholder names.
+
+### PII Expansion (13 new categories, 46 patterns)
+
+- **Personal Identifiers**: Date of birth, age, gender markers.
+- **Geolocation**: GPS coordinates (decimal and DMS), geohash.
+- **Postal Codes**: US ZIP, UK, Canada, Australia, Germany, Japan, India, Brazil.
+- **Device Identifiers**: IMEI, IMEISV, IMSI, MEID, ICCID, Android ID, IDFA/IDFV,
+  serial numbers.
+- **Medical Identifiers**: MRN, health plan ID, DEA, ICD-10, NDC codes.
+- **Insurance Identifiers**: Policy, group, and claim numbers.
+- **Authentication Tokens**: OTP, session ID, CSRF token, refresh token.
+- **Social Media Identifiers**: Twitter handles, hashtags, user IDs.
+- **Education Identifiers**: Student ID, .edu emails, GPA.
+- **Legal Identifiers**: Federal case numbers, docket numbers, bar numbers.
+- **Employment Identifiers**: Employee ID, work permit numbers.
+- **Biometric Identifiers**: Biometric hashes, template IDs.
+- **Property Identifiers**: Parcel/APN numbers, title deeds.
+
+### Classification Labels & Regulatory Markers (6 new categories, 47 patterns)
+
+- **Supervisory Information**: CSI, supervisory controlled/confidential, MRA/MRIA.
+- **Privileged Information**: Attorney-client privilege, work product, litigation hold.
+- **Data Classification Labels**: TOP SECRET, SECRET, FOUO, CUI, SBU, LES, NOFORN.
+- **Corporate Classification**: Internal only, strictly confidential, do not distribute,
+  need to know, eyes only, proprietary, trade secret, embargoed.
+- **Financial Regulatory Labels**: MNPI, inside information, pre-decisional, market
+  sensitive, information barrier, restricted list.
+- **Privacy Classification**: PII, PHI, HIPAA, GDPR, PCI-DSS, FERPA, GLBA, CCPA/CPRA,
+  SOX, NPI.
+
+### Massive European Expansion (+115 patterns)
+
+- Expanded from 12 to 34 European categories covering 32 countries.
+- **New countries**: Austria, Belgium, Ireland, Denmark, Finland, Norway, Czech Republic,
+  Hungary, Romania, Greece, Croatia, Bulgaria, Slovakia, Lithuania, Latvia, Estonia,
+  Slovenia, Luxembourg, Malta, Cyprus, Iceland, Liechtenstein.
+- Each country includes national ID, passport, driver's licence, and tax/social
+  security number patterns where applicable.
+- Added country-specific IBANs for Germany, France, and Netherlands.
+- Added EU-wide VAT number pattern covering all member state prefixes.
+- Improved existing UK patterns (added DL, fixed NHS format).
+
+### Geographic Pattern Expansion
+
+- **Asia-Pacific**: 66 patterns across 15 countries.
+- **Latin America**: 34 patterns across 10 countries.
+- **Middle East**: 21 patterns across 10 countries.
+- **Africa**: 33 patterns across 10 countries.
+
+### Documentation
+
+- **README.md**: Complete rewrite with API reference, detection architecture,
+  security features, usage examples, and pattern coverage summary.
+- **PATTERNS.md**: Regenerated — complete inventory of all 587 patterns.
+- **docs/ reference library**: Language-agnostic markdown files with raw regex
+  patterns and context keywords, organized by category, for integration into
+  any tool or language.
+
+### Tests
+
+- Expanded from 19 to 37 tests.
+- New test classes: `TestRedactWithPatterns`, `TestScanForContext`.
+- Coverage for: input validation (None, non-string, empty, oversized), category
+  filtering, require-context mode, regex-sub vs string-replace, classification
+  label detection, privileged info detection, Luhn type checking.
+
+### Totals
+
+- **587 patterns** across **127 categories** (up from 111 patterns / 12 categories in v0.2.0).
+- All patterns have matching context keyword sets for proximity-based detection.
+
 ## [0.2.0] - 2026-03-25
 
 ### Bug Fixes

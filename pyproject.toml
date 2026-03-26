@@ -1,0 +1,100 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "dlpscan"
+version = "1.1.0"
+description = "A tool for scanning and redacting sensitive information."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.8"
+authors = [
+    {name = "Moussa Noun", email = "moussa@polygoncyber.com"},
+]
+keywords = [
+    "dlp", "data-loss-prevention", "sensitive-data", "redaction",
+    "pii", "regex", "scanner",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = []
+
+[project.optional-dependencies]
+pdf = ["pdfplumber>=0.7"]
+office = ["python-docx>=0.8", "openpyxl>=3.0", "python-pptx>=0.6"]
+email = ["extract-msg>=0.28"]
+all-formats = [
+    "pdfplumber>=0.7",
+    "python-docx>=0.8",
+    "openpyxl>=3.0",
+    "python-pptx>=0.6",
+    "extract-msg>=0.28",
+]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.0",
+    "coverage>=7.0",
+    "pre-commit>=3.0",
+    "pdfplumber>=0.7",
+    "python-docx>=0.8",
+    "openpyxl>=3.0",
+    "python-pptx>=0.6",
+    "extract-msg>=0.28",
+]
+
+[project.scripts]
+dlpscan = "dlpscan.input:main"
+
+[project.urls]
+Homepage = "https://github.com/oxide11/dlpscan"
+Issues = "https://github.com/oxide11/dlpscan/issues"
+
+[tool.setuptools.packages.find]
+include = ["dlpscan*"]
+
+[tool.setuptools.package-data]
+dlpscan = ["py.typed"]
+
+[tool.ruff]
+target-version = "py38"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["dlpscan"]
+omit = ["dlpscan/patterns/*", "dlpscan/context/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+
+# dlpscan default configuration
+[tool.dlpscan]
+min_confidence = 0.0
+require_context = false
+deduplicate = true
+max_matches = 50000
+format = "text"
+# allowlist = []
+# ignore_patterns = []
+# ignore_paths = []

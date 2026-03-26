@@ -1,0 +1,11 @@
+include LICENSE
+include README.md
+include CHANGELOG.md
+include PATTERNS.md
+include pyproject.toml
+include setup.py
+recursive-include dlpscan *.py py.typed
+recursive-include examples *.py
+recursive-include tests *.py
+prune .github
+prune scan-target

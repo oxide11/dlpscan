@@ -17,3 +17,7 @@ class InvalidCardNumberError(RedactionError):
 class SubCategoryNotFoundError(RedactionError):
     """Exception raised when a category is not found in the patterns."""
     pass
+
+class ExtractionError(RedactionError):
+    """Raised when text extraction from a document format fails."""
+    pass
