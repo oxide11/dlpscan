@@ -14,95 +14,81 @@ code platforms, messaging services, and payment processors.
 
 ---
 
-## Patterns
+## Patterns & Keywords
 
 ### Generic Secrets
 
-| Category | Source |
-|----------|--------|
-| Bearer Token | [generic_secrets](../patterns/generic/generic_secrets.md) |
-| JWT Token | [generic_secrets](../patterns/generic/generic_secrets.md) |
-| Private Key | [generic_secrets](../patterns/generic/generic_secrets.md) |
-| Generic API Key | [generic_secrets](../patterns/generic/generic_secrets.md) |
-| Generic Secret Assignment | [generic_secrets](../patterns/generic/generic_secrets.md) |
-| Database Connection String | [generic_secrets](../patterns/generic/generic_secrets.md) |
+| Pattern Name | Regex | Keywords (proximity: 80 chars) |
+|---|---|---|
+| Bearer Token | `[Bb]earer\s+[A-Za-z0-9\-._~+/]+=*` | `authorization`, `bearer`, `auth token` |
+| JWT Token | `\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}` | `jwt`, `json web token`, `auth`, `token` |
+| Private Key | `-----BEGIN (?:RSA \|EC \|DSA \|OPENSSH )?PRIVATE KEY-----` | `private key`, `rsa`, `ssh key`, `pem` |
+| Generic API Key | `(?:api[_-]?key\|apikey\|api[_-]?secret\|api[_-]?token)\s*[=:]\s*["']?[A-Za-z0-9\-._~+/]{16,}["']?` | `api key`, `api_key`, `apikey`, `api secret` |
+| Generic Secret Assignment | `(?:password\|passwd\|pwd\|secret\|token\|credential)\s*[=:]\s*["']?[^\s"']{8,}["']?` | `password`, `secret`, `credential`, `passwd` |
+| Database Connection String | `(?:mongodb(?:\+srv)?\|mysql\|postgres(?:ql)?\|redis\|mssql)://[^:\s]+:[^@\s]+@[^\s]+` | `database`, `db connection`, `connection string`, `mongodb`, `postgres`, `mysql`, `redis` |
 
 ### URLs with Embedded Credentials
 
-| Category | Source |
-|----------|--------|
-| URL with Password | [urls_with_credentials](../patterns/generic/urls_with_credentials.md) |
-| URL with Token | [urls_with_credentials](../patterns/generic/urls_with_credentials.md) |
+| Pattern Name | Regex | Keywords (proximity: 80 chars) |
+|---|---|---|
+| URL with Password | `https?://[^:\s]+:[^@\s]+@[^\s]+` | `url`, `link`, `endpoint`, `connection`, `connect` |
+| URL with Token | `https?://[^\s]*[?&](?:token\|key\|api_key\|apikey\|access_token\|secret\|password\|passwd\|pwd)=[^\s&]+` | `url`, `link`, `endpoint`, `api`, `callback` |
 
 ### Cloud Provider Secrets
 
-| Category | Source |
-|----------|--------|
-| AWS Access Key | [cloud_provider_secrets](../patterns/custom/cloud_provider_secrets.md) |
-| AWS Secret Key | [cloud_provider_secrets](../patterns/custom/cloud_provider_secrets.md) |
-| Google API Key | [cloud_provider_secrets](../patterns/custom/cloud_provider_secrets.md) |
+| Pattern Name | Regex | Keywords (proximity: 80 chars) |
+|---|---|---|
+| AWS Access Key | `\b(?:A3T[A-Z0-9]\|AKIA\|AGPA\|AIDA\|AROA\|AIPA\|ANPA\|ANVA\|ASIA)[A-Z0-9]{16}\b` | `aws`, `amazon`, `access key`, `iam`, `credentials` |
+| AWS Secret Key | `(?<![A-Za-z0-9/+=])[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])` | `aws`, `secret key`, `secret access key`, `aws_secret` |
+| Google API Key | `\bAIza[0-9A-Za-z\\-_]{35}\b` | `google`, `gcp`, `api key`, `google cloud`, `firebase` |
 
 ### Code Platform Secrets
 
-| Category | Source |
-|----------|--------|
-| GitHub Token (Classic) | [code_platform_secrets](../patterns/custom/code_platform_secrets.md) |
-| GitHub Token (Fine-Grained) | [code_platform_secrets](../patterns/custom/code_platform_secrets.md) |
-| GitHub OAuth Token | [code_platform_secrets](../patterns/custom/code_platform_secrets.md) |
-| NPM Token | [code_platform_secrets](../patterns/custom/code_platform_secrets.md) |
-| PyPI Token | [code_platform_secrets](../patterns/custom/code_platform_secrets.md) |
+| Pattern Name | Regex | Keywords (proximity: 80 chars) |
+|---|---|---|
+| GitHub Token (Classic) | `\bghp_[A-Za-z0-9]{36}\b` | `github`, `token`, `pat`, `personal access token` |
+| GitHub Token (Fine-Grained) | `\bgithub_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}\b` | `github`, `fine-grained`, `pat`, `personal access token` |
+| GitHub OAuth Token | `\bgho_[A-Za-z0-9]{36}\b` | `github`, `oauth`, `token`, `app token` |
+| NPM Token | `\bnpm_[A-Za-z0-9]{36}\b` | `npm`, `npmjs`, `registry`, `publish token` |
+| PyPI Token | `\bpypi-[A-Za-z0-9-_]{16,}\b` | `pypi`, `python`, `package`, `upload token` |
 
 ### Messaging Service Secrets
 
-| Category | Source |
-|----------|--------|
-| Slack Bot Token | [messaging_service_secrets](../patterns/custom/messaging_service_secrets.md) |
-| Slack User Token | [messaging_service_secrets](../patterns/custom/messaging_service_secrets.md) |
-| Slack Webhook | [messaging_service_secrets](../patterns/custom/messaging_service_secrets.md) |
-| SendGrid API Key | [messaging_service_secrets](../patterns/custom/messaging_service_secrets.md) |
-| Twilio API Key | [messaging_service_secrets](../patterns/custom/messaging_service_secrets.md) |
-| Mailgun API Key | [messaging_service_secrets](../patterns/custom/messaging_service_secrets.md) |
+| Pattern Name | Regex | Keywords (proximity: 80 chars) |
+|---|---|---|
+| Slack Bot Token | `\bxoxb-[0-9]{10,13}-[0-9]{10,13}-[A-Za-z0-9]{24}\b` | `slack`, `bot`, `token`, `workspace` |
+| Slack User Token | `\bxoxp-[0-9]{10,13}-[0-9]{10,13}-[A-Za-z0-9]{24,34}\b` | `slack`, `user`, `token`, `workspace` |
+| Slack Webhook | `\bhttps://hooks\.slack\.com/services/T[A-Z0-9]{8,}/B[A-Z0-9]{8,}/[A-Za-z0-9]{24}\b` | `slack`, `webhook`, `incoming`, `notification` |
+| SendGrid API Key | `\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}\b` | `sendgrid`, `email`, `api key`, `mail` |
+| Twilio API Key | `\bSK[0-9a-fA-F]{32}\b` | `twilio`, `sms`, `api key`, `messaging` |
+| Mailgun API Key | `\bkey-[0-9a-zA-Z]{32}\b` | `mailgun`, `email`, `api key`, `mail` |
 
 ### Payment Service Secrets
 
-| Category | Source |
-|----------|--------|
-| Stripe Secret Key | [payment_service_secrets](../patterns/custom/payment_service_secrets.md) |
-| Stripe Publishable Key | [payment_service_secrets](../patterns/custom/payment_service_secrets.md) |
+| Pattern Name | Regex | Keywords (proximity: 80 chars) |
+|---|---|---|
+| Stripe Secret Key | `\bsk_live_[0-9a-zA-Z]{24,}\b` | `stripe`, `stripe key`, `secret key`, `payment`, `api key` |
+| Stripe Publishable Key | `\bpk_live_[0-9a-zA-Z]{24,}\b` | `stripe`, `publishable`, `public key`, `payment`, `client key` |
 
 ### Authentication Tokens
 
-| Category | Source |
-|----------|--------|
-| Session ID | [authentication_tokens](../patterns/generic/authentication_tokens.md) |
+| Pattern Name | Regex | Keywords (proximity: 50 chars) |
+|---|---|---|
+| Session ID | `\b[0-9a-f]{32,64}\b` | `session id`, `session_id`, `sessionid`, `sess_id`, `session token`, `phpsessid`, `jsessionid`, `asp.net_sessionid` |
+| CSRF Token | `\b[0-9a-zA-Z_-]{32,64}\b` | `csrf`, `csrf_token`, `xsrf`, `anti-forgery`, `request token`, `authenticity_token`, `_token` |
+| OTP Code | `\b\d{6,8}\b` | `otp`, `one-time password`, `one time password`, `verification code`, `two-factor`, `2fa`, `mfa code`, `authenticator code`, `totp` |
+| Refresh Token | `\b[0-9a-zA-Z_-]{40,}\b` | `refresh_token`, `refresh token`, `rt_token`, `oauth refresh` |
 
 ### Banking Authentication (Infrastructure Secrets)
 
-| Category | Source |
-|----------|--------|
-| Encryption Key | [banking_authentication](../patterns/generic/banking_authentication.md) |
-| HSM Key | [banking_authentication](../patterns/generic/banking_authentication.md) |
-
----
-
-## Keywords
-
-| Keyword Source | Proximity | Mapped Patterns |
-|---------------|-----------|-----------------|
-| [generic_secrets](../keywords/generic/generic_secrets.md) | 80 chars | Bearer, JWT, Private Key, API Key, DB Connection |
-| [urls_with_credentials](../keywords/generic/urls_with_credentials.md) | 80 chars | URL with Password/Token |
-| [cloud_provider_secrets](../keywords/custom/cloud_provider_secrets.md) | 80 chars | AWS, Google keys |
-| [code_platform_secrets](../keywords/custom/code_platform_secrets.md) | 80 chars | GitHub, NPM, PyPI tokens |
-| [messaging_service_secrets](../keywords/custom/messaging_service_secrets.md) | 80 chars | Slack, SendGrid, Twilio, Mailgun |
-| [payment_service_secrets](../keywords/custom/payment_service_secrets.md) | 80 chars | Stripe keys |
-| [authentication_tokens](../keywords/generic/authentication_tokens.md) | 50 chars | Session ID |
-| [banking_authentication](../keywords/generic/banking_authentication.md) | 50 chars | Encryption Key, HSM Key |
+| Pattern Name | Regex | Keywords (proximity: 50 chars) |
+|---|---|---|
+| Encryption Key | `\b[0-9A-Fa-f]{32,48}\b` | `kek`, `zmk`, `tmk`, `zone master key`, `key encrypting`, `terminal master key`, `transport key`, `working key` |
+| HSM Key | `\b[0-9A-Fa-f]{32,64}\b` | `hsm`, `hardware security module`, `hsm key`, `master key`, `key material` |
 
 ---
 
 ## Common Leak Vectors
-
-This baseline is designed to detect secrets in:
 
 | Vector | Example |
 |--------|---------|
