@@ -9,20 +9,20 @@ import tempfile
 import unittest
 
 from dlpscan import (
-    enhanced_scan_text,
-    scan_file,
-    scan_stream,
-    scan_directory,
-    register_patterns,
-    unregister_patterns,
-    Match,
     Allowlist,
+    enhanced_scan_text,
+    register_patterns,
+    scan_stream,
+    unregister_patterns,
 )
-from dlpscan.extractors import extract_text, register_extractor, ExtractionResult
-from dlpscan.pipeline import Pipeline, PipelineResult, results_to_json, results_to_csv, results_to_sarif
-from dlpscan.guard import InputGuard, ScanResult, Preset, Action, Mode, InputGuardError
+from dlpscan.guard import Action, InputGuard, InputGuardError, Mode, Preset
+from dlpscan.pipeline import (
+    Pipeline,
+    results_to_csv,
+    results_to_json,
+    results_to_sarif,
+)
 from dlpscan.streaming import StreamScanner, WebhookScanner
-
 
 # ---------------------------------------------------------------------------
 # Test data
@@ -283,7 +283,7 @@ class TestPipelineWithExtractors(unittest.TestCase):
 
     def test_empty_file(self):
         path = os.path.join(self.tmpdir, 'empty.txt')
-        with open(path, 'w') as f:
+        with open(path, 'w'):
             pass
         with Pipeline(max_workers=1) as pipe:
             result = pipe.process_file(path)

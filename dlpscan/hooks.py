@@ -30,9 +30,9 @@ import os
 import subprocess
 import sys
 
-from .scanner import enhanced_scan_text
-from .exceptions import RedactionError
 from .allowlist import Allowlist
+from .exceptions import RedactionError
+from .scanner import enhanced_scan_text
 
 logger = logging.getLogger(__name__)
 

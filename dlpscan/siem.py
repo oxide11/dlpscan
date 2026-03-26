@@ -29,7 +29,7 @@ import time
 import urllib.error
 import urllib.request
 from logging.handlers import SysLogHandler
-from typing import Any, Dict, Optional, runtime_checkable
+from typing import Dict, Optional, runtime_checkable
 
 try:
     from typing import Protocol

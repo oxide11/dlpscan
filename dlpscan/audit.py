@@ -31,7 +31,7 @@ import logging
 import os
 import sys
 import threading
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Protocol, runtime_checkable
 

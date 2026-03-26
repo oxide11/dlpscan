@@ -22,10 +22,10 @@ Usage::
 import json
 import threading
 from collections import defaultdict
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from html import escape as html_escape
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 from .models import Match
 
@@ -128,7 +128,6 @@ class ComplianceReporter:
 
         # Category / sub-category aggregation
         cat_counts: Dict[str, int] = defaultdict(int)
-        group_key = lambda m: (m.category, m.sub_category)
         group_data: Dict[Tuple[str, str], List[Match]] = defaultdict(list)
 
         for m, _src in matches:

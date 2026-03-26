@@ -29,7 +29,7 @@ import random
 import re
 import string
 import threading
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from ..models import Match
 
