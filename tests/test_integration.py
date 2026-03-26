@@ -501,5 +501,433 @@ class TestWebhookScannerIntegration(unittest.TestCase):
         self.assertFalse(result.is_clean)
 
 
+# ---------------------------------------------------------------------------
+# API integration tests (requires fastapi + httpx)
+# ---------------------------------------------------------------------------
+
+_HAS_FASTAPI_TESTCLIENT = False
+try:
+    from fastapi.testclient import TestClient
+
+    _HAS_FASTAPI_TESTCLIENT = True
+except Exception:
+    pass
+
+
+@unittest.skipUnless(_HAS_FASTAPI_TESTCLIENT, "fastapi + httpx not installed")
+class TestAPIIntegration(unittest.TestCase):
+    """Exercise the FastAPI REST endpoints via TestClient."""
+
+    @classmethod
+    def setUpClass(cls):
+        # Disable API key auth and set a tight rate limit for testing.
+        os.environ.pop("DLPSCAN_API_KEY", None)
+        os.environ.pop("DLPSCAN_CACHE_ENABLED", None)
+        # Reset the rate-limiter singleton so our env var takes effect.
+        from dlpscan.api import _get_rate_limiter
+        if hasattr(_get_rate_limiter, "_instance"):
+            del _get_rate_limiter._instance
+
+        from dlpscan.api import create_app
+
+        cls.app = create_app()
+        cls.client = TestClient(cls.app)
+
+    @classmethod
+    def tearDownClass(cls):
+        # Clean up rate-limiter singleton.
+        from dlpscan.api import _get_rate_limiter
+        if hasattr(_get_rate_limiter, "_instance"):
+            del _get_rate_limiter._instance
+
+    def setUp(self):
+        # Reset rate limiter between tests to avoid cross-test interference.
+        from dlpscan.api import _get_rate_limiter
+        if hasattr(_get_rate_limiter, "_instance"):
+            _get_rate_limiter._instance.reset()
+
+    def test_health_returns_200_and_version(self):
+        resp = self.client.get("/health")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["status"], "ok")
+        self.assertIn("version", body)
+        self.assertTrue(len(body["version"]) > 0)
+
+    def test_scan_with_ssn_returns_findings(self):
+        resp = self.client.post("/v1/scan", json={
+            "text": "My SSN is 123-45-6789",
+            "action": "flag",
+        })
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertFalse(body["is_clean"])
+        self.assertGreater(body["finding_count"], 0)
+        self.assertGreater(len(body["findings"]), 0)
+
+    def test_scan_clean_text_returns_is_clean(self):
+        resp = self.client.post("/v1/scan", json={
+            "text": "Quarterly planning meeting scheduled for next Thursday.",
+            "action": "flag",
+        })
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertTrue(body["is_clean"])
+        self.assertEqual(body["finding_count"], 0)
+
+    def test_tokenize_detokenize_roundtrip(self):
+        original = "Contact john.doe@example.com for details"
+        # Tokenize
+        tok_resp = self.client.post("/v1/tokenize", json={"text": original})
+        self.assertEqual(tok_resp.status_code, 200)
+        tok_body = tok_resp.json()
+        self.assertIn("tokenized_text", tok_body)
+        self.assertIn("vault_id", tok_body)
+        self.assertNotEqual(tok_body["tokenized_text"], original)
+
+        # Detokenize
+        detok_resp = self.client.post("/v1/detokenize", json={
+            "text": tok_body["tokenized_text"],
+            "vault_id": tok_body["vault_id"],
+        })
+        self.assertEqual(detok_resp.status_code, 200)
+        detok_body = detok_resp.json()
+        self.assertEqual(detok_body["original_text"], original)
+
+    def test_obfuscate_returns_obfuscated_text(self):
+        resp = self.client.post("/v1/obfuscate", json={
+            "text": "Email me at john.doe@example.com",
+            "seed": 42,
+        })
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertIn("obfuscated_text", body)
+        # The original email should not appear in the obfuscated output.
+        self.assertNotIn("john.doe@example.com", body["obfuscated_text"])
+
+    def test_batch_scan_with_multiple_items(self):
+        resp = self.client.post("/v1/batch/scan", json={
+            "items": [
+                {"text": "SSN: 123-45-6789", "action": "flag"},
+                {"text": "Nothing sensitive here", "action": "flag"},
+                {"text": "Card: 4111111111111111", "action": "flag"},
+            ],
+        })
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        results = body["results"]
+        self.assertEqual(len(results), 3)
+        # First and third items should have findings.
+        self.assertFalse(results[0]["is_clean"])
+        self.assertTrue(results[1]["is_clean"])
+        self.assertFalse(results[2]["is_clean"])
+
+    def test_rate_limiting_returns_429(self):
+        # Create a fresh app with a very low rate limit.
+        from dlpscan.api import _get_rate_limiter
+        if hasattr(_get_rate_limiter, "_instance"):
+            del _get_rate_limiter._instance
+
+        old_val = os.environ.get("DLPSCAN_API_RATE_LIMIT")
+        os.environ["DLPSCAN_API_RATE_LIMIT"] = "2"
+        try:
+            from dlpscan.api import create_app as _create
+            app = _create()
+            client = TestClient(app)
+
+            # First two requests on rate-limited endpoints should succeed.
+            r1 = client.post("/v1/scan", json={
+                "text": "hello", "action": "flag",
+            })
+            self.assertEqual(r1.status_code, 200)
+            r2 = client.post("/v1/scan", json={
+                "text": "world", "action": "flag",
+            })
+            self.assertEqual(r2.status_code, 200)
+            # The third request should be rejected by the rate limiter.
+            r3 = client.post("/v1/scan", json={
+                "text": "test", "action": "flag",
+            })
+            self.assertEqual(r3.status_code, 429)
+        finally:
+            if old_val is None:
+                os.environ.pop("DLPSCAN_API_RATE_LIMIT", None)
+            else:
+                os.environ["DLPSCAN_API_RATE_LIMIT"] = old_val
+            if hasattr(_get_rate_limiter, "_instance"):
+                del _get_rate_limiter._instance
+
+    def test_request_body_too_large_returns_422(self):
+        # The ScanRequest.text field has max_length=1_000_000.
+        # Sending a text larger than that should trigger a validation error.
+        huge_text = "A" * 1_000_001
+        resp = self.client.post("/v1/scan", json={
+            "text": huge_text,
+            "action": "flag",
+        })
+        self.assertEqual(resp.status_code, 422)
+
+
+# ---------------------------------------------------------------------------
+# Batch database integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestBatchDatabaseIntegration(unittest.TestCase):
+    """Test BatchScanner.scan_database with an in-memory SQLite DB."""
+
+    def setUp(self):
+        import sqlite3
+
+        self.db_path = os.path.join(tempfile.mkdtemp(), "test.db")
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(
+            "CREATE TABLE customers ("
+            "  id INTEGER PRIMARY KEY,"
+            "  name TEXT,"
+            "  email TEXT,"
+            "  notes TEXT"
+            ")"
+        )
+        conn.execute(
+            "INSERT INTO customers (name, email, notes) VALUES (?, ?, ?)",
+            ("Alice", "alice@example.com", "SSN: 123-45-6789"),
+        )
+        conn.execute(
+            "INSERT INTO customers (name, email, notes) VALUES (?, ?, ?)",
+            ("Bob", "bob@example.com", "Nothing sensitive"),
+        )
+        conn.execute(
+            "INSERT INTO customers (name, email, notes) VALUES (?, ?, ?)",
+            ("Carol", "carol@example.com", "Card: 4111111111111111"),
+        )
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        parent = os.path.dirname(self.db_path)
+        shutil.rmtree(parent, ignore_errors=True)
+
+    def test_scan_returns_findings_for_pii_rows(self):
+        from dlpscan.batch import BatchScanner
+
+        scanner = BatchScanner(max_workers=1)
+        results = scanner.scan_database(
+            self.db_path,
+            "SELECT id, name, email, notes FROM customers",
+        )
+        self.assertEqual(len(results), 3)
+        # At least two rows should have findings (SSN and credit card rows).
+        rows_with_findings = [
+            r for r in results
+            if r.scan_result is not None and not r.scan_result.is_clean
+        ]
+        self.assertGreaterEqual(len(rows_with_findings), 2)
+
+    def test_column_filtering(self):
+        from dlpscan.batch import BatchScanner
+
+        scanner = BatchScanner(max_workers=1)
+        # Only scan the 'name' column which has no PII patterns.
+        results = scanner.scan_database(
+            self.db_path,
+            "SELECT id, name, email, notes FROM customers",
+            columns=["name"],
+        )
+        self.assertEqual(len(results), 3)
+        # Names alone should not trigger findings.
+        for r in results:
+            self.assertTrue(
+                r.scan_result is None or r.scan_result.is_clean,
+                f"Unexpected finding in name-only scan: {r.text}",
+            )
+
+    def test_non_select_query_rejected(self):
+        from dlpscan.batch import BatchScanner
+
+        scanner = BatchScanner(max_workers=1)
+        with self.assertRaises(ValueError) as ctx:
+            scanner.scan_database(
+                self.db_path,
+                "DROP TABLE customers",
+            )
+        self.assertIn("SELECT", str(ctx.exception))
+
+
+# ---------------------------------------------------------------------------
+# Cache integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestCacheIntegration(unittest.TestCase):
+    """Test ScanCache integration with real scans."""
+
+    def test_cache_hit_returns_same_result(self):
+        from dlpscan.cache import ScanCache
+        from dlpscan.guard.core import InputGuard
+        from dlpscan.guard.enums import Action
+
+        cache = ScanCache(max_size=10, ttl_seconds=60)
+        guard = InputGuard(action=Action.FLAG)
+
+        text = "Card: 4111111111111111"
+        result1 = guard.scan(text)
+        cache.put(text, result1)
+
+        cached = cache.get(text)
+        self.assertIsNotNone(cached)
+        self.assertEqual(cached.is_clean, result1.is_clean)
+        self.assertEqual(cached.finding_count, result1.finding_count)
+
+    def test_cache_miss_triggers_scan(self):
+        from dlpscan.cache import ScanCache
+
+        cache = ScanCache(max_size=10, ttl_seconds=60)
+        result = cache.get("never seen this text before")
+        self.assertIsNone(result)
+        self.assertEqual(cache.stats["misses"], 1)
+        self.assertEqual(cache.stats["hits"], 0)
+
+    def test_ttl_expiration(self):
+        from dlpscan.cache import ScanCache
+        from dlpscan.guard.core import InputGuard
+        from dlpscan.guard.enums import Action
+
+        # Use a very short TTL.
+        cache = ScanCache(max_size=10, ttl_seconds=0.1)
+        guard = InputGuard(action=Action.FLAG)
+
+        text = "Email: test@example.com"
+        result = guard.scan(text)
+        cache.put(text, result)
+
+        # Immediately should be a hit.
+        self.assertIsNotNone(cache.get(text))
+
+        # Wait for TTL to expire.
+        import time
+        time.sleep(0.2)
+
+        # Should be a miss now.
+        self.assertIsNone(cache.get(text))
+
+    def test_cache_stats_tracking(self):
+        from dlpscan.cache import ScanCache
+        from dlpscan.guard.core import InputGuard
+        from dlpscan.guard.enums import Action
+
+        cache = ScanCache(max_size=10, ttl_seconds=60)
+        guard = InputGuard(action=Action.FLAG)
+
+        text = "SSN: 123-45-6789"
+        result = guard.scan(text)
+
+        # Miss on first access.
+        cache.get(text)
+        self.assertEqual(cache.stats["misses"], 1)
+        self.assertEqual(cache.stats["hits"], 0)
+
+        # Put and then hit.
+        cache.put(text, result)
+        cache.get(text)
+        self.assertEqual(cache.stats["hits"], 1)
+        self.assertEqual(cache.stats["misses"], 1)
+        self.assertEqual(cache.stats["size"], 1)
+
+
+# ---------------------------------------------------------------------------
+# Webhook integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestWebhookIntegration(unittest.TestCase):
+    """Test WebhookNotifier and notify_findings dispatch."""
+
+    def test_notification_payload_structure(self):
+        from unittest.mock import MagicMock, patch
+
+        from dlpscan.guard.core import InputGuard
+        from dlpscan.guard.enums import Action
+        from dlpscan.webhooks import WebhookNotifier
+
+        guard = InputGuard(action=Action.FLAG)
+        result = guard.scan("Card: 4111111111111111")
+
+        captured_payloads = []
+
+        def fake_urlopen(req, **kwargs):
+            import json as _json
+            payload = _json.loads(req.data.decode())
+            captured_payloads.append(payload)
+            return MagicMock(__enter__=MagicMock(), __exit__=MagicMock(return_value=False))
+
+        notifier = WebhookNotifier(
+            urls=["http://localhost:9999/hook"],
+            retries=0,
+            timeout=1,
+        )
+
+        with patch("dlpscan.webhooks.urllib.request.urlopen", side_effect=fake_urlopen):
+            notifier.notify(result, source="test")
+            # The delivery happens in a daemon thread; give it a moment.
+            import time
+            time.sleep(0.5)
+
+        self.assertEqual(len(captured_payloads), 1)
+        payload = captured_payloads[0]
+        self.assertEqual(payload["event_type"], "dlp_finding")
+        self.assertIn("timestamp", payload)
+        self.assertGreater(payload["finding_count"], 0)
+        self.assertIsInstance(payload["categories"], list)
+        self.assertEqual(payload["source"], "test")
+        self.assertIsInstance(payload["details"], list)
+
+    def test_notify_findings_dispatches_to_all_notifiers(self):
+        from unittest.mock import MagicMock, patch
+
+        from dlpscan.guard.core import InputGuard
+        from dlpscan.guard.enums import Action
+        from dlpscan.webhooks import (
+            WebhookNotifier,
+            notify_findings,
+            register_notifier,
+            unregister_notifier,
+        )
+
+        guard = InputGuard(action=Action.FLAG)
+        result = guard.scan("SSN: 123-45-6789")
+
+        call_counts = {"a": 0, "b": 0}
+
+        def fake_urlopen(req, **kwargs):
+            url = req.full_url
+            if "hook-a" in url:
+                call_counts["a"] += 1
+            elif "hook-b" in url:
+                call_counts["b"] += 1
+            return MagicMock(__enter__=MagicMock(), __exit__=MagicMock(return_value=False))
+
+        notifier_a = WebhookNotifier(
+            urls=["http://localhost:9999/hook-a"], retries=0,
+        )
+        notifier_b = WebhookNotifier(
+            urls=["http://localhost:9999/hook-b"], retries=0,
+        )
+        register_notifier(notifier_a)
+        register_notifier(notifier_b)
+
+        try:
+            with patch("dlpscan.webhooks.urllib.request.urlopen", side_effect=fake_urlopen):
+                notify_findings(result, source="integration-test")
+                import time
+                time.sleep(0.5)
+
+            self.assertGreaterEqual(call_counts["a"], 1)
+            self.assertGreaterEqual(call_counts["b"], 1)
+        finally:
+            unregister_notifier(notifier_a)
+            unregister_notifier(notifier_b)
+
+
 if __name__ == '__main__':
     unittest.main()

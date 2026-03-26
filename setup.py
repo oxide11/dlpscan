@@ -9,7 +9,7 @@ setup(
     author='Moussa Noun',
     author_email='moussa@polygoncyber.com',
     packages=find_packages(),
-    python_requires='>=3.8',
+    python_requires='>=3.9',
     install_requires=[],
     description='A tool for scanning and redacting sensitive information.',
     long_description=long_description,
