@@ -1155,5 +1155,241 @@ class TestScanFileEdgeCases(unittest.TestCase):
             shutil.rmtree(tmpdir)
 
 
+class TestRedactedOutput(unittest.TestCase):
+    """Test Match.redacted_text and redact parameter in formatters."""
+
+    def test_redacted_text_long(self):
+        m = Match(text='4532015112830366', category='C', sub_category='Visa',
+                  confidence=0.9, span=(0, 16))
+        self.assertEqual(m.redacted_text, '453...366')
+
+    def test_redacted_text_short(self):
+        m = Match(text='12345678', category='C', sub_category='S',
+                  confidence=0.5, span=(0, 8))
+        self.assertEqual(m.redacted_text, '***')
+
+    def test_to_dict_redact(self):
+        m = Match(text='4532015112830366', category='C', sub_category='Visa',
+                  confidence=0.9, span=(0, 16))
+        d = m.to_dict(redact=True)
+        self.assertEqual(d['text'], '453...366')
+
+    def test_to_dict_no_redact(self):
+        m = Match(text='4532015112830366', category='C', sub_category='Visa',
+                  confidence=0.9, span=(0, 16))
+        d = m.to_dict(redact=False)
+        self.assertEqual(d['text'], '4532015112830366')
+
+    def test_format_text_redacted(self):
+        from dlpscan.input import _format_text
+        matches = [Match(text='test@example.com', category='C',
+                         sub_category='Email Address', confidence=0.9, span=(0, 16))]
+        result = _format_text(matches, redact=True)
+        self.assertNotIn('test@example.com', result)
+        self.assertIn('tes...com', result)
+
+    def test_format_json_redacted(self):
+        from dlpscan.input import _format_json
+        matches = [Match(text='test@example.com', category='C',
+                         sub_category='Email Address', confidence=0.9, span=(0, 16))]
+        result = json.loads(_format_json(matches, redact=True))
+        self.assertEqual(result[0]['text'], 'tes...com')
+
+    def test_format_csv_redacted(self):
+        from dlpscan.input import _format_csv
+        buf = io.StringIO()
+        matches = [Match(text='test@example.com', category='C',
+                         sub_category='Email Address', confidence=0.9, span=(0, 16))]
+        _format_csv(matches, buf, redact=True)
+        output = buf.getvalue()
+        self.assertNotIn('test@example.com', output)
+        self.assertIn('tes...com', output)
+
+
+class TestMetrics(unittest.TestCase):
+    """Test metrics/observability system."""
+
+    def test_metrics_collector_records_duration(self):
+        from dlpscan.metrics import MetricsCollector
+        import time
+        with MetricsCollector() as m:
+            time.sleep(0.01)
+        self.assertGreater(m.duration_ms, 0)
+
+    def test_metrics_callback_invoked(self):
+        from dlpscan.metrics import set_metrics_callback, ScanMetrics
+        captured = []
+        def cb(metrics):
+            captured.append(metrics)
+        set_metrics_callback(cb)
+        try:
+            list(enhanced_scan_text("email: test@example.com",
+                                     categories={'Contact Information'}))
+            self.assertEqual(len(captured), 1)
+            self.assertIsInstance(captured[0], ScanMetrics)
+            self.assertGreater(captured[0].match_count, 0)
+            self.assertGreater(captured[0].bytes_scanned, 0)
+        finally:
+            set_metrics_callback(None)
+
+    def test_metrics_callback_none_disables(self):
+        from dlpscan.metrics import set_metrics_callback
+        set_metrics_callback(None)
+        # Should not raise
+        list(enhanced_scan_text("test@example.com",
+                                 categories={'Contact Information'}))
+
+    def test_metrics_error_captured(self):
+        from dlpscan.metrics import MetricsCollector
+        try:
+            with MetricsCollector() as m:
+                raise ValueError("test error")
+        except ValueError:
+            pass
+        self.assertIsNotNone(m.error)
+        self.assertIsInstance(m.error, ValueError)
+
+
+class TestPlugins(unittest.TestCase):
+    """Test plugin validator and post-processor system."""
+
+    def setUp(self):
+        from dlpscan.plugins import unregister_validators, unregister_post_processors
+        unregister_validators('Email Address')
+        unregister_post_processors()
+
+    def tearDown(self):
+        from dlpscan.plugins import unregister_validators, unregister_post_processors
+        unregister_validators('Email Address')
+        unregister_post_processors()
+
+    def test_validator_filters_matches(self):
+        from dlpscan.plugins import register_validator
+        # Reject all Email Address matches
+        register_validator('Email Address', lambda m: False)
+        results = list(enhanced_scan_text("email: test@example.com",
+                                           categories={'Contact Information'}))
+        emails = [m for m in results if m.sub_category == 'Email Address']
+        self.assertEqual(len(emails), 0)
+
+    def test_validator_keeps_matches(self):
+        from dlpscan.plugins import register_validator
+        register_validator('Email Address', lambda m: True)
+        results = list(enhanced_scan_text("email: test@example.com",
+                                           categories={'Contact Information'}))
+        emails = [m for m in results if m.sub_category == 'Email Address']
+        self.assertGreater(len(emails), 0)
+
+    def test_validator_error_discards_match(self):
+        from dlpscan.plugins import register_validator
+        def bad_validator(m):
+            raise RuntimeError("broken")
+        register_validator('Email Address', bad_validator)
+        results = list(enhanced_scan_text("email: test@example.com",
+                                           categories={'Contact Information'}))
+        emails = [m for m in results if m.sub_category == 'Email Address']
+        self.assertEqual(len(emails), 0)
+
+    def test_post_processor_transforms_results(self):
+        from dlpscan.plugins import register_post_processor
+        def remove_emails(matches):
+            return [m for m in matches if m.sub_category != 'Email Address']
+        register_post_processor(remove_emails)
+        results = list(enhanced_scan_text("email: test@example.com",
+                                           categories={'Contact Information'}))
+        emails = [m for m in results if m.sub_category == 'Email Address']
+        self.assertEqual(len(emails), 0)
+
+    def test_post_processor_error_ignored(self):
+        from dlpscan.plugins import register_post_processor
+        def bad_processor(matches):
+            raise RuntimeError("broken")
+        register_post_processor(bad_processor)
+        # Should not crash, returns original matches
+        results = list(enhanced_scan_text("email: test@example.com",
+                                           categories={'Contact Information'}))
+        self.assertIsInstance(results, list)
+
+    def test_register_non_callable_raises(self):
+        from dlpscan.plugins import register_validator, register_post_processor
+        with self.assertRaises(TypeError):
+            register_validator('Email Address', "not callable")
+        with self.assertRaises(TypeError):
+            register_post_processor("not callable")
+
+
+class TestLoggingConfig(unittest.TestCase):
+    """Test structured JSON logging."""
+
+    def test_json_formatter(self):
+        from dlpscan.logging_config import JSONFormatter
+        import logging
+        formatter = JSONFormatter()
+        record = logging.LogRecord(
+            name='dlpscan.test', level=logging.WARNING,
+            pathname='test.py', lineno=1, msg='Test message',
+            args=(), exc_info=None,
+        )
+        output = formatter.format(record)
+        parsed = json.loads(output)
+        self.assertEqual(parsed['level'], 'WARNING')
+        self.assertEqual(parsed['message'], 'Test message')
+        self.assertIn('timestamp', parsed)
+
+    def test_configure_logging_json(self):
+        from dlpscan.logging_config import configure_logging
+        import logging
+        configure_logging(level='DEBUG', json_format=True, stream=io.StringIO())
+        logger = logging.getLogger('dlpscan')
+        self.assertEqual(logger.level, logging.DEBUG)
+
+    def test_configure_logging_plain(self):
+        from dlpscan.logging_config import configure_logging
+        import logging
+        configure_logging(level='INFO', json_format=False, stream=io.StringIO())
+        logger = logging.getLogger('dlpscan')
+        self.assertEqual(logger.level, logging.INFO)
+
+
+class TestAsyncScanner(unittest.TestCase):
+    """Test async scanning wrappers."""
+
+    def test_async_scan_text(self):
+        import asyncio
+        from dlpscan.async_scanner import async_scan_text
+
+        async def run():
+            results = []
+            async for m in async_scan_text("email: test@example.com",
+                                            categories={'Contact Information'}):
+                results.append(m)
+            return results
+
+        results = asyncio.get_event_loop().run_until_complete(run())
+        emails = [m for m in results if m.sub_category == 'Email Address']
+        self.assertGreater(len(emails), 0)
+
+    def test_async_scan_file(self):
+        import asyncio
+        from dlpscan.async_scanner import async_scan_file
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write("Contact email: test@example.com\n")
+            path = f.name
+
+        async def run():
+            results = []
+            async for m in async_scan_file(path, categories={'Contact Information'}):
+                results.append(m)
+            return results
+
+        try:
+            results = asyncio.get_event_loop().run_until_complete(run())
+            emails = [m for m in results if m.sub_category == 'Email Address']
+            self.assertGreater(len(emails), 0)
+        finally:
+            os.unlink(path)
+
+
 if __name__ == '__main__':
     unittest.main()

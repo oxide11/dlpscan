@@ -131,6 +131,82 @@ results = enhanced_scan_text("Contact test@example.com")
 filtered = al.filter_matches(results)
 ```
 
+### Redact output (enterprise)
+
+```python
+from dlpscan import enhanced_scan_text
+
+text = "My credit card is 4532015112830366"
+for m in enhanced_scan_text(text):
+    print(m.redacted_text)  # '453...366'
+    print(m.to_dict(redact=True))  # {'text': '453...366', ...}
+```
+
+CLI:
+```bash
+dlpscan --redact file.txt           # Redacts matched text in output
+dlpscan --redact -f json file.txt   # Redacted JSON output
+```
+
+### Plugin system
+
+```python
+from dlpscan import register_validator, register_post_processor
+
+# Validator: return True to keep match, False to discard
+def validate_employee_id(match):
+    return match.text.startswith('EMP')
+
+register_validator('Employee ID', validate_employee_id)
+
+# Post-processor: transform the full match list
+def remove_test_data(matches):
+    return [m for m in matches if 'test' not in m.text.lower()]
+
+register_post_processor(remove_test_data)
+```
+
+### Metrics and observability
+
+```python
+from dlpscan import set_metrics_callback, ScanMetrics
+
+def my_callback(metrics: ScanMetrics) -> None:
+    print(f"Scan took {metrics.duration_ms:.1f}ms, found {metrics.match_count} matches")
+    print(f"Scanned {metrics.bytes_scanned} bytes across {metrics.categories_scanned} categories")
+
+set_metrics_callback(my_callback)
+# All subsequent scans invoke the callback automatically.
+```
+
+### Structured JSON logging
+
+```python
+from dlpscan import configure_logging
+
+# JSON logging to stderr (for ELK, Splunk, Datadog)
+configure_logging(level='INFO', json_format=True)
+
+# Plain text logging
+configure_logging(level='DEBUG', json_format=False)
+```
+
+### Async scanning
+
+```python
+import asyncio
+from dlpscan import async_scan_text, async_scan_file
+
+async def main():
+    async for match in async_scan_text("My SSN is 123-45-6789"):
+        print(match.sub_category, match.confidence)
+
+    async for match in async_scan_file("data.csv"):
+        print(match.text)
+
+asyncio.run(main())
+```
+
 ### Check context proximity
 
 ```python
@@ -402,6 +478,10 @@ dlpscan/
 ├── config.py                      # Configuration file loading
 ├── allowlist.py                   # Allowlist filtering and inline ignore
 ├── hooks.py                       # Pre-commit hook for git
+├── metrics.py                     # Callback-based observability system
+├── plugins.py                     # Plugin validators and post-processors
+├── logging_config.py              # Structured JSON logging
+├── async_scanner.py               # Async scanning wrappers
 ├── exceptions.py                  # Exception hierarchy
 ├── py.typed                       # PEP 561 type marker
 ├── patterns/                      # Regex pattern definitions
@@ -427,7 +507,15 @@ coverage run -m unittest tests.unit -v
 coverage report
 ```
 
-114 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering, config loading, SARIF output, and custom pattern registration.
+178+ tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering, config loading, SARIF output, custom pattern registration, output redaction, metrics/observability, plugin system, structured logging, and async scanning.
+
+## Docker
+
+```bash
+docker build -t dlpscan .
+echo "My SSN is 123-45-6789" | docker run -i dlpscan --redact
+docker run -v $(pwd):/data dlpscan /data/src/ -f sarif --redact
+```
 
 ## License
 

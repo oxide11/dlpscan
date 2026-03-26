@@ -2,6 +2,74 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [1.0.0] - 2026-03-26
+
+### Enterprise Features
+
+- **Output redaction** (`--redact`): CLI flag redacts matched text in all output
+  formats (text, JSON, CSV). Shows first/last 3 characters for matches >8 chars,
+  otherwise `***`. Recommended for production use. SARIF output never includes
+  matched text (safe by design).
+- **Structured JSON logging**: `configure_logging(level, json_format=True)` emits
+  JSON log lines compatible with ELK, Splunk, Datadog, and other log aggregation
+  platforms. Includes scan duration, match count, file path, and exception info.
+- **Metrics/observability**: Callback-based `ScanMetrics` system. Register a
+  callback via `set_metrics_callback()` to receive duration, match count, bytes
+  scanned, files scanned/skipped, and timeout stats after each scan. Wire into
+  Prometheus, StatsD, or any monitoring backend.
+- **Plugin system**: Register custom validators (`register_validator()`) that
+  run after regex matching to accept/reject individual matches. Register
+  post-processors (`register_post_processor()`) that transform the full match
+  list after scanning. Fail-closed semantics: validator errors discard matches.
+- **Async scanning**: `async_scan_text()`, `async_scan_file()`,
+  `async_scan_directory()` for asyncio-based applications (FastAPI, aiohttp).
+  Uses ThreadPoolExecutor for Python 3.8+ compatibility.
+
+### Packaging & Deployment
+
+- **Dockerfile**: Python 3.12-slim image with non-root user. Entrypoint is
+  `dlpscan` CLI.
+- **PyPI trusted publishing**: GitHub Actions workflow (`.github/workflows/publish.yml`)
+  publishes to PyPI via OIDC on tag push. No API tokens needed.
+- **MIT License**: Standalone `LICENSE` file added.
+- **Version bump**: v1.0.0 — stable API with backward-compatible guarantees.
+
+### Scanner Integration
+
+- Metrics collection wired into `enhanced_scan_text()` — every scan automatically
+  records duration, bytes scanned, match count, categories scanned, and timeout stats.
+- Plugin validators run inline during scanning (before match is appended).
+- Plugin post-processors run after deduplication on the full match list.
+
+### New Exports
+
+- `ScanMetrics`, `set_metrics_callback`, `MetricsCollector`
+- `register_validator`, `unregister_validators`, `register_post_processor`,
+  `unregister_post_processors`, `run_validators`, `run_post_processors`
+- `configure_logging`
+- `async_scan_text`, `async_scan_file`, `async_scan_directory`
+
+### New Files
+
+- `dlpscan/metrics.py` — Callback-based observability system
+- `dlpscan/plugins.py` — Plugin validators and post-processors
+- `dlpscan/logging_config.py` — Structured JSON logging
+- `dlpscan/async_scanner.py` — Async scanning wrappers
+- `Dockerfile` — Container image
+- `.github/workflows/publish.yml` — PyPI publishing workflow
+- `LICENSE` — MIT License
+
+### Tests
+
+- Expanded from 148 to 178+ tests.
+- New test classes: `TestRedactedOutput`, `TestMetrics`, `TestPlugins`,
+  `TestLoggingConfig`, `TestAsyncScanner`.
+
+### Totals
+
+- **560 patterns** across **126 categories** (unchanged).
+- **178+ tests** (up from 148).
+
 ## [0.6.0] - 2026-03-26
 
 ### New Features

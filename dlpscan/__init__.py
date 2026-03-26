@@ -26,5 +26,16 @@ from .exceptions import (
     InvalidCardNumberError,
     SubCategoryNotFoundError,
 )
+from .metrics import ScanMetrics, set_metrics_callback, MetricsCollector
+from .plugins import (
+    register_validator,
+    unregister_validators,
+    register_post_processor,
+    unregister_post_processors,
+    run_validators,
+    run_post_processors,
+)
+from .logging_config import configure_logging
+from .async_scanner import async_scan_text, async_scan_file, async_scan_directory
 
-__version__ = '0.6.0'
+__version__ = '1.0.0'

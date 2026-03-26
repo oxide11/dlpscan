@@ -25,9 +25,28 @@ class Match:
     span: tuple = (0, 0)
     context_required: bool = False
 
-    def to_dict(self) -> dict:
-        """Convert to a plain dictionary for JSON serialization."""
-        return asdict(self)
+    @property
+    def redacted_text(self) -> str:
+        """Return a redacted version of the matched text.
+
+        Shows first 3 and last 3 characters for matches longer than 8
+        characters, otherwise returns '***'.  Safe for logging and
+        enterprise output.
+        """
+        if len(self.text) > 8:
+            return self.text[:3] + '...' + self.text[-3:]
+        return '***'
+
+    def to_dict(self, redact: bool = False) -> dict:
+        """Convert to a plain dictionary for JSON serialization.
+
+        Args:
+            redact: If True, replace 'text' with redacted version.
+        """
+        d = asdict(self)
+        if redact:
+            d['text'] = self.redacted_text
+        return d
 
     def __iter__(self):
         """Allow tuple unpacking for backward compatibility.

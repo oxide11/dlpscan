@@ -21,6 +21,8 @@ from .exceptions import (
     InvalidCardNumberError,
     SubCategoryNotFoundError,
 )
+from .metrics import MetricsCollector
+from .plugins import run_validators, run_post_processors
 
 logger = logging.getLogger(__name__)
 
@@ -395,82 +397,101 @@ def enhanced_scan_text(
 
     raw_matches: List[Match] = []
     scan_timed_out = False
+    patterns_timed_out = 0
 
-    # Set up global scan timeout if available.
-    _global_old_handler = None
-    if MAX_SCAN_SECONDS > 0 and _can_use_sigalrm():
-        _global_old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-        signal.alarm(MAX_SCAN_SECONDS)
+    with MetricsCollector() as metrics:
+        metrics.bytes_scanned = len(text)
+        metrics.categories_scanned = len(patterns_to_scan)
 
-    try:
-        for category, sub_categories in patterns_to_scan.items():
-            if scan_timed_out or len(raw_matches) >= max_matches:
-                break
+        # Set up global scan timeout if available.
+        _global_old_handler = None
+        if MAX_SCAN_SECONDS > 0 and _can_use_sigalrm():
+            _global_old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+            signal.alarm(MAX_SCAN_SECONDS)
 
-            for sub_category, pattern in sub_categories.items():
+        try:
+            for category, sub_categories in patterns_to_scan.items():
                 if scan_timed_out or len(raw_matches) >= max_matches:
                     break
 
-                is_ctx_required = sub_category in CONTEXT_REQUIRED_PATTERNS
+                for sub_category, pattern in sub_categories.items():
+                    if scan_timed_out or len(raw_matches) >= max_matches:
+                        break
 
-                try:
-                    for match in pattern.finditer(text):
-                        # For credit cards, apply Luhn validation.
-                        if category == 'Credit Card Numbers':
-                            try:
-                                if not is_luhn_valid(match.group()):
+                    is_ctx_required = sub_category in CONTEXT_REQUIRED_PATTERNS
+
+                    try:
+                        for match in pattern.finditer(text):
+                            # For credit cards, apply Luhn validation.
+                            if category == 'Credit Card Numbers':
+                                try:
+                                    if not is_luhn_valid(match.group()):
+                                        continue
+                                except InvalidCardNumberError:
                                     continue
-                            except InvalidCardNumberError:
+
+                            has_context = scan_for_context(
+                                text, match.start(), match.end(), category, sub_category
+                            )
+
+                            # Context-required patterns are silently skipped without context.
+                            if is_ctx_required and not has_context:
                                 continue
 
-                        has_context = scan_for_context(
-                            text, match.start(), match.end(), category, sub_category
-                        )
+                            # User-requested require_context filter.
+                            if require_context and not has_context:
+                                continue
 
-                        # Context-required patterns are silently skipped without context.
-                        if is_ctx_required and not has_context:
-                            continue
+                            confidence = _compute_confidence(sub_category, has_context, is_ctx_required)
 
-                        # User-requested require_context filter.
-                        if require_context and not has_context:
-                            continue
-
-                        confidence = _compute_confidence(sub_category, has_context, is_ctx_required)
-
-                        m = Match(
-                            text=match.group(),
-                            category=category,
-                            sub_category=sub_category,
-                            has_context=has_context,
-                            confidence=confidence,
-                            span=(match.start(), match.end()),
-                            context_required=is_ctx_required,
-                        )
-                        raw_matches.append(m)
-
-                        if len(raw_matches) >= max_matches:
-                            logger.warning(
-                                "Match limit reached (%d). Scan truncated.", max_matches
+                            m = Match(
+                                text=match.group(),
+                                category=category,
+                                sub_category=sub_category,
+                                has_context=has_context,
+                                confidence=confidence,
+                                span=(match.start(), match.end()),
+                                context_required=is_ctx_required,
                             )
-                            break
-                except _RegexTimeout:
-                    if _global_old_handler is not None:
-                        scan_timed_out = True
-                        logger.warning(
-                            "Global scan timeout (%ds) reached. Scan truncated.",
-                            MAX_SCAN_SECONDS,
-                        )
-                    else:
-                        logger.warning(
-                            "Regex timeout: pattern %r skipped.", pattern.pattern
-                        )
-    finally:
-        if _global_old_handler is not None:
-            signal.signal(signal.SIGALRM, _global_old_handler)
-            signal.alarm(0)
 
-    if deduplicate:
-        raw_matches = _deduplicate_overlapping(raw_matches)
+                            # Run plugin validators — discard match if any validator rejects.
+                            if not run_validators(m):
+                                continue
+
+                            raw_matches.append(m)
+
+                            if len(raw_matches) >= max_matches:
+                                logger.warning(
+                                    "Match limit reached (%d). Scan truncated.", max_matches
+                                )
+                                metrics.scan_truncated = True
+                                break
+                    except _RegexTimeout:
+                        patterns_timed_out += 1
+                        if _global_old_handler is not None:
+                            scan_timed_out = True
+                            metrics.scan_truncated = True
+                            logger.warning(
+                                "Global scan timeout (%ds) reached. Scan truncated.",
+                                MAX_SCAN_SECONDS,
+                            )
+                        else:
+                            logger.warning(
+                                "Regex timeout: pattern %r skipped.", pattern.pattern
+                            )
+        finally:
+            if _global_old_handler is not None:
+                signal.signal(signal.SIGALRM, _global_old_handler)
+                signal.alarm(0)
+
+        if deduplicate:
+            raw_matches = _deduplicate_overlapping(raw_matches)
+
+        # Run plugin post-processors on the full match list.
+        raw_matches = run_post_processors(raw_matches)
+
+        metrics.match_count = len(raw_matches)
+        metrics.patterns_timed_out = patterns_timed_out
 
     yield from raw_matches
 

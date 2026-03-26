@@ -10,7 +10,12 @@ from .allowlist import Allowlist
 from .exceptions import RedactionError
 
 
-def _format_text(findings, file_context=False):
+def _display_text(m, redact=False):
+    """Return the matched text or its redacted form."""
+    return m.redacted_text if redact else m.text
+
+
+def _format_text(findings, file_context=False, redact=False):
     """Format findings as human-readable text."""
     if not findings:
         return "No sensitive data detected.\n"
@@ -21,43 +26,43 @@ def _format_text(findings, file_context=False):
             ctx = "WITH context" if m.has_context else "no context"
             lines.append(
                 f"  {path}:{m.span[0]} [{m.category} > {m.sub_category}] "
-                f"'{m.text}' (confidence: {m.confidence:.0%}, {ctx})"
+                f"'{_display_text(m, redact)}' (confidence: {m.confidence:.0%}, {ctx})"
             )
         else:
             m = item
             ctx = "WITH context" if m.has_context else "no context"
             lines.append(
                 f"  [{m.category} > {m.sub_category}] "
-                f"'{m.text}' (confidence: {m.confidence:.0%}, {ctx})"
+                f"'{_display_text(m, redact)}' (confidence: {m.confidence:.0%}, {ctx})"
             )
     return '\n'.join(lines) + '\n'
 
 
-def _format_json(findings, file_context=False):
+def _format_json(findings, file_context=False, redact=False):
     """Format findings as JSON."""
     if file_context:
         return json.dumps(
-            [{'file': path, **m.to_dict()} for path, m in findings],
+            [{'file': path, **m.to_dict(redact=redact)} for path, m in findings],
             indent=2,
         )
-    return json.dumps([m.to_dict() for m in findings], indent=2)
+    return json.dumps([m.to_dict(redact=redact) for m in findings], indent=2)
 
 
-def _format_csv(findings, stream, file_context=False):
+def _format_csv(findings, stream, file_context=False, redact=False):
     """Write findings as CSV to a stream."""
     writer = csv.writer(stream)
     if file_context:
         writer.writerow(['file', 'text', 'category', 'sub_category', 'has_context',
                           'confidence', 'span_start', 'span_end'])
         for path, m in findings:
-            writer.writerow([path, m.text, m.category, m.sub_category, m.has_context,
-                              m.confidence, m.span[0], m.span[1]])
+            writer.writerow([path, _display_text(m, redact), m.category, m.sub_category,
+                              m.has_context, m.confidence, m.span[0], m.span[1]])
     else:
         writer.writerow(['text', 'category', 'sub_category', 'has_context',
                           'confidence', 'span_start', 'span_end'])
         for m in findings:
-            writer.writerow([m.text, m.category, m.sub_category, m.has_context,
-                              m.confidence, m.span[0], m.span[1]])
+            writer.writerow([_display_text(m, redact), m.category, m.sub_category,
+                              m.has_context, m.confidence, m.span[0], m.span[1]])
 
 
 def _format_sarif(findings, file_context=False):
@@ -66,6 +71,8 @@ def _format_sarif(findings, file_context=False):
     SARIF (Static Analysis Results Interchange Format) is the industry
     standard for security tool output.  Supported by GitHub Code Scanning,
     Azure DevOps, and many other platforms.
+
+    Note: SARIF output never includes matched text (safe by design).
     """
     # Build unique rule set from findings.
     rules_map = {}
@@ -175,6 +182,11 @@ def main():
         '--config', default=None,
         help='Path to config file (pyproject.toml or .dlpscanrc).',
     )
+    parser.add_argument(
+        '--redact', action='store_true', default=False,
+        help='Redact matched text in output (shows first/last 3 chars only). '
+             'Recommended for production use.',
+    )
 
     args = parser.parse_args()
 
@@ -187,6 +199,7 @@ def main():
 
     cats = set(args.categories) if args.categories else None
     deduplicate = not args.no_dedup
+    redact = args.redact
     file_context = False
 
     try:
@@ -268,13 +281,13 @@ def main():
 
     # Output.
     if args.format == 'json':
-        print(_format_json(findings, file_context=file_context))
+        print(_format_json(findings, file_context=file_context, redact=redact))
     elif args.format == 'csv':
-        _format_csv(findings, sys.stdout, file_context=file_context)
+        _format_csv(findings, sys.stdout, file_context=file_context, redact=redact)
     elif args.format == 'sarif':
         print(_format_sarif(findings, file_context=file_context))
     else:
-        print(_format_text(findings, file_context=file_context), end='')
+        print(_format_text(findings, file_context=file_context, redact=redact), end='')
 
 
 if __name__ == '__main__':
