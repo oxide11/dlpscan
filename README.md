@@ -13,7 +13,12 @@ pip install dlpscan
 After installation, the `dlpscan` CLI command is available:
 
 ```bash
-dlpscan
+dlpscan                         # Interactive mode
+dlpscan file.txt                # Scan a file
+dlpscan ./src/                  # Scan a directory recursively
+echo "text" | dlpscan           # Pipe input
+dlpscan -f json file.txt        # JSON output
+dlpscan -f sarif ./src/         # SARIF output (GitHub Code Scanning)
 ```
 
 ## Quick Start
@@ -85,6 +90,45 @@ from dlpscan import is_luhn_valid
 is_luhn_valid("4532015112830366")  # True
 is_luhn_valid("4532015112830365")  # False
 is_luhn_valid("4532 0151 1283 0366")  # True (handles separators)
+```
+
+### Scan files and directories
+
+```python
+from dlpscan import scan_file, scan_directory
+
+# Scan a single file
+for match in scan_file('data.csv', categories={'Credit Card Numbers'}):
+    print(f"{match.sub_category}: {match.text} (confidence: {match.confidence:.0%})")
+
+# Scan a directory recursively
+for path, match in scan_directory('./src/', skip_paths=['*.md', 'tests/**']):
+    print(f"{path}:{match.span[0]} {match.sub_category}")
+```
+
+### Confidence scoring
+
+```python
+from dlpscan import enhanced_scan_text
+
+text = "My credit card number is 4532015112830366"
+for m in enhanced_scan_text(text):
+    print(f"{m.sub_category}: confidence={m.confidence:.0%}, context={m.has_context}")
+    # Visa: confidence=100%, context=True
+```
+
+### Allowlist known false positives
+
+```python
+from dlpscan import enhanced_scan_text, Allowlist
+
+al = Allowlist(
+    texts=['test@example.com'],           # Exact text to ignore
+    patterns=['Gender Marker', 'Hashtag'], # Pattern types to ignore
+)
+
+results = enhanced_scan_text("Contact test@example.com")
+filtered = al.filter_matches(results)
 ```
 
 ### Check context proximity
@@ -166,7 +210,7 @@ The SIGALRM-based timeout only works in the main thread on Unix. When called fro
 
 ## API Reference
 
-### `enhanced_scan_text(text, categories=None, require_context=False, max_matches=50000)`
+### `enhanced_scan_text(text, categories=None, require_context=False, max_matches=50000, deduplicate=True)`
 
 Scan text for sensitive data.
 
@@ -176,8 +220,27 @@ Scan text for sensitive data.
 | `categories` | `set[str]` or `None` | Category names to scan. `None` scans all. |
 | `require_context` | `bool` | If `True`, only return matches with nearby keywords. |
 | `max_matches` | `int` | Maximum matches to return (default 50,000). |
+| `deduplicate` | `bool` | If `True`, remove overlapping matches keeping highest confidence. |
 
-**Yields**: `(matched_text, sub_category, has_context, category)`
+**Yields**: `Match` objects with `.text`, `.category`, `.sub_category`, `.has_context`, `.confidence`, `.span`. Supports tuple unpacking for backward compatibility: `text, sub_category, has_context, category = match`
+
+### `scan_file(file_path, categories=None, require_context=False, max_matches=50000, deduplicate=True, encoding='utf-8')`
+
+Scan a file for sensitive data, processing in chunks for memory efficiency.
+
+**Yields**: `Match` objects with span offsets relative to the full file.
+
+### `scan_directory(dir_path, categories=None, require_context=False, max_matches=50000, deduplicate=True, skip_paths=None)`
+
+Recursively scan all text files in a directory. Skips binary files and common non-text directories (`.git`, `node_modules`, `__pycache__`, etc.).
+
+**Yields**: `(relative_path, Match)` tuples.
+
+### `scan_stream(stream, categories=None, require_context=False, max_matches=50000, deduplicate=True)`
+
+Scan a text stream (StringIO, stdin, etc.) for sensitive data.
+
+**Yields**: `Match` objects with span offsets relative to stream start.
 
 ### `redact_sensitive_info(match, redaction_char='X')`
 
@@ -197,6 +260,14 @@ Validate a credit card number using the Luhn algorithm. Handles spaces and hyphe
 
 **Raises**: `InvalidCardNumberError`
 
+### `register_patterns(category, patterns, context=None, specificity=None, context_required=None)`
+
+Register custom patterns at runtime for domain-specific scanning.
+
+### `unregister_patterns(category)`
+
+Remove previously registered custom patterns.
+
 ### `scan_for_context(text, start_index, end_index, category, sub_category)`
 
 Check for contextual keywords within the configured proximity distance of a match span.
@@ -204,6 +275,42 @@ Check for contextual keywords within the configured proximity distance of a matc
 **Returns**: `bool`
 
 **Raises**: `TypeError`, `ValueError` (invalid indices)
+
+### `load_config(path=None, start_dir=None)`
+
+Load dlpscan configuration from `pyproject.toml [tool.dlpscan]` or `.dlpscanrc` (JSON). Auto-discovers config files by walking up from the current directory.
+
+### `Allowlist(texts=None, patterns=None, paths=None)`
+
+Filter for suppressing known false positives by exact text, pattern name, or file path glob.
+
+## Configuration
+
+dlpscan can be configured via `pyproject.toml` or `.dlpscanrc` (JSON):
+
+```toml
+# pyproject.toml
+[tool.dlpscan]
+min_confidence = 0.5
+require_context = false
+deduplicate = true
+max_matches = 50000
+format = "text"
+allowlist = ["test@example.com", "AKIAIOSFODNN7EXAMPLE"]
+ignore_patterns = ["Gender Marker", "Hashtag"]
+ignore_paths = ["*.md", "tests/**"]
+```
+
+```json
+// .dlpscanrc
+{
+    "min_confidence": 0.5,
+    "allowlist": ["test@example.com"],
+    "ignore_patterns": ["Gender Marker"]
+}
+```
+
+CLI arguments always override config file settings.
 
 ## Constants
 
@@ -290,8 +397,13 @@ Use these files to integrate dlpscan's detection rules into any tool or language
 dlpscan/
 ├── __init__.py                    # Package exports
 ├── scanner.py                     # Core scanning, redaction, validation
-├── input.py                       # CLI entry point
+├── input.py                       # CLI entry point (argparse)
+├── models.py                      # Match dataclass, specificity scores
+├── config.py                      # Configuration file loading
+├── allowlist.py                   # Allowlist filtering and inline ignore
+├── hooks.py                       # Pre-commit hook for git
 ├── exceptions.py                  # Exception hierarchy
+├── py.typed                       # PEP 561 type marker
 ├── patterns/                      # Regex pattern definitions
 │   ├── __init__.py                # Aggregates all patterns into PATTERNS dict
 │   ├── generic/                   # Universal patterns (credit cards, PII, banking...)
@@ -308,9 +420,14 @@ dlpscan/
 
 ```bash
 python -m unittest tests.unit -v
+
+# With coverage
+pip install dlpscan[dev]
+coverage run -m unittest tests.unit -v
+coverage report
 ```
 
-68 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, and edge cases.
+114 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering, config loading, SARIF output, and custom pattern registration.
 
 ## License
 

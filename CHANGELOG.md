@@ -2,6 +2,107 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [0.6.0] - 2026-03-26
+
+### New Features
+
+- **Configuration file support**: Loads settings from `pyproject.toml [tool.dlpscan]`
+  or `.dlpscanrc` (JSON). Auto-discovers config files by walking up from the current
+  directory. CLI arguments override config file settings.
+- **Allowlist/ignore rules**: Suppress known false positives via:
+  - `allowlist` — exact text values to skip
+  - `ignore_patterns` — sub_category names to skip entirely
+  - `ignore_paths` — file path globs to skip in directory scanning
+  - Inline `# dlpscan:ignore` directive on source lines
+- **SARIF output**: `--format sarif` produces SARIF 2.1.0 JSON, compatible with
+  GitHub Code Scanning, Azure DevOps, and other security platforms.
+- **Recursive directory scanning**: `dlpscan ./src/` scans all text files in a
+  directory tree. Automatically skips binary files, `.git`, `node_modules`,
+  `__pycache__`, and other common non-text directories.
+- **GitHub Actions CI**: Workflow runs tests on Python 3.8–3.13 across Linux,
+  macOS, and Windows. Includes ruff linting, mypy type checking, and coverage
+  reporting via codecov.
+
+### Packaging & Tooling
+
+- **pyproject.toml**: Migrated from legacy `setup.py` to modern PEP 621
+  packaging with `[project]` metadata, `[project.optional-dependencies]` for
+  dev tools, and tool configurations for ruff, mypy, and coverage.
+- **py.typed marker**: PEP 561 compliance — type checkers now recognize dlpscan
+  as a typed package.
+- **.pre-commit-config.yaml**: Development workflow hooks for ruff, mypy, and
+  dlpscan itself.
+- **`[dev]` extras**: `pip install dlpscan[dev]` installs ruff, mypy, coverage,
+  and pre-commit.
+
+### New Files
+
+- `dlpscan/config.py` — Configuration file discovery and loading
+- `dlpscan/allowlist.py` — Allowlist filtering and inline ignore support
+- `dlpscan/py.typed` — PEP 561 marker
+- `pyproject.toml` — Modern Python packaging
+- `.github/workflows/ci.yml` — GitHub Actions CI pipeline
+- `.pre-commit-config.yaml` — Pre-commit hooks
+
+### Tests
+
+- Expanded from 92 to 114 tests.
+- New test classes: `TestDirectoryScanning`, `TestAllowlist`, `TestInlineIgnore`,
+  `TestConfig`, `TestSARIFOutput`.
+
+### Totals
+
+- **560 patterns** across **126 categories** (unchanged).
+- **114 tests** (up from 92).
+
+## [0.5.0] - 2026-03-26
+
+### New Features
+
+- **Match dataclass**: `enhanced_scan_text()` now yields `Match` objects with
+  `.text`, `.category`, `.sub_category`, `.has_context`, `.confidence`, `.span`,
+  and `.context_required` attributes. Full backward compatibility preserved via
+  `__iter__`/`__getitem__`/`__len__` — existing tuple unpacking still works.
+- **Confidence scoring**: Each match gets a 0.0–1.0 confidence score based on
+  pattern specificity and context keyword proximity. Context boosts score by +0.20.
+- **Per-pattern context requirements**: 12 overly-broad patterns (e.g., Gender
+  Marker, US Bank Account Number, Cardholder Name) are automatically filtered
+  when no context keywords are nearby, regardless of the caller's `require_context`
+  setting.
+- **Overlap deduplication**: Overlapping matches on the same span are deduplicated,
+  keeping the highest-confidence match. Controlled via `deduplicate=True` (default).
+- **File scanning**: New `scan_file()` processes files in configurable chunks with
+  overlap for boundary matches. Span offsets are relative to the full file.
+- **Stream scanning**: New `scan_stream()` accepts any `TextIO` (StringIO, stdin).
+- **Custom pattern registration**: `register_patterns()` / `unregister_patterns()`
+  allow runtime injection of custom regex patterns, context keywords, and specificity
+  scores.
+- **CLI rewrite**: Full argparse CLI with `-f/--format` (text/json/csv),
+  `--min-confidence`, `--categories`, `--require-context`, `--no-dedup`,
+  `--max-matches`, file argument, and piped stdin support.
+- **Pre-commit hook**: `dlpscan/hooks.py` scans staged git diffs for sensitive data.
+  Supports `--min-confidence` and `--require-context` flags.
+- **Performance benchmarks**: `benchmarks/bench.py` measures throughput, category
+  filtering speedup, deduplication overhead, and stream scanning performance.
+
+### New Files
+
+- `dlpscan/models.py` — Match dataclass, PATTERN_SPECIFICITY, CONTEXT_REQUIRED_PATTERNS
+- `dlpscan/hooks.py` — Pre-commit hook for git
+- `benchmarks/bench.py` — Performance benchmark suite
+
+### Tests
+
+- Expanded from 68 to 92 tests.
+- New test classes: `TestMatchDataclass`, `TestConfidenceScoring`,
+  `TestContextRequired`, `TestOverlapDeduplication`, `TestFileScanming`,
+  `TestCustomPatterns`.
+
+### Totals
+
+- **560 patterns** across **126 categories** (unchanged).
+- **92 tests** (up from 68).
+
 ## [0.4.0] - 2026-03-25
 
 ### Breaking Changes

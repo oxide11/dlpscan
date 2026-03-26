@@ -6,6 +6,7 @@ from .scanner import (
     scan_for_context,
     scan_file,
     scan_stream,
+    scan_directory,
     register_patterns,
     unregister_patterns,
     MAX_INPUT_SIZE,
@@ -14,6 +15,8 @@ from .scanner import (
     REGEX_TIMEOUT_SECONDS,
 )
 from .models import Match
+from .config import load_config
+from .allowlist import Allowlist
 from .patterns import PATTERNS
 from .context import CONTEXT_KEYWORDS
 from .exceptions import (
@@ -24,4 +27,4 @@ from .exceptions import (
     SubCategoryNotFoundError,
 )
 
-__version__ = '0.5.0'
+__version__ = '0.6.0'

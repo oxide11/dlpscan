@@ -1,3 +1,4 @@
+import fnmatch
 import io
 import os
 import re
@@ -600,3 +601,106 @@ def scan_stream(
 
         prev_tail = raw[-chunk_overlap:] if len(raw) >= chunk_overlap else raw
         offset += len(raw)
+
+
+# Default directories and file extensions to skip during directory scanning.
+_SKIP_DIRS = frozenset({
+    '.git', '.hg', '.svn', '__pycache__', 'node_modules', '.tox',
+    '.mypy_cache', '.ruff_cache', '.pytest_cache', 'venv', '.venv',
+    'env', '.env', 'dist', 'build', '.eggs', '*.egg-info',
+})
+
+_BINARY_EXTENSIONS = frozenset({
+    '.pyc', '.pyo', '.so', '.dylib', '.dll', '.exe', '.bin',
+    '.png', '.jpg', '.jpeg', '.gif', '.ico', '.bmp', '.tiff',
+    '.mp3', '.mp4', '.avi', '.mov', '.mkv', '.wav', '.flac',
+    '.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar',
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    '.woff', '.woff2', '.ttf', '.eot', '.otf',
+    '.sqlite', '.db', '.pickle', '.pkl',
+})
+
+
+def _is_binary_file(path: str) -> bool:
+    """Quick heuristic to detect binary files."""
+    _, ext = os.path.splitext(path)
+    if ext.lower() in _BINARY_EXTENSIONS:
+        return True
+    # Check first 8KB for null bytes
+    try:
+        with open(path, 'rb') as f:
+            chunk = f.read(8192)
+            return b'\x00' in chunk
+    except OSError:
+        return True
+
+
+def scan_directory(
+    dir_path: str,
+    categories: Optional[Set[str]] = None,
+    require_context: bool = False,
+    max_matches: int = MAX_MATCHES,
+    deduplicate: bool = True,
+    encoding: str = 'utf-8',
+    skip_paths: Optional[List[str]] = None,
+) -> Generator[tuple, None, None]:
+    """Recursively scan all text files in a directory.
+
+    Args:
+        dir_path: Path to the directory to scan.
+        categories: Optional set of category names to scan.
+        require_context: If True, only yield matches with context.
+        max_matches: Maximum total matches across all files.
+        deduplicate: If True, deduplicate overlapping matches per file.
+        encoding: File encoding (default 'utf-8').
+        skip_paths: Optional list of glob patterns for paths to skip.
+
+    Yields:
+        (file_path, match) tuples where match is a Match object.
+    """
+    if not os.path.isdir(dir_path):
+        raise FileNotFoundError(f"Directory not found: {dir_path}")
+
+    total_yielded = 0
+    skip_globs = skip_paths or []
+
+    for root, dirs, files in os.walk(dir_path):
+        # Prune skipped directories in-place.
+        dirs[:] = [
+            d for d in dirs
+            if d not in _SKIP_DIRS
+            and not any(fnmatch.fnmatch(d, p) for p in _SKIP_DIRS if '*' in p)
+        ]
+
+        for filename in sorted(files):
+            if total_yielded >= max_matches:
+                return
+
+            file_path = os.path.join(root, filename)
+            rel_path = os.path.relpath(file_path, dir_path)
+
+            # Skip paths matching ignore globs.
+            if any(fnmatch.fnmatch(rel_path, g) for g in skip_globs):
+                continue
+
+            # Skip binary files.
+            if _is_binary_file(file_path):
+                continue
+
+            try:
+                for m in scan_file(
+                    file_path,
+                    categories=categories,
+                    require_context=require_context,
+                    max_matches=max_matches - total_yielded,
+                    deduplicate=deduplicate,
+                    encoding=encoding,
+                ):
+                    yield (rel_path, m)
+                    total_yielded += 1
+
+                    if total_yielded >= max_matches:
+                        return
+            except (FileNotFoundError, UnicodeDecodeError, OSError) as exc:
+                logger.debug("Skipping %s: %s", file_path, exc)
+                continue

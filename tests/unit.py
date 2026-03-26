@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import re
 import tempfile
@@ -12,12 +13,15 @@ from dlpscan.scanner import (
     scan_for_context,
     scan_file,
     scan_stream,
+    scan_directory,
     register_patterns,
     unregister_patterns,
     MAX_INPUT_SIZE,
     MAX_MATCHES,
 )
 from dlpscan.models import Match, CONTEXT_REQUIRED_PATTERNS
+from dlpscan.config import load_config, _parse_toml_fallback
+from dlpscan.allowlist import Allowlist, has_inline_ignore
 from dlpscan.exceptions import (
     EmptyInputError,
     ShortInputError,
@@ -603,6 +607,209 @@ class TestCustomPatterns(unittest.TestCase):
     def test_register_empty_patterns_raises(self):
         with self.assertRaises(ValueError):
             register_patterns('Valid', {})
+
+
+class TestDirectoryScanning(unittest.TestCase):
+    """Test recursive directory scanning."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        # Create some test files.
+        with open(os.path.join(self.tmpdir, 'file1.txt'), 'w') as f:
+            f.write("Contact email: test@example.com\n")
+        with open(os.path.join(self.tmpdir, 'file2.txt'), 'w') as f:
+            f.write("Normal text with no sensitive data.\n")
+        # Create a subdirectory with a file.
+        subdir = os.path.join(self.tmpdir, 'sub')
+        os.makedirs(subdir)
+        with open(os.path.join(subdir, 'file3.txt'), 'w') as f:
+            f.write("SSN: 123-45-6789\n")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir)
+
+    def test_scan_directory_finds_matches(self):
+        results = list(scan_directory(
+            self.tmpdir, categories={'Contact Information'}
+        ))
+        emails = [(p, m) for p, m in results if m.sub_category == 'Email Address']
+        self.assertTrue(len(emails) > 0)
+
+    def test_scan_directory_returns_relative_paths(self):
+        results = list(scan_directory(self.tmpdir))
+        for path, m in results:
+            self.assertFalse(os.path.isabs(path))
+
+    def test_scan_directory_not_found(self):
+        with self.assertRaises(FileNotFoundError):
+            list(scan_directory('/nonexistent/dir'))
+
+    def test_scan_directory_skip_paths(self):
+        results = list(scan_directory(
+            self.tmpdir, skip_paths=['sub/*']
+        ))
+        sub_results = [(p, m) for p, m in results if p.startswith('sub')]
+        self.assertEqual(len(sub_results), 0)
+
+    def test_scan_directory_respects_max_matches(self):
+        results = list(scan_directory(self.tmpdir, max_matches=1))
+        self.assertLessEqual(len(results), 1)
+
+
+class TestAllowlist(unittest.TestCase):
+    """Test allowlist filtering."""
+
+    def test_allowlist_filters_by_text(self):
+        al = Allowlist(texts=['test@example.com'])
+        m = Match(text='test@example.com', category='Contact Information',
+                  sub_category='Email Address', confidence=0.9, span=(0, 16))
+        self.assertFalse(al.is_allowed(m))
+
+    def test_allowlist_filters_by_pattern(self):
+        al = Allowlist(patterns=['Gender Marker'])
+        m = Match(text='male', category='PII', sub_category='Gender Marker',
+                  confidence=0.25, span=(0, 4))
+        self.assertFalse(al.is_allowed(m))
+
+    def test_allowlist_keeps_unmatched(self):
+        al = Allowlist(texts=['other@example.com'])
+        m = Match(text='test@example.com', category='Contact Information',
+                  sub_category='Email Address', confidence=0.9, span=(0, 16))
+        self.assertTrue(al.is_allowed(m))
+
+    def test_allowlist_skip_path(self):
+        al = Allowlist(paths=['tests/**', '*.md'])
+        self.assertTrue(al.should_skip_path('tests/unit.py'))
+        self.assertTrue(al.should_skip_path('README.md'))
+        self.assertFalse(al.should_skip_path('src/main.py'))
+
+    def test_allowlist_filter_matches(self):
+        al = Allowlist(patterns=['Email Address'])
+        matches = [
+            Match(text='test@example.com', category='Contact', sub_category='Email Address',
+                  confidence=0.9, span=(0, 16)),
+            Match(text='123-45-6789', category='PII', sub_category='USA SSN',
+                  confidence=0.7, span=(20, 31)),
+        ]
+        filtered = al.filter_matches(matches)
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0].sub_category, 'USA SSN')
+
+    def test_allowlist_from_config(self):
+        config = {
+            'allowlist': ['test@example.com'],
+            'ignore_patterns': ['Hashtag'],
+            'ignore_paths': ['*.md'],
+        }
+        al = Allowlist.from_config(config)
+        self.assertIn('test@example.com', al.texts)
+        self.assertIn('Hashtag', al.patterns)
+        self.assertIn('*.md', al.paths)
+
+    def test_empty_allowlist_is_falsy(self):
+        al = Allowlist()
+        self.assertFalse(bool(al))
+
+    def test_nonempty_allowlist_is_truthy(self):
+        al = Allowlist(texts=['x'])
+        self.assertTrue(bool(al))
+
+
+class TestInlineIgnore(unittest.TestCase):
+    """Test inline dlpscan:ignore directive."""
+
+    def test_detects_hash_comment(self):
+        self.assertTrue(has_inline_ignore("secret = 'abc123'  # dlpscan:ignore"))
+
+    def test_detects_slash_comment(self):
+        self.assertTrue(has_inline_ignore("const key = 'abc'; // dlpscan:ignore"))
+
+    def test_no_directive(self):
+        self.assertFalse(has_inline_ignore("secret = 'abc123'"))
+
+
+class TestConfig(unittest.TestCase):
+    """Test configuration file loading."""
+
+    def test_load_config_defaults(self):
+        config = load_config()
+        self.assertEqual(config['min_confidence'], 0.0)
+        self.assertEqual(config['deduplicate'], True)
+        self.assertEqual(config['max_matches'], 50_000)
+
+    def test_load_dlpscanrc(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump({'min_confidence': 0.5, 'require_context': True}, f)
+            path = f.name
+        try:
+            config = load_config(path=path)
+            self.assertEqual(config['min_confidence'], 0.5)
+            self.assertTrue(config['require_context'])
+        finally:
+            os.unlink(path)
+
+    def test_toml_fallback_parser(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.toml', delete=False) as f:
+            f.write('[tool.dlpscan]\n')
+            f.write('min_confidence = 0.7\n')
+            f.write('require_context = true\n')
+            f.write('format = "json"\n')
+            f.write('allowlist = ["test@example.com"]\n')
+            path = f.name
+        try:
+            from pathlib import Path
+            result = _parse_toml_fallback(Path(path))
+            dlpscan_cfg = result['tool']['dlpscan']
+            self.assertEqual(dlpscan_cfg['min_confidence'], 0.7)
+            self.assertTrue(dlpscan_cfg['require_context'])
+            self.assertEqual(dlpscan_cfg['format'], 'json')
+            self.assertEqual(dlpscan_cfg['allowlist'], ['test@example.com'])
+        finally:
+            os.unlink(path)
+
+
+class TestSARIFOutput(unittest.TestCase):
+    """Test SARIF output format."""
+
+    def test_sarif_structure(self):
+        from dlpscan.input import _format_sarif
+        matches = [
+            Match(text='test@example.com', category='Contact Information',
+                  sub_category='Email Address', confidence=0.9, span=(0, 16)),
+        ]
+        sarif_str = _format_sarif(matches)
+        sarif = json.loads(sarif_str)
+        self.assertEqual(sarif['version'], '2.1.0')
+        self.assertEqual(len(sarif['runs']), 1)
+        self.assertEqual(len(sarif['runs'][0]['results']), 1)
+        self.assertEqual(sarif['runs'][0]['tool']['driver']['name'], 'dlpscan')
+
+    def test_sarif_with_file_context(self):
+        from dlpscan.input import _format_sarif
+        findings = [
+            ('src/main.py', Match(text='test@example.com', category='Contact Information',
+                                   sub_category='Email Address', confidence=0.9, span=(10, 26))),
+        ]
+        sarif_str = _format_sarif(findings, file_context=True)
+        sarif = json.loads(sarif_str)
+        result = sarif['runs'][0]['results'][0]
+        self.assertIn('locations', result)
+        loc = result['locations'][0]['physicalLocation']
+        self.assertEqual(loc['artifactLocation']['uri'], 'src/main.py')
+
+    def test_sarif_confidence_levels(self):
+        from dlpscan.input import _format_sarif
+        matches = [
+            Match(text='test', category='C', sub_category='High',
+                  confidence=0.9, span=(0, 4)),
+            Match(text='test', category='C', sub_category='Low',
+                  confidence=0.3, span=(5, 9)),
+        ]
+        sarif = json.loads(_format_sarif(matches))
+        results = sarif['runs'][0]['results']
+        self.assertEqual(results[0]['level'], 'warning')
+        self.assertEqual(results[1]['level'], 'note')
 
 
 if __name__ == '__main__':
