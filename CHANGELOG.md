@@ -2,6 +2,54 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [1.4.0] - 2026-03-26
+
+### New Features
+
+- **REST API Server** (`dlpscan.api`): FastAPI-based HTTP server with scan, tokenize,
+  detokenize, obfuscate, and batch scan endpoints. API key auth via `X-API-Key` header,
+  request ID middleware, rate limiting, and in-memory vault management with TTL.
+  `pip install dlpscan[api]` to install dependencies.
+
+- **Policy-as-Code** (`dlpscan.policy`): Define scanning policies in YAML with per-category
+  rules, audit configuration, and rate limiting. `PolicyEngine` creates guards from policies,
+  applies rule overrides, and provides a convenience `scan()` method.
+  `load_policies_from_dir()` for multi-policy setups.
+
+- **Observability** (`dlpscan.observability`): Prometheus and OpenTelemetry metrics.
+  Built-in DLP metrics (scans_total, findings_total, scan_duration_seconds, etc.).
+  `PrometheusExporter` serves `/metrics` via stdlib HTTP server.
+  Optional OpenTelemetry bridge via `setup_opentelemetry()`.
+
+- **Batch Scanning** (`dlpscan.batch`): Scan CSV, JSON/JSONL, databases, and pandas
+  DataFrames at scale. `BatchScanner` with parallel `ThreadPoolExecutor`, chunked
+  processing, progress callbacks, and `BatchReport` aggregation.
+
+- **Masking Profiles** (`dlpscan.profiles`): Named, reusable scan configurations.
+  9 built-in profiles (PCI_PRODUCTION, HIPAA_STRICT, GDPR_COMPLIANCE, CI_PIPELINE, etc.).
+  `ProfileRegistry` with JSON file save/load. `get_profile("pci-production").to_guard()`.
+
+- **Documentation Site**: MkDocs Material site with getting started guide, user guide,
+  enterprise feature docs, deployment guides, and API reference.
+
+### New Files
+
+- `dlpscan/api.py` — FastAPI REST server
+- `dlpscan/policy.py` — YAML policy engine
+- `dlpscan/observability.py` — Prometheus/OpenTelemetry metrics
+- `dlpscan/batch.py` — Batch/database scanning
+- `dlpscan/profiles.py` — Named masking profiles
+- `mkdocs.yml` — Documentation site configuration
+- `docs/` — Full documentation site (20+ pages)
+
+### Changes
+
+- Added `[api]` and `[observability]` optional dependency groups
+- Added `mkdocs-material` to dev dependencies
+- Version bumped to 1.4.0
+
+---
+
 ## [1.3.0] - 2026-03-26
 
 ### Enterprise Features
