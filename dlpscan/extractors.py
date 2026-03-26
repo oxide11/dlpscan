@@ -398,7 +398,7 @@ def _extract_eml(file_path: str) -> ExtractionResult:
                     if isinstance(body, str) and body.strip():
                         # Strip HTML tags for basic text extraction.
                         import re
-                        clean = re.sub(r'<[^>]+>', ' ', body)
+                        clean = re.sub(r'<[^>]{0,1000}>', ' ', body)
                         clean = re.sub(r'\s+', ' ', clean).strip()
                         if clean:
                             parts.append(clean)

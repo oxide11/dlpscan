@@ -27,6 +27,7 @@ import hashlib
 import hmac
 import random
 import re
+import secrets
 import string
 import threading
 from typing import Dict, List, Optional
@@ -136,7 +137,8 @@ class TokenVault:
 
     def __init__(self, prefix: str = "TOK", secret: Optional[str] = None):
         self.prefix = prefix
-        self._secret = secret.encode() if secret else None
+        # Use a random secret when none is provided to prevent precomputation
+        self._secret = secret.encode() if secret else secrets.token_bytes(32)
         self._token_to_original: Dict[str, str] = {}
         self._original_to_token: Dict[str, str] = {}
         self._lock = threading.Lock()
@@ -160,12 +162,9 @@ class TokenVault:
 
         abbrev = _abbreviate_category(category)
 
-        # Generate deterministic hash.
+        # Generate deterministic hash using HMAC.
         hash_input = f"{category}:{value}".encode()
-        if self._secret:
-            digest = hmac.new(self._secret, hash_input, hashlib.sha256).hexdigest()[:8]
-        else:
-            digest = hashlib.sha256(hash_input).hexdigest()[:8]
+        digest = hmac.new(self._secret, hash_input, hashlib.sha256).hexdigest()[:8]
 
         token = f"{self.prefix}_{abbrev}_{digest}"
 

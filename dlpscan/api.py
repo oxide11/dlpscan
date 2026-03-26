@@ -15,6 +15,7 @@ Usage::
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import threading
@@ -53,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 
 class ScanRequest(BaseModel):
-    text: str
+    text: str = Field(..., max_length=1_000_000)
     presets: Optional[List[str]] = None
     categories: Optional[List[str]] = None
     action: str = "flag"
@@ -70,7 +71,7 @@ class ScanResponse(BaseModel):
 
 
 class TokenizeRequest(BaseModel):
-    text: str
+    text: str = Field(..., max_length=1_000_000)
     presets: Optional[List[str]] = None
     categories: Optional[List[str]] = None
     min_confidence: float = 0.0
@@ -92,7 +93,7 @@ class DetokenizeResponse(BaseModel):
 
 
 class ObfuscateRequest(BaseModel):
-    text: str
+    text: str = Field(..., max_length=1_000_000)
     presets: Optional[List[str]] = None
     categories: Optional[List[str]] = None
     min_confidence: float = 0.0
@@ -181,7 +182,7 @@ def _verify_api_key(x_api_key: Optional[str] = Header(None)):
     if expected is None:
         # Auth disabled when env var is not set
         return
-    if x_api_key is None or x_api_key != expected:
+    if x_api_key is None or not hmac.compare_digest(x_api_key, expected):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
@@ -323,7 +324,8 @@ def create_app() -> FastAPI:
             if hasattr(exc, "result"):
                 result = exc.result
             else:
-                raise HTTPException(status_code=500, detail=str(exc))
+                logger.exception("Scan failed")
+                raise HTTPException(status_code=500, detail="Internal scan error")
 
         elapsed_ms = (time.monotonic() - start) * 1000
 
@@ -424,7 +426,8 @@ def create_app() -> FastAPI:
                 if hasattr(exc, "result"):
                     result = exc.result
                 else:
-                    raise HTTPException(status_code=500, detail=str(exc))
+                    logger.exception("Batch scan item failed")
+                    raise HTTPException(status_code=500, detail="Internal scan error")
             results.append(_scan_to_response(result))
 
         return BatchScanResponse(results=results)

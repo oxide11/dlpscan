@@ -413,6 +413,10 @@ class BatchScanner:
         conn = self._connect_db(connection_string)
         try:
             cursor = conn.cursor()
+            # Safety check: only allow SELECT queries to prevent SQL injection
+            stripped = query.strip().lstrip("(")
+            if not stripped.upper().startswith("SELECT"):
+                raise ValueError("Only SELECT queries are allowed for scanning")
             cursor.execute(query)
             col_names = [desc[0] for desc in cursor.description] if cursor.description else []
 
@@ -430,15 +434,21 @@ class BatchScanner:
                 col_indices = list(range(len(col_names)))
 
             pairs: List[Tuple[str, str]] = []
-            for row_num, row in enumerate(cursor.fetchall(), start=1):
-                values = [
-                    str(row[i])
-                    for i in col_indices
-                    if row[i] is not None
-                ]
-                text = " ".join(values)
-                source_id = f"db:row:{row_num}"
-                pairs.append((source_id, text))
+            _FETCH_BATCH = 1000
+            rows = cursor.fetchmany(_FETCH_BATCH)
+            row_num = 0
+            while rows:
+                for row in rows:
+                    row_num += 1
+                    values = [
+                        str(row[i])
+                        for i in col_indices
+                        if row[i] is not None
+                    ]
+                    text = " ".join(values)
+                    source_id = f"db:row:{row_num}"
+                    pairs.append((source_id, text))
+                rows = cursor.fetchmany(_FETCH_BATCH)
         finally:
             conn.close()
 

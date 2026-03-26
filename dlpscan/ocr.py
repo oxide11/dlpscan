@@ -59,7 +59,7 @@ MAX_PIXEL_AREA = 50_000_000  # 50 megapixels
 
 # Allowed tesseract config flags (whitelist for security).
 _ALLOWED_CONFIG_PATTERN = re.compile(
-    r'^(--(?:oem|psm|dpi|tessdata-dir|user-words|user-patterns)\s+\S+\s*)*$'
+    r'^(--(?:oem|psm|dpi)\s+\S+\s*)*$'
 )
 
 

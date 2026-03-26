@@ -447,7 +447,7 @@ class PrometheusExporter:
         """Start serving ``/metrics`` in a daemon background thread."""
         if self._server is not None:
             raise RuntimeError("Exporter is already running")
-        self._server = HTTPServer(("", port), _MetricsHandler)
+        self._server = HTTPServer(("127.0.0.1", port), _MetricsHandler)
         self._thread = threading.Thread(
             target=self._server.serve_forever,
             name="dlpscan-metrics-exporter",

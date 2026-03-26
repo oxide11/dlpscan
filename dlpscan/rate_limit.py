@@ -24,6 +24,7 @@ Usage::
     limiter = get_default_limiter()
 """
 
+import collections
 import functools
 import threading
 import time
@@ -71,7 +72,7 @@ class RateLimiter:
         self._max_payload_bytes = max_payload_bytes
 
         self._lock = threading.Lock()
-        self._request_times: list = []  # timestamps of accepted requests
+        self._request_times: collections.deque = collections.deque()  # timestamps
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -82,7 +83,7 @@ class RateLimiter:
         cutoff = now - self._window_seconds
         # _request_times is kept sorted; trim from the front.
         while self._request_times and self._request_times[0] <= cutoff:
-            self._request_times.pop(0)
+            self._request_times.popleft()
 
     def _seconds_until_slot(self, now: float) -> float:
         """Return how many seconds until a slot opens, or 0.0 if available."""
