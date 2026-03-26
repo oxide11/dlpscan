@@ -22,7 +22,7 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Any, Dict, Optional, Protocol, runtime_checkable
+from typing import Any, Dict, Optional, Protocol, Union, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def _require_cryptography() -> Any:
         raise ImportError(_CRYPTOGRAPHY_INSTALL_MSG) from None
 
 
-def _derive_key(key: str | bytes, salt: bytes | None = None) -> bytes:
+def _derive_key(key: Union[str, bytes], salt: Optional[bytes] = None) -> bytes:
     """Derive a 256-bit AES key from an arbitrary string using PBKDF2."""
     if isinstance(key, str):
         key = key.encode("utf-8")
@@ -186,7 +186,7 @@ class FileBackend:
 
     def __init__(
         self,
-        path: str | Path,
+        path: Union[str, Path],
         encryption_key: Optional[str] = None,
     ) -> None:
         self._path = Path(path).resolve()
@@ -359,7 +359,7 @@ class EncryptedVault:
         ImportError: If the ``cryptography`` package is not installed.
     """
 
-    def __init__(self, backend: VaultBackend, key: str | bytes) -> None:
+    def __init__(self, backend: VaultBackend, key: Union[str, bytes]) -> None:
         AESGCM = _require_cryptography()
         self._backend = backend
         self._derived_key = _derive_key(key)

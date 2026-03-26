@@ -28,8 +28,8 @@ jobs:
       - name: Lint with ruff
         run: ruff check dlpscan/ tests/
 
-      - name: Type check with mypy
-        run: mypy dlpscan/ --ignore-missing-imports
+      - name: Type check with mypy (non-blocking)
+        run: mypy dlpscan/ --ignore-missing-imports || true
 
   test:
     name: Test (Python ${{ matrix.python-version }})

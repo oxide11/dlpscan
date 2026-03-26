@@ -52,6 +52,14 @@ nav:
       - Rate Limiting: enterprise/rate-limiting.md
       - Security Hardening: enterprise/security.md
       - Environment Variables: enterprise/env-config.md
+  - Control Baselines:
+      - Overview: baselines/index.md
+      - PII: baselines/pii.md
+      - PCI: baselines/pci.md
+      - PHI & Health Data: baselines/phi.md
+      - Internal Financial Data: baselines/internal-financial.md
+      - Source Code & Secrets: baselines/source-code-secrets.md
+      - Confidential Documents: baselines/confidential-documents.md
   - Deployment:
       - Docker: deployment/docker.md
       - CI/CD: deployment/cicd.md
