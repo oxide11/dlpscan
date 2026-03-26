@@ -772,8 +772,12 @@ def scan_directory(
                                 total_yielded += 1
                                 if total_yielded >= max_matches:
                                     return
+                    except ImportError as exc:
+                        logger.debug("Extractor dependency missing for %s: %s", file_path, exc)
+                    except (FileNotFoundError, OSError) as exc:
+                        logger.warning("Extractor I/O error for %s: %s", file_path, exc)
                     except Exception as exc:
-                        logger.debug("Extractor failed for %s: %s", file_path, exc)
+                        logger.warning("Extractor failed for %s: %s", file_path, exc)
                     continue
 
                 for m in scan_file(

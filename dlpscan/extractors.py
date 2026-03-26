@@ -191,7 +191,7 @@ def _extract_pdf(file_path: str) -> ExtractionResult:
             if ocr_available():
                 from pdf2image import convert_from_path
 
-                from .ocr import DEFAULT_CONFIG, DEFAULT_LANG, _ensure_pytesseract
+                from .ocr import _ensure_pytesseract, ocr_page_image
                 pytesseract = _ensure_pytesseract()
                 for page_idx in empty_pages:
                     try:
@@ -202,20 +202,18 @@ def _extract_pdf(file_path: str) -> ExtractionResult:
                             thread_count=1,
                         )
                         if images:
-                            page_text = pytesseract.image_to_string(
-                                images[0], lang=DEFAULT_LANG, config=DEFAULT_CONFIG
-                            ).strip()
+                            # ocr_page_image closes the image for us.
+                            page_text = ocr_page_image(pytesseract, images[0])
                             if page_text:
                                 pages_text.append((page_idx, page_text))
                                 metadata.setdefault('ocr_pages', []).append(page_idx + 1)
                     except Exception as exc:
                         warnings.append(f"Page {page_idx + 1}: OCR fallback failed ({exc})")
             else:
-                if empty_pages:
-                    warnings.append(
-                        f"{len(empty_pages)} page(s) had no extractable text. "
-                        "Install dlpscan[ocr] for OCR fallback."
-                    )
+                warnings.append(
+                    f"{len(empty_pages)} page(s) had no extractable text. "
+                    "Install dlpscan[ocr] for OCR fallback."
+                )
         except ImportError:
             warnings.append(
                 f"{len(empty_pages)} page(s) had no extractable text. "

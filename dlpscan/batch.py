@@ -156,6 +156,8 @@ class BatchScanner:
                 text=truncated,
                 scan_result=result,
             )
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as exc:
             return BatchResult(
                 source_id=source_id,
@@ -197,15 +199,15 @@ class BatchScanner:
                     if self._on_result is not None:
                         try:
                             self._on_result(batch_result)
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.warning("on_result callback error: %s", exc)
 
                     completed += 1
                     if self._on_progress is not None:
                         try:
                             self._on_progress(completed, total)
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.warning("on_progress callback error: %s", exc)
 
         return all_results  # type: ignore[return-value]
 

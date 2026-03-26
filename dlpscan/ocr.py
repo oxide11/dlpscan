@@ -32,6 +32,7 @@ System requirements::
 
 import logging
 import os
+import re
 import shutil
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
@@ -52,6 +53,14 @@ MIN_OCR_CONFIDENCE = 30
 
 # Maximum image dimension (pixels) before downscaling to avoid memory issues.
 MAX_IMAGE_DIMENSION = 10000
+
+# Maximum total pixel area to prevent memory exhaustion.
+MAX_PIXEL_AREA = 50_000_000  # 50 megapixels
+
+# Allowed tesseract config flags (whitelist for security).
+_ALLOWED_CONFIG_PATTERN = re.compile(
+    r'^(--(?:oem|psm|dpi|tessdata-dir|user-words|user-patterns)\s+\S+\s*)*$'
+)
 
 
 @dataclass
@@ -94,6 +103,33 @@ def pdf_ocr_available() -> bool:
         return False
     # pdf2image requires poppler (pdftoppm).
     return shutil.which('pdftoppm') is not None
+
+
+def _validate_config(config: str) -> str:
+    """Validate tesseract config string against an allowlist of safe flags.
+
+    Raises ValueError if the config contains disallowed options.
+    """
+    config = config.strip()
+    if not config:
+        return config
+    if not _ALLOWED_CONFIG_PATTERN.match(config):
+        raise ValueError(
+            f"Invalid Tesseract config: {config!r}. "
+            "Only --oem, --psm, --dpi, --tessdata-dir, "
+            "--user-words, and --user-patterns are allowed."
+        )
+    return config
+
+
+def _validate_lang(lang: str) -> str:
+    """Validate tesseract language string (alphanumeric + plus signs only)."""
+    if not re.match(r'^[a-zA-Z0-9_+]+$', lang):
+        raise ValueError(
+            f"Invalid Tesseract language code: {lang!r}. "
+            "Use alphanumeric codes separated by '+' (e.g., 'eng+fra')."
+        )
+    return lang
 
 
 def _ensure_pytesseract():
@@ -140,12 +176,21 @@ def _preprocess_image(image, *, grayscale: bool = True, threshold: bool = False,
     Returns:
         Preprocessed PIL Image.
     """
-    # Downscale oversized images to avoid memory issues.
     w, h = image.size
-    if max(w, h) > MAX_IMAGE_DIMENSION:
+    if w == 0 or h == 0:
+        return image
+
+    # Check total pixel area to prevent memory exhaustion.
+    if w * h > MAX_PIXEL_AREA:
+        scale = (MAX_PIXEL_AREA / (w * h)) ** 0.5
+        new_w = max(1, int(w * scale))
+        new_h = max(1, int(h * scale))
+        image = image.resize((new_w, new_h))
+        logger.debug("Downscaled image from %dx%d to %dx%d (pixel area limit)", w, h, new_w, new_h)
+    elif max(w, h) > MAX_IMAGE_DIMENSION:
         scale = MAX_IMAGE_DIMENSION / max(w, h)
-        new_w = int(w * scale)
-        new_h = int(h * scale)
+        new_w = max(1, int(w * scale))
+        new_h = max(1, int(h * scale))
         image = image.resize((new_w, new_h))
         logger.debug("Downscaled image from %dx%d to %dx%d", w, h, new_w, new_h)
 
@@ -158,8 +203,8 @@ def _preprocess_image(image, *, grayscale: bool = True, threshold: bool = False,
         if isinstance(current_dpi, tuple) and current_dpi[0] > 0:
             scale = dpi / current_dpi[0]
             if abs(scale - 1.0) > 0.1:
-                new_w = int(image.width * scale)
-                new_h = int(image.height * scale)
+                new_w = max(1, int(image.width * scale))
+                new_h = max(1, int(image.height * scale))
                 image = image.resize((new_w, new_h))
 
     if threshold:
@@ -169,20 +214,66 @@ def _preprocess_image(image, *, grayscale: bool = True, threshold: bool = False,
     return image
 
 
-def _compute_confidence(pytesseract, image, lang: str, config: str) -> float:
-    """Compute average OCR confidence using pytesseract.image_to_data."""
+def _ocr_with_confidence(pytesseract, image, lang: str, config: str):
+    """Run OCR once using image_to_data and extract both text and confidence.
+
+    Returns (text, confidence) tuple. This avoids running the OCR engine
+    twice (once for text, once for confidence).
+    """
     try:
         data = pytesseract.image_to_data(image, lang=lang, config=config,
                                           output_type=pytesseract.Output.DICT)
-        confidences = [
-            int(c) for c in data.get('conf', [])
-            if str(c).lstrip('-').isdigit() and int(c) >= 0
-        ]
-        if confidences:
-            return sum(confidences) / len(confidences)
-    except Exception as exc:
-        logger.debug("Could not compute OCR confidence: %s", exc)
-    return 0.0
+        # Build text from word-level tokens.
+        words = []
+        confidences = []
+        prev_block = None
+        prev_line = None
+        for i, word in enumerate(data.get('text', [])):
+            conf = data['conf'][i]
+            block = data.get('block_num', [0])[i]
+            line = data.get('line_num', [0])[i]
+
+            if word.strip():
+                # Add newlines between blocks/lines.
+                if prev_block is not None and block != prev_block:
+                    words.append('\n\n')
+                elif prev_line is not None and line != prev_line:
+                    words.append('\n')
+
+                words.append(word)
+                prev_block = block
+                prev_line = line
+
+                conf_val = int(conf) if str(conf).lstrip('-').isdigit() else -1
+                if conf_val >= 0:
+                    confidences.append(conf_val)
+
+        text = ' '.join(w for w in words if w not in ('\n', '\n\n'))
+        # Restore line structure.
+        result_parts = []
+        current_line = []
+        for w in words:
+            if w == '\n\n':
+                if current_line:
+                    result_parts.append(' '.join(current_line))
+                    current_line = []
+                result_parts.append('')
+            elif w == '\n':
+                if current_line:
+                    result_parts.append(' '.join(current_line))
+                    current_line = []
+            else:
+                current_line.append(w)
+        if current_line:
+            result_parts.append(' '.join(current_line))
+
+        text = '\n'.join(result_parts).strip()
+        avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+        return text, avg_conf
+    except Exception:
+        # Fall back to simple image_to_string if image_to_data fails.
+        text = pytesseract.image_to_string(image, lang=lang, config=config)
+        return text.strip(), 0.0
 
 
 def ocr_image(
@@ -213,14 +304,19 @@ def ocr_image(
 
     Raises:
         ImportError: If pytesseract or Pillow is not installed.
-        RuntimeError: If Tesseract binary is not found.
+        RuntimeError: If Tesseract binary is not found or OCR fails.
         FileNotFoundError: If source file does not exist.
+        ValueError: If config or lang contain invalid values.
     """
     pytesseract = _ensure_pytesseract()
     Image = _ensure_pillow()
 
+    config = _validate_config(config)
+    lang = _validate_lang(lang)
+
     warnings = []
     metadata: Dict[str, Any] = {}
+    opened_here = False
 
     # Load image.
     if isinstance(source, str):
@@ -229,47 +325,72 @@ def ocr_image(
         metadata['file_path'] = source
         metadata['file_size'] = os.path.getsize(source)
         image = Image.open(source)
+        opened_here = True
     else:
         image = source
 
-    metadata['original_size'] = image.size
-    metadata['mode'] = image.mode
-
-    # Preprocess.
-    if preprocess:
-        image = _preprocess_image(image, grayscale=grayscale,
-                                   threshold=threshold, dpi=dpi)
-        metadata['preprocessed'] = True
-
-    # Run OCR.
     try:
-        text = pytesseract.image_to_string(image, lang=lang, config=config)
-    except Exception as exc:
-        raise RuntimeError(f"OCR failed: {exc}")
+        metadata['original_size'] = image.size
+        metadata['mode'] = image.mode
 
-    text = text.strip()
+        # Preprocess.
+        if preprocess:
+            image = _preprocess_image(image, grayscale=grayscale,
+                                       threshold=threshold, dpi=dpi)
+            metadata['preprocessed'] = True
 
-    # Compute confidence.
-    confidence = 0.0
-    if compute_confidence and text:
-        confidence = _compute_confidence(pytesseract, image, lang, config)
-        if confidence < MIN_OCR_CONFIDENCE:
+        # Run OCR — single pass for both text and confidence.
+        if compute_confidence:
+            text, confidence = _ocr_with_confidence(pytesseract, image, lang, config)
+        else:
+            try:
+                text = pytesseract.image_to_string(image, lang=lang, config=config).strip()
+            except (OSError, RuntimeError) as exc:
+                raise RuntimeError(f"OCR failed: {exc}") from exc
+            confidence = 0.0
+
+        if compute_confidence and confidence < MIN_OCR_CONFIDENCE and text:
             warnings.append(
                 f"Low OCR confidence ({confidence:.1f}%). "
                 "Text may contain errors. Consider preprocessing the image."
             )
 
-    metadata['language'] = lang
-    metadata['config'] = config
+        metadata['language'] = lang
 
-    return OCRResult(
-        text=text,
-        confidence=confidence,
-        language=lang,
-        page_count=1,
-        metadata=metadata,
-        warnings=warnings,
-    )
+        return OCRResult(
+            text=text,
+            confidence=confidence,
+            language=lang,
+            page_count=1,
+            metadata=metadata,
+            warnings=warnings,
+        )
+    finally:
+        if opened_here:
+            image.close()
+
+
+def ocr_page_image(pytesseract, image, *, lang: str = DEFAULT_LANG,
+                    config: str = DEFAULT_CONFIG):
+    """OCR a single page image. Public API for use by extractors.
+
+    Args:
+        pytesseract: The pytesseract module.
+        image: PIL Image of a single page.
+        lang: Tesseract language code.
+        config: Tesseract config string.
+
+    Returns:
+        Extracted text string (stripped), or empty string on failure.
+    """
+    try:
+        text = pytesseract.image_to_string(image, lang=lang, config=config)
+        return text.strip()
+    except (OSError, RuntimeError) as exc:
+        logger.warning("OCR failed for page image: %s", exc)
+        return ''
+    finally:
+        image.close()
 
 
 def ocr_pdf(
@@ -285,7 +406,7 @@ def ocr_pdf(
 
     For each page, first attempts pdfplumber text extraction. Falls back
     to OCR (via pdf2image + pytesseract) for pages that yield little or
-    no text.
+    no text. Processes one page at a time to limit memory usage.
 
     Args:
         file_path: Path to the PDF file.
@@ -300,6 +421,9 @@ def ocr_pdf(
     """
     pytesseract = _ensure_pytesseract()
     _ensure_pillow()
+
+    config = _validate_config(config)
+    lang = _validate_lang(lang)
 
     if not os.path.isfile(file_path):
         raise FileNotFoundError(f"PDF file not found: {file_path}")
@@ -342,47 +466,71 @@ def ocr_pdf(
         except Exception as exc:
             warnings.append(f"pdfplumber failed, using full OCR: {exc}")
 
-    # Convert pages to images for OCR (only pages without sufficient text).
-    limit = min(page_count, max_pages) if (max_pages and page_count) else None
-    try:
-        # Convert one page at a time to manage memory.
-        first_page = 1
-        last_page = limit if limit else None
-        images = convert_from_path(
-            file_path, dpi=dpi,
-            first_page=first_page,
-            last_page=last_page,
-            thread_count=1,
-        )
-    except Exception as exc:
-        raise RuntimeError(
-            f"PDF to image conversion failed: {exc}. "
-            "Ensure poppler is installed: apt install poppler-utils"
-        )
+    # Determine how many pages to process.
+    effective_limit = min(page_count, max_pages) if (max_pages and page_count) else (page_count or None)
 
-    if not page_count:
-        page_count = len(images)
+    # Process one page at a time to limit memory usage.
+    page_idx = 0
+    while True:
+        page_num = page_idx + 1  # 1-based for pdf2image
+        if effective_limit is not None and page_idx >= effective_limit:
+            break
 
-    for i, img in enumerate(images):
         # Use pdfplumber text if available and sufficient.
-        if i in pdfplumber_texts:
-            pages_text.append(pdfplumber_texts[i])
+        if page_idx in pdfplumber_texts:
+            pages_text.append(pdfplumber_texts[page_idx])
             text_page_count += 1
+            page_idx += 1
             continue
 
-        # OCR fallback for this page.
+        # Convert single page to image for OCR.
         try:
-            page_text = pytesseract.image_to_string(img, lang=lang, config=config)
-            page_text = page_text.strip()
+            images = convert_from_path(
+                file_path, dpi=dpi,
+                first_page=page_num,
+                last_page=page_num,
+                thread_count=1,
+            )
+        except Exception as exc:
+            if page_idx == 0 and not page_count:
+                # First page failed and we don't know page count — can't continue.
+                raise RuntimeError(
+                    f"PDF to image conversion failed: {exc}. "
+                    "Ensure poppler is installed: apt install poppler-utils"
+                ) from exc
+            warnings.append(f"Page {page_num}: image conversion failed ({exc})")
+            page_idx += 1
+            continue
+
+        if not images:
+            # No more pages — we've reached the end.
+            if not page_count:
+                break
+            page_idx += 1
+            continue
+
+        # OCR the page image and close it immediately.
+        img = images[0]
+        try:
+            page_text = pytesseract.image_to_string(img, lang=lang, config=config).strip()
             if page_text:
                 pages_text.append(page_text)
-                conf = _compute_confidence(pytesseract, img, lang, config)
-                total_confidence += conf
                 ocr_page_count += 1
             else:
-                warnings.append(f"Page {i + 1}: OCR returned no text")
-        except Exception as exc:
-            warnings.append(f"Page {i + 1}: OCR failed ({exc})")
+                warnings.append(f"Page {page_num}: OCR returned no text")
+        except (OSError, RuntimeError) as exc:
+            warnings.append(f"Page {page_num}: OCR failed ({exc})")
+        finally:
+            img.close()
+
+        page_idx += 1
+
+        # If we don't know page_count (no pdfplumber), stop after conversion returns empty.
+        if not page_count and not images:
+            break
+
+    if not page_count:
+        page_count = page_idx
 
     avg_confidence = (total_confidence / ocr_page_count) if ocr_page_count else 0.0
     combined_text = '\n\n'.join(pages_text)

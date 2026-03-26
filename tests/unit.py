@@ -3296,6 +3296,68 @@ class TestOCRModule(unittest.TestCase):
         self.assertIsInstance(result.text, str)
 
 
+class TestOCRConfigValidation(unittest.TestCase):
+    """Tests for OCR config and lang validation."""
+
+    def test_valid_config_accepted(self):
+        """Valid tesseract config strings pass validation."""
+        from dlpscan.ocr import _validate_config
+        self.assertEqual(_validate_config('--oem 3 --psm 3'), '--oem 3 --psm 3')
+        self.assertEqual(_validate_config('--psm 6'), '--psm 6')
+        self.assertEqual(_validate_config(''), '')
+
+    def test_invalid_config_rejected(self):
+        """Dangerous config strings are rejected."""
+        from dlpscan.ocr import _validate_config
+        with self.assertRaises(ValueError):
+            _validate_config('--oem 3; rm -rf /')
+        with self.assertRaises(ValueError):
+            _validate_config('$(whoami)')
+        with self.assertRaises(ValueError):
+            _validate_config('--invalid-flag value')
+
+    def test_valid_lang_accepted(self):
+        """Valid language codes pass validation."""
+        from dlpscan.ocr import _validate_lang
+        self.assertEqual(_validate_lang('eng'), 'eng')
+        self.assertEqual(_validate_lang('eng+fra'), 'eng+fra')
+        self.assertEqual(_validate_lang('chi_sim'), 'chi_sim')
+
+    def test_invalid_lang_rejected(self):
+        """Invalid language codes are rejected."""
+        from dlpscan.ocr import _validate_lang
+        with self.assertRaises(ValueError):
+            _validate_lang('eng; whoami')
+        with self.assertRaises(ValueError):
+            _validate_lang('eng && ls')
+
+    def test_pixel_area_limit(self):
+        """Images exceeding pixel area limit are downscaled."""
+        from dlpscan.ocr import ocr_available
+        if not ocr_available():
+            self.skipTest("Tesseract not available")
+        from PIL import Image
+
+        from dlpscan.ocr import MAX_PIXEL_AREA, _preprocess_image
+        # Create image that exceeds pixel area (e.g., 8000x8000 = 64M pixels > 50M)
+        big = Image.new('L', (8000, 8000))
+        processed = _preprocess_image(big, grayscale=False, threshold=False)
+        self.assertLessEqual(processed.size[0] * processed.size[1], MAX_PIXEL_AREA * 1.01)
+
+    def test_zero_dimension_image(self):
+        """Zero-dimension images don't crash preprocessing."""
+        from dlpscan.ocr import ocr_available
+        if not ocr_available():
+            self.skipTest("Tesseract not available")
+        from PIL import Image
+
+        from dlpscan.ocr import _preprocess_image
+        # PIL can't really create 0x0, but test with minimal image
+        tiny = Image.new('L', (1, 1))
+        processed = _preprocess_image(tiny, grayscale=True, threshold=False)
+        self.assertEqual(processed.size, (1, 1))
+
+
 class TestExtractorOCRIntegration(unittest.TestCase):
     """Tests for OCR integration in extractors."""
 

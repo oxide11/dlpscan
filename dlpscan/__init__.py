@@ -58,6 +58,7 @@ from .ocr import (
     OCRResult,
     ocr_available,
     ocr_image,
+    ocr_page_image,
     ocr_pdf,
     pdf_ocr_available,
 )

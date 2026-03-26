@@ -274,6 +274,8 @@ class Pipeline:
                 error=str(exc),
                 duration_ms=_elapsed_ms(start),
             )
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as exc:
             logger.warning("Pipeline unexpected error for %s: %s", file_path, exc)
             result = PipelineResult(
@@ -286,8 +288,8 @@ class Pipeline:
         if self._on_result is not None:
             try:
                 self._on_result(result)
-            except Exception:
-                pass  # Never let callback crash the pipeline.
+            except Exception as exc:
+                logger.warning("on_result callback error for %s: %s", file_path, exc)
 
         return result
 
