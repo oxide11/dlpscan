@@ -25,6 +25,7 @@ from .exceptions import (
     ShortInputError,
     InvalidCardNumberError,
     SubCategoryNotFoundError,
+    ExtractionError,
 )
 from .metrics import ScanMetrics, set_metrics_callback, MetricsCollector
 from .plugins import (
@@ -37,5 +38,12 @@ from .plugins import (
 )
 from .logging_config import configure_logging
 from .async_scanner import async_scan_text, async_scan_file, async_scan_directory
+from .extractors import (
+    ExtractionResult,
+    extract_text,
+    register_extractor,
+    supported_extensions,
+)
+from .pipeline import Pipeline, FileJob, PipelineResult
 
 __version__ = '1.0.0'

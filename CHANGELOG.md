@@ -70,6 +70,62 @@ All notable changes to dlpscan will be documented in this file.
 - **560 patterns** across **126 categories** (unchanged).
 - **178+ tests** (up from 148).
 
+## [1.0.1] - 2026-03-26
+
+### New Features
+
+- **File processing pipeline**: Queue-based concurrent pipeline that ingests files
+  of any supported format, extracts text, runs DLP scanning, and returns structured
+  results. Supports batch processing, directory scanning, async submission via
+  futures, and per-file error isolation.
+- **Text extraction from binary formats**: New `extractors` module extracts plain
+  text from PDF, DOCX, XLSX, PPTX, EML, and MSG files. All extraction libraries
+  are optional dependencies — clear error messages guide installation.
+- **EML support**: Email files parsed via stdlib `email` module (no extra deps).
+  Extracts headers (From, To, Subject) and body parts (text/plain and text/html).
+- **MSG support**: Outlook `.msg` files via `extract-msg` library.
+- **Legacy Office detection**: `.doc`, `.xls`, `.ppt` files raise clear errors
+  with guidance on conversion options.
+- **CLI auto-detection**: When a file with a binary format extension is passed to
+  the CLI, it automatically routes through the pipeline extractor instead of the
+  plain-text scanner. Directory scanning also uses the pipeline.
+- **Custom extractor registration**: `register_extractor('.rtf', my_func)` to
+  add support for additional formats.
+
+### Pipeline API
+
+- `Pipeline(max_workers, max_file_size, categories, min_confidence, allowlist, on_result)`
+- `pipe.process_file(path)` — single file, synchronous
+- `pipe.process_files([paths])` — batch, concurrent, ordered results
+- `pipe.process_directory(dir_path)` — recursive directory scan
+- `pipe.submit(path)` — returns `Future[PipelineResult]`
+- `PipelineResult` — `.success`, `.matches`, `.match_count`, `.format_detected`,
+  `.extraction_metadata`, `.duration_ms`, `.to_dict(redact=True)`
+
+### New Optional Dependencies
+
+```
+pip install dlpscan[pdf]          # pdfplumber
+pip install dlpscan[office]       # python-docx, openpyxl, python-pptx
+pip install dlpscan[email]        # extract-msg
+pip install dlpscan[all-formats]  # Everything
+```
+
+### New Files
+
+- `dlpscan/extractors.py` — Text extraction registry and format handlers
+- `dlpscan/pipeline.py` — Queue-based concurrent processing pipeline
+
+### Tests
+
+- Expanded from 170 to 199 tests.
+- New test classes: `TestExtractors`, `TestPipeline`, `TestFileJob`.
+
+### Totals
+
+- **560 patterns** across **126 categories** (unchanged).
+- **199 tests** (up from 170).
+
 ## [0.6.0] - 2026-03-26
 
 ### New Features

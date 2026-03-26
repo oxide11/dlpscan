@@ -21,6 +21,19 @@ dlpscan -f json file.txt        # JSON output
 dlpscan -f sarif ./src/         # SARIF output (GitHub Code Scanning)
 ```
 
+## Format Support
+
+dlpscan can scan binary document formats by extracting text first. Install optional dependencies for the formats you need:
+
+```bash
+pip install dlpscan[pdf]          # PDF support (pdfplumber)
+pip install dlpscan[office]       # DOCX, XLSX, PPTX (python-docx, openpyxl, python-pptx)
+pip install dlpscan[email]        # Outlook MSG (extract-msg). EML uses stdlib.
+pip install dlpscan[all-formats]  # Everything
+```
+
+Supported formats: `.pdf`, `.docx`, `.xlsx`, `.pptx`, `.eml`, `.msg`, plus all plain text formats (`.txt`, `.csv`, `.json`, `.xml`, `.py`, `.js`, etc.). Files up to 100 MB by default.
+
 ## Quick Start
 
 ### Scan text for sensitive data
@@ -205,6 +218,47 @@ async def main():
         print(match.text)
 
 asyncio.run(main())
+```
+
+### File processing pipeline
+
+```python
+from dlpscan import Pipeline
+
+# Process a batch of files concurrently
+with Pipeline(max_workers=4, min_confidence=0.5) as pipe:
+    results = pipe.process_files(['report.pdf', 'data.xlsx', 'notes.docx'])
+    for r in results:
+        if r.success:
+            print(f"{r.file_path} ({r.format_detected}): {r.match_count} matches")
+        else:
+            print(f"{r.file_path}: ERROR — {r.error}")
+
+    # Process a directory
+    results = pipe.process_directory('./documents/')
+
+    # Submit for async processing
+    future = pipe.submit('large_report.pdf')
+    result = future.result()
+```
+
+```python
+# Extract text from any supported format
+from dlpscan import extract_text
+
+result = extract_text('report.pdf')
+print(result.text[:200])
+print(result.metadata)   # {'page_count': 5, 'pdf_metadata': {...}}
+print(result.format)     # 'pdf'
+
+# Register a custom extractor
+from dlpscan import register_extractor, ExtractionResult
+
+def extract_rtf(path):
+    text = my_rtf_parser(path)
+    return ExtractionResult(text=text, format='rtf')
+
+register_extractor('.rtf', extract_rtf)
 ```
 
 ### Check context proximity
@@ -482,6 +536,8 @@ dlpscan/
 ├── plugins.py                     # Plugin validators and post-processors
 ├── logging_config.py              # Structured JSON logging
 ├── async_scanner.py               # Async scanning wrappers
+├── extractors.py                  # Text extraction from binary formats
+├── pipeline.py                    # Queue-based file processing pipeline
 ├── exceptions.py                  # Exception hierarchy
 ├── py.typed                       # PEP 561 type marker
 ├── patterns/                      # Regex pattern definitions
@@ -507,7 +563,7 @@ coverage run -m unittest tests.unit -v
 coverage report
 ```
 
-178+ tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering, config loading, SARIF output, custom pattern registration, output redaction, metrics/observability, plugin system, structured logging, and async scanning.
+199 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering, config loading, SARIF output, custom pattern registration, output redaction, metrics/observability, plugin system, structured logging, async scanning, text extraction, and the file processing pipeline.
 
 ## Docker
 

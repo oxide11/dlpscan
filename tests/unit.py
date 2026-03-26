@@ -1391,5 +1391,382 @@ class TestAsyncScanner(unittest.TestCase):
             os.unlink(path)
 
 
+class TestExtractors(unittest.TestCase):
+    """Test text extraction system."""
+
+    def test_extract_plain_text(self):
+        from dlpscan.extractors import extract_text
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write("email: test@example.com\nSSN: 123-45-6789\n")
+            path = f.name
+        try:
+            result = extract_text(path)
+            self.assertEqual(result.format, 'text')
+            self.assertIn('test@example.com', result.text)
+            self.assertIn('123-45-6789', result.text)
+        finally:
+            os.unlink(path)
+
+    def test_extract_csv(self):
+        from dlpscan.extractors import extract_text
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+            f.write("name,email\nJohn,test@example.com\n")
+            path = f.name
+        try:
+            result = extract_text(path)
+            self.assertEqual(result.format, 'text')
+            self.assertIn('test@example.com', result.text)
+        finally:
+            os.unlink(path)
+
+    def test_extract_empty_file(self):
+        from dlpscan.extractors import extract_text
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            path = f.name
+        try:
+            result = extract_text(path)
+            self.assertEqual(result.format, 'empty')
+            self.assertEqual(result.text, '')
+        finally:
+            os.unlink(path)
+
+    def test_extract_nonexistent_file(self):
+        from dlpscan.extractors import extract_text
+        with self.assertRaises(FileNotFoundError):
+            extract_text('/nonexistent/file.txt')
+
+    def test_extract_file_too_large(self):
+        from dlpscan.extractors import extract_text
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write("x" * 100)
+            path = f.name
+        try:
+            with self.assertRaises(ValueError):
+                extract_text(path, max_size=50)
+        finally:
+            os.unlink(path)
+
+    def test_supported_extensions(self):
+        from dlpscan.extractors import supported_extensions
+        exts = supported_extensions()
+        self.assertIn('.pdf', exts)
+        self.assertIn('.docx', exts)
+        self.assertIn('.xlsx', exts)
+        self.assertIn('.pptx', exts)
+        self.assertIn('.eml', exts)
+        self.assertIn('.msg', exts)
+        self.assertIn('.txt', exts)
+
+    def test_get_extractor_returns_none_for_unknown(self):
+        from dlpscan.extractors import get_extractor
+        self.assertIsNone(get_extractor('file.xyz_unknown'))
+
+    def test_get_extractor_returns_callable(self):
+        from dlpscan.extractors import get_extractor
+        ext = get_extractor('report.pdf')
+        self.assertIsNotNone(ext)
+        self.assertTrue(callable(ext))
+
+    def test_register_custom_extractor(self):
+        from dlpscan.extractors import register_extractor, extract_text, ExtractionResult, _EXTRACTORS
+        def my_extractor(path):
+            return ExtractionResult(text='custom extracted', format='custom')
+        register_extractor('.zzz_test', my_extractor)
+        try:
+            with tempfile.NamedTemporaryFile(suffix='.zzz_test', delete=False) as f:
+                f.write(b'data')
+                path = f.name
+            try:
+                result = extract_text(path)
+                self.assertEqual(result.text, 'custom extracted')
+                self.assertEqual(result.format, 'custom')
+            finally:
+                os.unlink(path)
+        finally:
+            _EXTRACTORS.pop('.zzz_test', None)
+
+    def test_register_extractor_validation(self):
+        from dlpscan.extractors import register_extractor
+        with self.assertRaises(ValueError):
+            register_extractor('pdf', lambda p: None)  # Missing dot
+        with self.assertRaises(TypeError):
+            register_extractor('.pdf', 'not callable')
+
+    def test_legacy_office_raises(self):
+        from dlpscan.extractors import extract_text
+        from dlpscan.exceptions import ExtractionError
+        with tempfile.NamedTemporaryFile(suffix='.doc', delete=False) as f:
+            f.write(b'\xd0\xcf\x11\xe0')
+            path = f.name
+        try:
+            with self.assertRaises(ExtractionError):
+                extract_text(path)
+        finally:
+            os.unlink(path)
+
+    def test_extract_eml(self):
+        from dlpscan.extractors import extract_text
+        eml_content = (
+            "From: sender@example.com\r\n"
+            "To: recipient@example.com\r\n"
+            "Subject: Test Email\r\n"
+            "Content-Type: text/plain\r\n"
+            "\r\n"
+            "This is the body with SSN 123-45-6789\r\n"
+        )
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.eml', delete=False) as f:
+            f.write(eml_content)
+            path = f.name
+        try:
+            result = extract_text(path)
+            self.assertEqual(result.format, 'eml')
+            self.assertIn('sender@example.com', result.text)
+            self.assertIn('123-45-6789', result.text)
+            self.assertIn('from', result.metadata.get('headers', {}))
+        finally:
+            os.unlink(path)
+
+
+class TestPipeline(unittest.TestCase):
+    """Test the file processing pipeline."""
+
+    def test_process_text_file(self):
+        from dlpscan.pipeline import Pipeline
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write("Contact email: test@example.com\n")
+            path = f.name
+        try:
+            with Pipeline() as pipe:
+                result = pipe.process_file(path, categories={'Contact Information'})
+            self.assertTrue(result.success)
+            self.assertGreater(result.match_count, 0)
+            emails = [m for m in result.matches if m.sub_category == 'Email Address']
+            self.assertGreater(len(emails), 0)
+            self.assertEqual(result.format_detected, 'text')
+            self.assertGreater(result.duration_ms, 0)
+        finally:
+            os.unlink(path)
+
+    def test_process_missing_file(self):
+        from dlpscan.pipeline import Pipeline
+        with Pipeline() as pipe:
+            result = pipe.process_file('/nonexistent/file.txt')
+        self.assertFalse(result.success)
+        self.assertIn('not found', result.error.lower())
+
+    def test_process_file_too_large(self):
+        from dlpscan.pipeline import Pipeline
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write("x" * 200)
+            path = f.name
+        try:
+            with Pipeline(max_file_size=100) as pipe:
+                result = pipe.process_file(path)
+            self.assertFalse(result.success)
+            self.assertIn('exceeds', result.error.lower())
+        finally:
+            os.unlink(path)
+
+    def test_process_empty_file(self):
+        from dlpscan.pipeline import Pipeline
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            path = f.name
+        try:
+            with Pipeline() as pipe:
+                result = pipe.process_file(path)
+            self.assertTrue(result.success)
+            self.assertEqual(result.match_count, 0)
+            self.assertEqual(result.format_detected, 'empty')
+        finally:
+            os.unlink(path)
+
+    def test_process_files_concurrent(self):
+        from dlpscan.pipeline import Pipeline
+        paths = []
+        for i in range(5):
+            f = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+            f.write(f"email: user{i}@example.com\n")
+            f.close()
+            paths.append(f.name)
+        try:
+            with Pipeline(max_workers=3) as pipe:
+                results = pipe.process_files(paths, categories={'Contact Information'})
+            self.assertEqual(len(results), 5)
+            for r in results:
+                self.assertTrue(r.success)
+                self.assertGreater(r.match_count, 0)
+        finally:
+            for p in paths:
+                os.unlink(p)
+
+    def test_process_files_preserves_order(self):
+        from dlpscan.pipeline import Pipeline
+        paths = []
+        for i in range(3):
+            f = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+            f.write(f"data {i}\n")
+            f.close()
+            paths.append(f.name)
+        try:
+            with Pipeline() as pipe:
+                results = pipe.process_files(paths)
+            for i, r in enumerate(results):
+                self.assertEqual(r.file_path, paths[i])
+        finally:
+            for p in paths:
+                os.unlink(p)
+
+    def test_process_directory(self):
+        from dlpscan.pipeline import Pipeline
+        tmpdir = tempfile.mkdtemp()
+        with open(os.path.join(tmpdir, 'file1.txt'), 'w') as f:
+            f.write("email: test@example.com\n")
+        with open(os.path.join(tmpdir, 'file2.csv'), 'w') as f:
+            f.write("name,email\nJohn,admin@example.com\n")
+        try:
+            with Pipeline() as pipe:
+                results = pipe.process_directory(tmpdir)
+            self.assertEqual(len(results), 2)
+            all_matches = sum(r.match_count for r in results)
+            self.assertGreater(all_matches, 0)
+        finally:
+            import shutil
+            shutil.rmtree(tmpdir)
+
+    def test_process_directory_not_found(self):
+        from dlpscan.pipeline import Pipeline
+        with Pipeline() as pipe:
+            with self.assertRaises(FileNotFoundError):
+                pipe.process_directory('/nonexistent/dir')
+
+    def test_pipeline_with_allowlist(self):
+        from dlpscan.pipeline import Pipeline
+        al = Allowlist(patterns=['Email Address'])
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write("email: test@example.com\n")
+            path = f.name
+        try:
+            with Pipeline(allowlist=al) as pipe:
+                result = pipe.process_file(path, categories={'Contact Information'})
+            self.assertTrue(result.success)
+            emails = [m for m in result.matches if m.sub_category == 'Email Address']
+            self.assertEqual(len(emails), 0)
+        finally:
+            os.unlink(path)
+
+    def test_pipeline_min_confidence(self):
+        from dlpscan.pipeline import Pipeline
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write("test@example.com\n")
+            path = f.name
+        try:
+            with Pipeline(min_confidence=0.99) as pipe:
+                result = pipe.process_file(path)
+            # Very high threshold should filter most/all matches
+            for m in result.matches:
+                self.assertGreaterEqual(m.confidence, 0.99)
+        finally:
+            os.unlink(path)
+
+    def test_pipeline_on_result_callback(self):
+        from dlpscan.pipeline import Pipeline
+        captured = []
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write("email: test@example.com\n")
+            path = f.name
+        try:
+            with Pipeline(on_result=lambda r: captured.append(r)) as pipe:
+                pipe.process_file(path)
+            self.assertEqual(len(captured), 1)
+        finally:
+            os.unlink(path)
+
+    def test_pipeline_submit_future(self):
+        from dlpscan.pipeline import Pipeline
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write("email: test@example.com\n")
+            path = f.name
+        try:
+            with Pipeline() as pipe:
+                future = pipe.submit(path, categories={'Contact Information'})
+                result = future.result(timeout=10)
+            self.assertTrue(result.success)
+            self.assertGreater(result.match_count, 0)
+        finally:
+            os.unlink(path)
+
+    def test_pipeline_result_to_dict(self):
+        from dlpscan.pipeline import PipelineResult
+        r = PipelineResult(
+            file_path='test.txt',
+            matches=[Match(text='test@example.com', category='C',
+                           sub_category='Email Address', confidence=0.9, span=(0, 16))],
+            format_detected='text',
+            duration_ms=10.5,
+        )
+        d = r.to_dict()
+        self.assertEqual(d['file_path'], 'test.txt')
+        self.assertEqual(d['match_count'], 1)
+        self.assertTrue(d['success'])
+        # Redacted dict
+        d_redact = r.to_dict(redact=True)
+        self.assertEqual(d_redact['matches'][0]['text'], 'tes...com')
+
+    def test_process_eml_file(self):
+        """Test that EML files are processed through the pipeline."""
+        from dlpscan.pipeline import Pipeline
+        eml_content = (
+            "From: sender@example.com\r\n"
+            "To: recipient@example.com\r\n"
+            "Subject: Test\r\n"
+            "Content-Type: text/plain\r\n"
+            "\r\n"
+            "The credit card number is 4532015112830366\r\n"
+        )
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.eml', delete=False) as f:
+            f.write(eml_content)
+            path = f.name
+        try:
+            with Pipeline() as pipe:
+                result = pipe.process_file(path)
+            self.assertTrue(result.success)
+            self.assertEqual(result.format_detected, 'eml')
+            self.assertGreater(result.match_count, 0)
+        finally:
+            os.unlink(path)
+
+    def test_process_files_empty_list(self):
+        from dlpscan.pipeline import Pipeline
+        with Pipeline() as pipe:
+            results = pipe.process_files([])
+        self.assertEqual(results, [])
+
+
+class TestFileJob(unittest.TestCase):
+    """Test FileJob dataclass."""
+
+    def test_defaults(self):
+        from dlpscan.pipeline import FileJob
+        job = FileJob(file_path='test.txt')
+        self.assertEqual(job.file_path, 'test.txt')
+        self.assertIsNone(job.categories)
+        self.assertFalse(job.require_context)
+        self.assertEqual(job.max_matches, 50000)
+        self.assertIsNone(job.metadata)
+
+    def test_with_overrides(self):
+        from dlpscan.pipeline import FileJob
+        job = FileJob(
+            file_path='report.pdf',
+            categories={'Credit Card Numbers'},
+            require_context=True,
+            max_matches=100,
+            metadata={'ticket': 'SEC-1234'},
+        )
+        self.assertEqual(job.categories, {'Credit Card Numbers'})
+        self.assertTrue(job.require_context)
+        self.assertEqual(job.metadata['ticket'], 'SEC-1234')
+
+
 if __name__ == '__main__':
     unittest.main()

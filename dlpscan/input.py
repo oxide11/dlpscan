@@ -7,7 +7,9 @@ import sys
 from .scanner import enhanced_scan_text, scan_file, scan_directory
 from .config import load_config, apply_config_to_args
 from .allowlist import Allowlist
-from .exceptions import RedactionError
+from .exceptions import RedactionError, ExtractionError
+from .extractors import get_extractor, extract_text
+from .pipeline import Pipeline
 
 
 def _display_text(m, redact=False):
@@ -204,24 +206,42 @@ def main():
 
     try:
         if args.file and os.path.isdir(args.file):
-            # Directory scanning.
+            # Directory scanning via pipeline (handles all formats).
             file_context = True
-            raw = list(scan_directory(
-                args.file,
+            with Pipeline(
                 categories=cats,
                 require_context=args.require_context,
-                max_matches=args.max_matches,
+                min_confidence=args.min_confidence,
                 deduplicate=deduplicate,
-                skip_paths=config.get('ignore_paths', []),
-            ))
-            if allowlist:
-                findings = [(p, m) for p, m in raw if allowlist.is_allowed(m)
-                            and not allowlist.should_skip_path(p)]
-            else:
-                findings = raw
+                allowlist=allowlist or None,
+            ) as pipe:
+                results = pipe.process_directory(args.file)
+            findings = []
+            for r in results:
+                if r.success:
+                    rel = os.path.relpath(r.file_path, args.file)
+                    for m in r.matches:
+                        findings.append((rel, m))
+                elif r.error:
+                    print(f"Warning: {r.file_path}: {r.error}", file=sys.stderr)
+
+        elif args.file and get_extractor(args.file) is not None:
+            # Binary format file — route through pipeline extractor.
+            with Pipeline(
+                categories=cats,
+                require_context=args.require_context,
+                min_confidence=args.min_confidence,
+                deduplicate=deduplicate,
+                allowlist=allowlist or None,
+            ) as pipe:
+                result = pipe.process_file(args.file)
+            if not result.success:
+                print(f"Error: {result.error}", file=sys.stderr)
+                sys.exit(1)
+            findings = result.matches
 
         elif args.file:
-            # Single file scanning.
+            # Plain text file scanning (legacy path).
             raw = list(scan_file(
                 args.file,
                 categories=cats,
@@ -268,7 +288,7 @@ def main():
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
-    except (RedactionError, TypeError, ValueError) as exc:
+    except (RedactionError, ExtractionError, TypeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
