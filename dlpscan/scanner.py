@@ -5,7 +5,7 @@ import re
 import signal
 import threading
 import logging
-from typing import Generator, List, Optional, Set
+from typing import Generator, List, Optional, Set, Tuple
 
 from .patterns import PATTERNS
 from .context import CONTEXT_KEYWORDS
@@ -36,9 +36,12 @@ MAX_MATCHES = 50_000
 # Maximum total scan time in seconds across all patterns (0 = no limit).
 MAX_SCAN_SECONDS = 120
 
-# -- Custom pattern registry --
+# -- Custom pattern registry (protected by _registry_lock) --
+_registry_lock = threading.Lock()
 _custom_patterns: dict = {}
 _custom_context: dict = {}
+_custom_specificity_keys: dict = {}  # category -> set of keys added to PATTERN_SPECIFICITY
+_custom_context_required_keys: dict = {}  # category -> set of keys added
 
 # Pre-compile context keyword patterns for proximity matching.
 compiled_context_patterns: dict = {}
@@ -104,27 +107,42 @@ def register_patterns(category: str, patterns: dict, context: Optional[dict] = N
     if not isinstance(patterns, dict) or not patterns:
         raise ValueError("patterns must be a non-empty dict of {name: compiled_regex}.")
 
-    _custom_patterns[category] = patterns
+    with _registry_lock:
+        _custom_patterns[category] = patterns
 
-    if context:
-        _custom_context[category] = context
-        _rebuild_context_patterns()
+        if context:
+            _custom_context[category] = context
+            _rebuild_context_patterns()
 
-    if specificity:
-        PATTERN_SPECIFICITY.update(specificity)
+        if specificity:
+            PATTERN_SPECIFICITY.update(specificity)
+            _custom_specificity_keys[category] = set(specificity.keys())
 
-    if context_required:
-        # Module-level frozenset can't be mutated — use global replacement
-        global CONTEXT_REQUIRED_PATTERNS
-        CONTEXT_REQUIRED_PATTERNS = CONTEXT_REQUIRED_PATTERNS | frozenset(context_required)
+        if context_required:
+            global CONTEXT_REQUIRED_PATTERNS
+            _custom_context_required_keys[category] = set(context_required)
+            CONTEXT_REQUIRED_PATTERNS = CONTEXT_REQUIRED_PATTERNS | frozenset(context_required)
 
 
 def unregister_patterns(category: str):
-    """Remove previously registered custom patterns."""
-    _custom_patterns.pop(category, None)
-    if category in _custom_context:
-        _custom_context.pop(category)
-        _rebuild_context_patterns()
+    """Remove previously registered custom patterns and associated metadata."""
+    with _registry_lock:
+        _custom_patterns.pop(category, None)
+
+        if category in _custom_context:
+            _custom_context.pop(category)
+            _rebuild_context_patterns()
+
+        # Clean up specificity entries added by this category.
+        removed_keys = _custom_specificity_keys.pop(category, set())
+        for key in removed_keys:
+            PATTERN_SPECIFICITY.pop(key, None)
+
+        # Clean up context_required entries added by this category.
+        removed_ctx = _custom_context_required_keys.pop(category, set())
+        if removed_ctx:
+            global CONTEXT_REQUIRED_PATTERNS
+            CONTEXT_REQUIRED_PATTERNS = CONTEXT_REQUIRED_PATTERNS - frozenset(removed_ctx)
 
 
 def _get_all_patterns() -> dict:
@@ -459,6 +477,88 @@ def enhanced_scan_text(
 
 # -- File / stream scanning --
 
+def _scan_chunks(
+    read_fn,
+    categories: Optional[Set[str]],
+    require_context: bool,
+    max_matches: int,
+    deduplicate: bool,
+    chunk_size: int,
+    chunk_overlap: int,
+) -> Generator[Match, None, None]:
+    """Shared chunked scanning logic for files and streams.
+
+    Args:
+        read_fn: Callable that reads up to N characters (e.g., file.read).
+        categories: Optional set of category names to scan.
+        require_context: If True, only yield matches with context.
+        max_matches: Maximum total matches to return.
+        deduplicate: If True, deduplicate overlapping matches per chunk.
+        chunk_size: Characters per chunk.
+        chunk_overlap: Overlap between chunks.
+
+    Yields:
+        Match objects with span offsets relative to the full input.
+    """
+    total_yielded = 0
+    offset = 0
+    prev_tail = ''
+    # Track yielded spans to avoid duplicates from the overlap region.
+    seen_spans: set = set()
+
+    while True:
+        raw = read_fn(chunk_size)
+        if not raw:
+            break
+
+        # Prepend overlap from previous chunk to catch boundary matches.
+        chunk = prev_tail + raw
+        chunk_offset = offset - len(prev_tail)
+
+        try:
+            for m in enhanced_scan_text(
+                chunk,
+                categories=categories,
+                require_context=require_context,
+                max_matches=max_matches - total_yielded,
+                deduplicate=deduplicate,
+            ):
+                # Adjust span to be relative to the full input.
+                abs_span = (m.span[0] + chunk_offset, m.span[1] + chunk_offset)
+
+                # Skip matches already yielded from a previous chunk's overlap.
+                if abs_span in seen_spans:
+                    continue
+                seen_spans.add(abs_span)
+
+                adjusted = Match(
+                    text=m.text,
+                    category=m.category,
+                    sub_category=m.sub_category,
+                    has_context=m.has_context,
+                    confidence=m.confidence,
+                    span=abs_span,
+                    context_required=m.context_required,
+                )
+                yield adjusted
+                total_yielded += 1
+
+                if total_yielded >= max_matches:
+                    return
+        except (EmptyInputError, ValueError):
+            pass  # Skip empty/oversized chunks
+
+        # Keep tail for overlap with next chunk.
+        prev_tail = raw[-chunk_overlap:] if len(raw) >= chunk_overlap else raw
+        offset += len(raw)
+
+        # Prune seen_spans — only need to track spans that could appear in the
+        # next chunk's overlap region.  Anything before (offset - chunk_overlap)
+        # can't be duplicated.
+        cutoff = offset - chunk_overlap
+        seen_spans = {s for s in seen_spans if s[1] > cutoff}
+
+
 def scan_file(
     file_path: str,
     categories: Optional[Set[str]] = None,
@@ -491,50 +591,11 @@ def scan_file(
     if file_size == 0:
         return
 
-    total_yielded = 0
-
     with open(file_path, 'r', encoding=encoding, errors='replace') as f:
-        offset = 0
-        prev_tail = ''
-
-        while True:
-            raw = f.read(chunk_size)
-            if not raw:
-                break
-
-            # Prepend overlap from previous chunk to catch boundary matches.
-            chunk = prev_tail + raw
-            chunk_offset = offset - len(prev_tail)
-
-            try:
-                for m in enhanced_scan_text(
-                    chunk,
-                    categories=categories,
-                    require_context=require_context,
-                    max_matches=max_matches - total_yielded,
-                    deduplicate=deduplicate,
-                ):
-                    # Adjust span to be relative to the full file.
-                    adjusted = Match(
-                        text=m.text,
-                        category=m.category,
-                        sub_category=m.sub_category,
-                        has_context=m.has_context,
-                        confidence=m.confidence,
-                        span=(m.span[0] + chunk_offset, m.span[1] + chunk_offset),
-                        context_required=m.context_required,
-                    )
-                    yield adjusted
-                    total_yielded += 1
-
-                    if total_yielded >= max_matches:
-                        return
-            except (EmptyInputError, ValueError):
-                pass  # Skip empty/oversized chunks
-
-            # Keep tail for overlap with next chunk.
-            prev_tail = raw[-chunk_overlap:] if len(raw) >= chunk_overlap else raw
-            offset += len(raw)
+        yield from _scan_chunks(
+            f.read, categories, require_context, max_matches,
+            deduplicate, chunk_size, chunk_overlap,
+        )
 
 
 def scan_stream(
@@ -562,45 +623,10 @@ def scan_stream(
     Yields:
         Match objects with span offsets relative to stream start.
     """
-    total_yielded = 0
-    offset = 0
-    prev_tail = ''
-
-    while True:
-        raw = stream.read(chunk_size)
-        if not raw:
-            break
-
-        chunk = prev_tail + raw
-        chunk_offset = offset - len(prev_tail)
-
-        try:
-            for m in enhanced_scan_text(
-                chunk,
-                categories=categories,
-                require_context=require_context,
-                max_matches=max_matches - total_yielded,
-                deduplicate=deduplicate,
-            ):
-                adjusted = Match(
-                    text=m.text,
-                    category=m.category,
-                    sub_category=m.sub_category,
-                    has_context=m.has_context,
-                    confidence=m.confidence,
-                    span=(m.span[0] + chunk_offset, m.span[1] + chunk_offset),
-                    context_required=m.context_required,
-                )
-                yield adjusted
-                total_yielded += 1
-
-                if total_yielded >= max_matches:
-                    return
-        except (EmptyInputError, ValueError):
-            pass
-
-        prev_tail = raw[-chunk_overlap:] if len(raw) >= chunk_overlap else raw
-        offset += len(raw)
+    yield from _scan_chunks(
+        stream.read, categories, require_context, max_matches,
+        deduplicate, chunk_size, chunk_overlap,
+    )
 
 
 # Default directories and file extensions to skip during directory scanning.
@@ -643,7 +669,7 @@ def scan_directory(
     deduplicate: bool = True,
     encoding: str = 'utf-8',
     skip_paths: Optional[List[str]] = None,
-) -> Generator[tuple, None, None]:
+) -> Generator[Tuple[str, Match], None, None]:
     """Recursively scan all text files in a directory.
 
     Args:

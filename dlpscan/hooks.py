@@ -45,6 +45,10 @@ def extract_added_lines(diff: str) -> list:
 
     Returns list of (filename, line_number, line_text) tuples.
     """
+    import re
+
+    _HUNK_RE = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@')
+
     added = []
     current_file = None
     current_line = 0
@@ -53,14 +57,10 @@ def extract_added_lines(diff: str) -> list:
         if line.startswith('+++ b/'):
             current_file = line[6:]
         elif line.startswith('@@'):
-            # Parse @@ -old,count +new,count @@ format
-            try:
-                parts = line.split('+')[1].split(' ')[0]
-                if ',' in parts:
-                    current_line = int(parts.split(',')[0])
-                else:
-                    current_line = int(parts)
-            except (IndexError, ValueError):
+            m = _HUNK_RE.match(line)
+            if m:
+                current_line = int(m.group(1))
+            else:
                 current_line = 0
         elif line.startswith('+') and not line.startswith('+++'):
             added.append((current_file, current_line, line[1:]))

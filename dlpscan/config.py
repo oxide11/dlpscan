@@ -15,6 +15,7 @@ Supported config keys:
     ignore_paths: list[str]      — file path globs to skip in directory scanning
 """
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -155,7 +156,7 @@ def load_config(path: Optional[str] = None, start_dir: Optional[str] = None) -> 
     Returns:
         Merged configuration dictionary.
     """
-    config = dict(_DEFAULTS)
+    config = copy.deepcopy(_DEFAULTS)
 
     if path:
         config_path = Path(path)

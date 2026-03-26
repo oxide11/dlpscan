@@ -1,13 +1,12 @@
 import argparse
 import csv
-import io
 import json
 import os
 import sys
 
 from .scanner import enhanced_scan_text, scan_file, scan_directory
 from .config import load_config, apply_config_to_args
-from .allowlist import Allowlist, has_inline_ignore
+from .allowlist import Allowlist
 from .exceptions import RedactionError
 
 

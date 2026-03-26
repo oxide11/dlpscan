@@ -1,3 +1,4 @@
+import argparse
 import io
 import json
 import os
@@ -16,12 +17,16 @@ from dlpscan.scanner import (
     scan_directory,
     register_patterns,
     unregister_patterns,
+    _is_binary_file,
+    _compute_confidence,
+    _deduplicate_overlapping,
     MAX_INPUT_SIZE,
     MAX_MATCHES,
 )
-from dlpscan.models import Match, CONTEXT_REQUIRED_PATTERNS
-from dlpscan.config import load_config, _parse_toml_fallback
+from dlpscan.models import Match, CONTEXT_REQUIRED_PATTERNS, PATTERN_SPECIFICITY
+from dlpscan.config import load_config, _parse_toml_fallback, apply_config_to_args
 from dlpscan.allowlist import Allowlist, has_inline_ignore
+from dlpscan.hooks import extract_added_lines
 from dlpscan.exceptions import (
     EmptyInputError,
     ShortInputError,
@@ -810,6 +815,344 @@ class TestSARIFOutput(unittest.TestCase):
         results = sarif['runs'][0]['results']
         self.assertEqual(results[0]['level'], 'warning')
         self.assertEqual(results[1]['level'], 'note')
+
+
+class TestComputeConfidence(unittest.TestCase):
+    """Direct tests for _compute_confidence."""
+
+    def test_base_specificity_only(self):
+        """No context, not context_required — returns base specificity."""
+        c = _compute_confidence('Email Address', has_context=False, context_required=False)
+        self.assertAlmostEqual(c, 0.90)
+
+    def test_context_boost(self):
+        c = _compute_confidence('Email Address', has_context=True, context_required=False)
+        self.assertAlmostEqual(c, 1.0)  # 0.90 + 0.20 = 1.10, capped at 1.0
+
+    def test_context_required_no_context(self):
+        """Context required but missing — very low confidence."""
+        c = _compute_confidence('Gender Marker', has_context=False, context_required=True)
+        self.assertAlmostEqual(c, round(0.25 * 0.3, 2))
+
+    def test_unknown_pattern_uses_default(self):
+        c = _compute_confidence('NonexistentPattern', has_context=False, context_required=False)
+        self.assertAlmostEqual(c, 0.40)  # DEFAULT_SPECIFICITY
+
+
+class TestDeduplicateOverlapping(unittest.TestCase):
+    """Direct tests for _deduplicate_overlapping."""
+
+    def test_empty_list(self):
+        self.assertEqual(_deduplicate_overlapping([]), [])
+
+    def test_no_overlaps(self):
+        matches = [
+            Match(text='a', category='C', sub_category='S', span=(0, 5), confidence=0.8),
+            Match(text='b', category='C', sub_category='S', span=(10, 15), confidence=0.9),
+        ]
+        result = _deduplicate_overlapping(matches)
+        self.assertEqual(len(result), 2)
+
+    def test_overlapping_keeps_higher_confidence(self):
+        matches = [
+            Match(text='abc', category='C', sub_category='Low', span=(0, 10), confidence=0.5),
+            Match(text='abcdef', category='C', sub_category='High', span=(0, 10), confidence=0.9),
+        ]
+        result = _deduplicate_overlapping(matches)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].sub_category, 'High')
+
+    def test_equal_confidence_keeps_longer(self):
+        matches = [
+            Match(text='ab', category='C', sub_category='Short', span=(0, 5), confidence=0.8),
+            Match(text='abcdef', category='C', sub_category='Long', span=(0, 10), confidence=0.8),
+        ]
+        result = _deduplicate_overlapping(matches)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].sub_category, 'Long')
+
+
+class TestIsBinaryFile(unittest.TestCase):
+    """Tests for _is_binary_file heuristic."""
+
+    def test_binary_extension_detected(self):
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+            f.write(b'not really a png')
+            path = f.name
+        try:
+            self.assertTrue(_is_binary_file(path))
+        finally:
+            os.unlink(path)
+
+    def test_text_file_not_binary(self):
+        with tempfile.NamedTemporaryFile(suffix='.txt', mode='w', delete=False) as f:
+            f.write('Hello world\n')
+            path = f.name
+        try:
+            self.assertFalse(_is_binary_file(path))
+        finally:
+            os.unlink(path)
+
+    def test_null_bytes_detected(self):
+        with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as f:
+            f.write(b'text with \x00 null byte')
+            path = f.name
+        try:
+            self.assertTrue(_is_binary_file(path))
+        finally:
+            os.unlink(path)
+
+    def test_nonexistent_file_returns_true(self):
+        self.assertTrue(_is_binary_file('/nonexistent/file.xyz'))
+
+
+class TestExtractAddedLines(unittest.TestCase):
+    """Tests for hooks.extract_added_lines."""
+
+    def test_basic_diff(self):
+        diff = (
+            "diff --git a/file.py b/file.py\n"
+            "+++ b/file.py\n"
+            "@@ -0,0 +1,3 @@\n"
+            "+line one\n"
+            "+line two\n"
+            "+line three\n"
+        )
+        result = extract_added_lines(diff)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0], ('file.py', 1, 'line one'))
+        self.assertEqual(result[1], ('file.py', 2, 'line two'))
+        self.assertEqual(result[2], ('file.py', 3, 'line three'))
+
+    def test_multi_hunk(self):
+        diff = (
+            "+++ b/file.py\n"
+            "@@ -10,3 +10,4 @@\n"
+            " unchanged\n"
+            "+added at 11\n"
+            " unchanged\n"
+            "@@ -20,0 +21,1 @@\n"
+            "+added at 21\n"
+        )
+        result = extract_added_lines(diff)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0][1], 11)  # line number
+        self.assertEqual(result[1][1], 21)
+
+    def test_malformed_hunk_header(self):
+        diff = (
+            "+++ b/file.py\n"
+            "@@ malformed header @@\n"
+            "+added line\n"
+        )
+        result = extract_added_lines(diff)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0][1], 0)  # fallback line number
+
+    def test_empty_diff(self):
+        self.assertEqual(extract_added_lines(''), [])
+
+    def test_no_additions(self):
+        diff = (
+            "+++ b/file.py\n"
+            "@@ -1,3 +1,2 @@\n"
+            " kept\n"
+            "-removed\n"
+            " kept\n"
+        )
+        result = extract_added_lines(diff)
+        self.assertEqual(len(result), 0)
+
+
+class TestApplyConfigToArgs(unittest.TestCase):
+    """Tests for config.apply_config_to_args."""
+
+    def _make_args(self, **kwargs):
+        """Create a simple namespace mimicking argparse output."""
+        defaults = {
+            'min_confidence': 0.0,
+            'require_context': False,
+            'no_dedup': False,
+            'max_matches': 50000,
+            'format': 'text',
+            'categories': None,
+        }
+        defaults.update(kwargs)
+        return argparse.Namespace(**defaults)
+
+    def test_config_overrides_defaults(self):
+        args = self._make_args()
+        config = {'min_confidence': 0.7, 'require_context': True, 'format': 'json'}
+        apply_config_to_args(config, args)
+        self.assertEqual(args.min_confidence, 0.7)
+        self.assertTrue(args.require_context)
+        self.assertEqual(args.format, 'json')
+
+    def test_cli_args_take_precedence(self):
+        args = self._make_args(min_confidence=0.5, format='csv')
+        config = {'min_confidence': 0.7, 'format': 'json'}
+        apply_config_to_args(config, args)
+        # min_confidence was explicitly set to 0.5 (not default 0.0), so config shouldn't override
+        self.assertEqual(args.min_confidence, 0.5)
+        self.assertEqual(args.format, 'csv')
+
+    def test_deduplicate_config(self):
+        args = self._make_args()
+        config = {'deduplicate': False}
+        apply_config_to_args(config, args)
+        self.assertTrue(args.no_dedup)
+
+    def test_categories_from_config(self):
+        args = self._make_args()
+        config = {'categories': ['Credit Card Numbers']}
+        apply_config_to_args(config, args)
+        self.assertEqual(args.categories, ['Credit Card Numbers'])
+
+
+class TestFormatters(unittest.TestCase):
+    """Tests for CLI output formatters."""
+
+    def _make_matches(self):
+        return [
+            Match(text='test@example.com', category='Contact Information',
+                  sub_category='Email Address', confidence=0.9, span=(0, 16)),
+            Match(text='123-45-6789', category='PII', sub_category='USA SSN',
+                  has_context=True, confidence=0.75, span=(20, 31)),
+        ]
+
+    def test_format_text_empty(self):
+        from dlpscan.input import _format_text
+        result = _format_text([])
+        self.assertIn('No sensitive data', result)
+
+    def test_format_text_with_matches(self):
+        from dlpscan.input import _format_text
+        result = _format_text(self._make_matches())
+        self.assertIn('2 potential match', result)
+        self.assertIn('Email Address', result)
+        self.assertIn('USA SSN', result)
+
+    def test_format_text_with_file_context(self):
+        from dlpscan.input import _format_text
+        findings = [('src/main.py', m) for m in self._make_matches()]
+        result = _format_text(findings, file_context=True)
+        self.assertIn('src/main.py', result)
+
+    def test_format_json(self):
+        from dlpscan.input import _format_json
+        result = json.loads(_format_json(self._make_matches()))
+        self.assertEqual(len(result), 2)
+        self.assertIn('text', result[0])
+
+    def test_format_json_with_file_context(self):
+        from dlpscan.input import _format_json
+        findings = [('src/main.py', m) for m in self._make_matches()]
+        result = json.loads(_format_json(findings, file_context=True))
+        self.assertEqual(result[0]['file'], 'src/main.py')
+
+    def test_format_csv(self):
+        from dlpscan.input import _format_csv
+        import io as _io
+        buf = _io.StringIO()
+        _format_csv(self._make_matches(), buf)
+        output = buf.getvalue()
+        self.assertIn('text,category', output)
+        self.assertIn('test@example.com', output)
+
+    def test_format_csv_with_file_context(self):
+        from dlpscan.input import _format_csv
+        import io as _io
+        buf = _io.StringIO()
+        findings = [('src/main.py', m) for m in self._make_matches()]
+        _format_csv(findings, buf, file_context=True)
+        output = buf.getvalue()
+        self.assertIn('file,text', output)
+        self.assertIn('src/main.py', output)
+
+
+class TestUnregisterCleanup(unittest.TestCase):
+    """Test that unregister_patterns properly cleans up metadata."""
+
+    def test_unregister_cleans_specificity(self):
+        register_patterns(
+            category='CleanupTest',
+            patterns={'TestPat': re.compile(r'\bCLN-\d{4}\b')},
+            specificity={'TestPat': 0.99},
+        )
+        self.assertIn('TestPat', PATTERN_SPECIFICITY)
+        unregister_patterns('CleanupTest')
+        self.assertNotIn('TestPat', PATTERN_SPECIFICITY)
+
+    def test_unregister_cleans_context_required(self):
+        from dlpscan import scanner
+        register_patterns(
+            category='CleanupTest2',
+            patterns={'BroadPat': re.compile(r'\bBRD\d+\b')},
+            context_required={'BroadPat'},
+        )
+        self.assertIn('BroadPat', scanner.CONTEXT_REQUIRED_PATTERNS)
+        unregister_patterns('CleanupTest2')
+        self.assertNotIn('BroadPat', scanner.CONTEXT_REQUIRED_PATTERNS)
+
+
+class TestChunkOverlapDedup(unittest.TestCase):
+    """Test that chunked scanning doesn't produce duplicate matches."""
+
+    def test_no_duplicate_matches_at_boundary(self):
+        # Create a file where a match falls near a chunk boundary.
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            # Write padding + email at position that will be in overlap zone.
+            padding = 'x' * 50
+            f.write(f"{padding} email: test@example.com {padding}\n")
+            path = f.name
+        try:
+            # Use tiny chunk size to force overlap processing.
+            results = list(scan_file(
+                path, categories={'Contact Information'},
+                chunk_size=60, chunk_overlap=30,
+            ))
+            emails = [m for m in results if m.sub_category == 'Email Address']
+            # Should have exactly 1, not duplicated.
+            self.assertEqual(len(emails), 1)
+        finally:
+            os.unlink(path)
+
+
+class TestConfigMutableDefaults(unittest.TestCase):
+    """Test that load_config doesn't mutate shared defaults."""
+
+    def test_mutating_config_does_not_affect_defaults(self):
+        config1 = load_config()
+        config1['allowlist'].append('should_not_leak')
+        config2 = load_config()
+        self.assertNotIn('should_not_leak', config2['allowlist'])
+
+
+class TestScanFileEdgeCases(unittest.TestCase):
+    """Edge case tests for scan_file."""
+
+    def test_empty_file(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            path = f.name
+        try:
+            results = list(scan_file(path))
+            self.assertEqual(len(results), 0)
+        finally:
+            os.unlink(path)
+
+    def test_unicode_error_in_directory_scan(self):
+        """Binary files in a directory should be silently skipped."""
+        tmpdir = tempfile.mkdtemp()
+        # Create a file with null bytes (binary).
+        with open(os.path.join(tmpdir, 'binary.dat'), 'wb') as f:
+            f.write(b'\x00\x01\x02\x03')
+        try:
+            results = list(scan_directory(tmpdir))
+            # Should not raise, binary file silently skipped.
+            self.assertEqual(len(results), 0)
+        finally:
+            import shutil
+            shutil.rmtree(tmpdir)
 
 
 if __name__ == '__main__':
