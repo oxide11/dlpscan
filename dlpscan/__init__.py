@@ -57,6 +57,10 @@ from .guard import (
     Mode,
     InputGuardError,
     PRESET_CATEGORIES,
+    TokenVault,
+    tokenize_matches,
+    obfuscate_matches,
+    obfuscate_match,
 )
 
-__version__ = '1.1.0'
+__version__ = '1.2.0'

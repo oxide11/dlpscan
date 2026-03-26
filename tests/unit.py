@@ -2406,5 +2406,297 @@ class TestWebhookScanner(unittest.TestCase):
         self.assertFalse(result.is_clean)
 
 
+# ---------------------------------------------------------------------------
+# TokenVault
+# ---------------------------------------------------------------------------
+
+class TestTokenVault(unittest.TestCase):
+    """Test TokenVault tokenization and detokenization."""
+
+    def test_tokenize_returns_token(self):
+        from dlpscan.guard.transforms import TokenVault
+        vault = TokenVault()
+        token = vault.tokenize("4111111111111111", "Credit Card Numbers")
+        self.assertTrue(token.startswith("TOK_CC_"))
+        self.assertEqual(len(token), len("TOK_CC_") + 8)
+
+    def test_deterministic(self):
+        from dlpscan.guard.transforms import TokenVault
+        vault = TokenVault()
+        t1 = vault.tokenize("4111111111111111", "Credit Card Numbers")
+        t2 = vault.tokenize("4111111111111111", "Credit Card Numbers")
+        self.assertEqual(t1, t2)
+
+    def test_different_values_different_tokens(self):
+        from dlpscan.guard.transforms import TokenVault
+        vault = TokenVault()
+        t1 = vault.tokenize("4111111111111111", "Credit Card Numbers")
+        t2 = vault.tokenize("5500000000000004", "Credit Card Numbers")
+        self.assertNotEqual(t1, t2)
+
+    def test_detokenize(self):
+        from dlpscan.guard.transforms import TokenVault
+        vault = TokenVault()
+        token = vault.tokenize("secret123", "Generic Secrets")
+        original = vault.detokenize(token)
+        self.assertEqual(original, "secret123")
+
+    def test_detokenize_unknown(self):
+        from dlpscan.guard.transforms import TokenVault
+        vault = TokenVault()
+        self.assertIsNone(vault.detokenize("TOK_UNKNOWN_12345678"))
+
+    def test_detokenize_text(self):
+        from dlpscan.guard.transforms import TokenVault
+        vault = TokenVault()
+        t = vault.tokenize("4111111111111111", "Credit Card Numbers")
+        text = f"Card: {t} is tokenized"
+        restored = vault.detokenize_text(text)
+        self.assertEqual(restored, "Card: 4111111111111111 is tokenized")
+
+    def test_export_import(self):
+        from dlpscan.guard.transforms import TokenVault
+        vault1 = TokenVault()
+        vault1.tokenize("test@example.com", "Contact Information")
+        exported = vault1.export_map()
+        vault2 = TokenVault()
+        vault2.import_map(exported)
+        for token, original in exported.items():
+            self.assertEqual(vault2.detokenize(token), original)
+
+    def test_clear(self):
+        from dlpscan.guard.transforms import TokenVault
+        vault = TokenVault()
+        vault.tokenize("test", "Generic Secrets")
+        self.assertEqual(vault.size, 1)
+        vault.clear()
+        self.assertEqual(vault.size, 0)
+
+    def test_secret_key(self):
+        from dlpscan.guard.transforms import TokenVault
+        v1 = TokenVault(secret="key1")
+        v2 = TokenVault(secret="key2")
+        t1 = v1.tokenize("data", "Generic Secrets")
+        t2 = v2.tokenize("data", "Generic Secrets")
+        self.assertNotEqual(t1, t2)
+
+    def test_custom_prefix(self):
+        from dlpscan.guard.transforms import TokenVault
+        vault = TokenVault(prefix="DLP")
+        token = vault.tokenize("test", "Generic Secrets")
+        self.assertTrue(token.startswith("DLP_"))
+
+    def test_thread_safety(self):
+        from dlpscan.guard.transforms import TokenVault
+        import threading
+        vault = TokenVault()
+        errors = []
+
+        def worker(i):
+            try:
+                for j in range(50):
+                    t = vault.tokenize(f"val_{i}_{j}", "Generic Secrets")
+                    r = vault.detokenize(t)
+                    if r != f"val_{i}_{j}":
+                        errors.append(f"Mismatch: {r}")
+            except Exception as e:
+                errors.append(str(e))
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(errors, [])
+
+
+# ---------------------------------------------------------------------------
+# Obfuscation
+# ---------------------------------------------------------------------------
+
+class TestObfuscation(unittest.TestCase):
+    """Test obfuscation generators."""
+
+    def test_obfuscate_credit_card(self):
+        from dlpscan.guard.transforms import obfuscate_match
+        m = Match(text='4111111111111111', category='Credit Card Numbers',
+                  sub_category='Visa', confidence=0.9, span=(0, 16))
+        fake = obfuscate_match(m)
+        self.assertEqual(len(fake), 16)
+        self.assertTrue(fake.isdigit())
+        self.assertNotEqual(fake, '4111111111111111')
+
+    def test_obfuscate_credit_card_preserves_format(self):
+        from dlpscan.guard.transforms import obfuscate_match
+        m = Match(text='4111-1111-1111-1111', category='Credit Card Numbers',
+                  sub_category='Visa', confidence=0.9, span=(0, 19))
+        fake = obfuscate_match(m)
+        self.assertEqual(len(fake), 19)
+        self.assertEqual(fake[4], '-')
+        self.assertEqual(fake[9], '-')
+        self.assertEqual(fake[14], '-')
+
+    def test_obfuscate_email(self):
+        from dlpscan.guard.transforms import obfuscate_match
+        m = Match(text='user@test.com', category='Contact Information',
+                  sub_category='Email Address', confidence=0.9, span=(0, 13))
+        fake = obfuscate_match(m)
+        self.assertIn('@', fake)
+        self.assertNotEqual(fake, 'user@test.com')
+
+    def test_obfuscate_ssn(self):
+        from dlpscan.guard.transforms import obfuscate_match
+        m = Match(text='123-45-6789', category='North America - United States',
+                  sub_category='USA SSN', confidence=0.9, span=(0, 11))
+        fake = obfuscate_match(m)
+        self.assertEqual(len(fake), 11)
+        self.assertEqual(fake[3], '-')
+        self.assertEqual(fake[6], '-')
+
+    def test_obfuscate_secret(self):
+        from dlpscan.guard.transforms import obfuscate_match
+        m = Match(text='ghp_abcdef1234567890', category='Code Platform Secrets',
+                  sub_category='GitHub Token (Classic)', confidence=0.9, span=(0, 20))
+        fake = obfuscate_match(m)
+        self.assertEqual(len(fake), 20)
+        self.assertNotEqual(fake, 'ghp_abcdef1234567890')
+
+    def test_obfuscate_generic_fallback(self):
+        from dlpscan.guard.transforms import obfuscate_match
+        m = Match(text='ABC-1234', category='Unknown Category',
+                  sub_category='Unknown Pattern', confidence=0.5, span=(0, 8))
+        fake = obfuscate_match(m)
+        self.assertEqual(len(fake), 8)
+        self.assertEqual(fake[3], '-')
+
+    def test_obfuscate_ipv4(self):
+        from dlpscan.guard.transforms import obfuscate_match
+        m = Match(text='192.168.1.1', category='Contact Information',
+                  sub_category='IPv4 Address', confidence=0.9, span=(0, 11))
+        fake = obfuscate_match(m)
+        parts = fake.split('.')
+        self.assertEqual(len(parts), 4)
+
+
+# ---------------------------------------------------------------------------
+# InputGuard TOKENIZE action
+# ---------------------------------------------------------------------------
+
+class TestTokenizeAction(unittest.TestCase):
+    """Test InputGuard with action=TOKENIZE."""
+
+    def test_tokenize_via_scan(self):
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.TOKENIZE)
+        result = guard.scan("Card: 4111111111111111")
+        self.assertFalse(result.is_clean)
+        self.assertIn('TOK_CC_', result.redacted_text)
+        self.assertNotIn('4111111111111111', result.redacted_text)
+        self.assertIsNotNone(result.token_vault)
+
+    def test_tokenize_convenience_method(self):
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
+        tokenized, vault = guard.tokenize("Card: 4111111111111111")
+        self.assertIn('TOK_CC_', tokenized)
+        self.assertGreater(vault.size, 0)
+
+    def test_detokenize_round_trip(self):
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.TOKENIZE)
+        original = "Card: 4111111111111111"
+        result = guard.scan(original)
+        restored = guard.detokenize(result.redacted_text)
+        self.assertEqual(restored, original)
+
+    def test_tokenize_clean_text(self):
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.TOKENIZE)
+        result = guard.scan("No cards here")
+        self.assertTrue(result.is_clean)
+        self.assertIsNone(result.redacted_text)
+
+    def test_tokenize_multiple_matches(self):
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.PCI_DSS, Preset.CONTACT_INFO],
+                          action=Action.TOKENIZE)
+        text = "Card: 4111111111111111 Email: test@example.com"
+        result = guard.scan(text)
+        self.assertNotIn('4111111111111111', result.redacted_text)
+        self.assertNotIn('test@example.com', result.redacted_text)
+        restored = guard.detokenize(result.redacted_text)
+        self.assertEqual(restored, text)
+
+    def test_tokenize_with_custom_vault(self):
+        from dlpscan.guard import InputGuard, Preset, Action, TokenVault
+        vault = TokenVault(prefix="MYAPP", secret="s3cret")
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.TOKENIZE,
+                          token_vault=vault)
+        result = guard.scan("Card: 4111111111111111")
+        self.assertIn('MYAPP_CC_', result.redacted_text)
+
+
+# ---------------------------------------------------------------------------
+# InputGuard OBFUSCATE action
+# ---------------------------------------------------------------------------
+
+class TestObfuscateAction(unittest.TestCase):
+    """Test InputGuard with action=OBFUSCATE."""
+
+    def test_obfuscate_via_scan(self):
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.OBFUSCATE)
+        result = guard.scan("Card: 4111111111111111")
+        self.assertFalse(result.is_clean)
+        self.assertNotIn('4111111111111111', result.redacted_text)
+        self.assertIn('Card: ', result.redacted_text)
+        # Fake card should be digits.
+        fake_part = result.redacted_text.replace('Card: ', '')
+        self.assertTrue(fake_part.isdigit())
+
+    def test_obfuscate_convenience_method(self):
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.CONTACT_INFO], action=Action.FLAG)
+        obfuscated = guard.obfuscate("Email: user@test.com")
+        self.assertNotIn('user@test.com', obfuscated)
+        self.assertIn('@', obfuscated)
+
+    def test_obfuscate_clean_text(self):
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.OBFUSCATE)
+        result = guard.scan("No cards here")
+        self.assertTrue(result.is_clean)
+
+    def test_obfuscate_irreversible(self):
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.OBFUSCATE)
+        result = guard.scan("Card: 4111111111111111")
+        # Obfuscation should not put tokens — no way to reverse.
+        self.assertNotIn('TOK_', result.redacted_text)
+
+    def test_obfuscate_decorator(self):
+        from dlpscan.guard import InputGuard, Preset, Action
+        guard = InputGuard(presets=[Preset.CONTACT_INFO], action=Action.OBFUSCATE)
+
+        @guard.protect(param='msg')
+        def log_it(msg):
+            return msg
+
+        result = log_it("Contact user@test.com")
+        self.assertNotIn('user@test.com', result)
+
+    def test_string_action_tokenize(self):
+        from dlpscan.guard import InputGuard, Preset
+        guard = InputGuard(presets=[Preset.PCI_DSS], action='tokenize')
+        result = guard.scan("Card: 4111111111111111")
+        self.assertIn('TOK_', result.redacted_text)
+
+    def test_string_action_obfuscate(self):
+        from dlpscan.guard import InputGuard, Preset
+        guard = InputGuard(presets=[Preset.PCI_DSS], action='obfuscate')
+        result = guard.scan("Card: 4111111111111111")
+        self.assertNotIn('4111111111111111', result.redacted_text)
+
+
 if __name__ == '__main__':
     unittest.main()

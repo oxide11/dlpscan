@@ -21,6 +21,12 @@ from .enums import (
     Action,
     Mode,
 )
+from .transforms import (
+    TokenVault,
+    tokenize_matches,
+    obfuscate_matches,
+    obfuscate_match,
+)
 
 __all__ = [
     'InputGuard',
@@ -30,4 +36,8 @@ __all__ = [
     'PRESET_CATEGORIES',
     'Action',
     'Mode',
+    'TokenVault',
+    'tokenize_matches',
+    'obfuscate_matches',
+    'obfuscate_match',
 ]

@@ -2,6 +2,35 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [1.2.0] - 2026-03-26
+
+### New Features
+
+- **Tokenization** (`Action.TOKENIZE`): Replace sensitive data with reversible
+  tokens (e.g., `4111111111111111` → `TOK_CC_b2a983d8`). A `TokenVault` stores
+  the mapping for later recovery via `guard.detokenize()` or `vault.detokenize_text()`.
+  Deterministic (HMAC-SHA256), thread-safe, with export/import support.
+- **Obfuscation** (`Action.OBFUSCATE`): Replace sensitive data with realistic-looking
+  fake data of the same type (credit cards with valid Luhn checksums, fake emails,
+  format-preserving SSNs/phones/IBANs). Irreversible — ideal for test datasets.
+- **Convenience methods**: `guard.tokenize(text)` returns `(tokenized_text, vault)`,
+  `guard.obfuscate(text)` returns obfuscated text, `guard.detokenize(text)` reverses.
+- **TokenVault**: Standalone class with `tokenize()`, `detokenize()`,
+  `detokenize_text()`, `export_map()`, `import_map()`, `clear()`. Custom prefix
+  and HMAC secret support.
+
+### New Files
+
+- `dlpscan/guard/transforms.py` — TokenVault, obfuscation generators, tokenize_matches, obfuscate_matches
+
+### Tests
+
+- Expanded from 257 to 288 unit tests.
+- New test classes: `TestTokenVault`, `TestObfuscation`, `TestTokenizeAction`,
+  `TestObfuscateAction`.
+
+---
+
 ## [1.1.0] - 2026-03-26
 
 ### New Features
