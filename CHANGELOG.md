@@ -24,6 +24,34 @@ All notable changes to dlpscan will be documented in this file.
 - **Directory Scanning for Images**: `scan_directory()` now processes image and
   document files via the extraction pipeline instead of skipping them as binary files.
 
+### Security
+
+- **Timing-safe API key comparison**: API key validation now uses `hmac.compare_digest()`
+  to prevent timing side-channel attacks.
+- **Request body size limits**: All API text fields capped at 1 MB to prevent memory
+  exhaustion from oversized payloads.
+- **Error message sanitization**: API 500 responses no longer leak internal exception
+  details to clients.
+- **PBKDF2 hardening**: Key derivation now uses random 16-byte salts (instead of a
+  hardcoded default) and 600,000 iterations per OWASP guidance (up from 100,000).
+- **File permission hardening**: Vault and audit log files are created with `0o600`
+  permissions (owner read/write only).
+- **Symlink attack prevention**: Vault and audit file paths are resolved and validated
+  to reject symbolic links.
+- **SQL injection prevention**: `scan_database()` now only allows `SELECT` queries.
+  Results are fetched in bounded batches of 1,000 rows instead of unbounded `fetchall()`.
+- **Metrics endpoint hardened**: Prometheus exporter binds to `127.0.0.1` instead of
+  `0.0.0.0` to prevent unauthorized network access.
+- **OCR config allowlist tightened**: Removed `--tessdata-dir`, `--user-words`, and
+  `--user-patterns` from the Tesseract config allowlist to prevent path traversal.
+- **ReDoS prevention**: HTML tag stripping regex now bounds match length to 1,000
+  characters.
+- **Token generation hardened**: `TokenVault` always uses HMAC with a random secret
+  (via `secrets.token_bytes()`) to prevent token precomputation.
+- **Rate limiter performance**: Replaced `list.pop(0)` O(n) with `deque.popleft()` O(1).
+- **JSON recursion depth limit**: `_extract_json_strings()` now caps recursion at depth
+  64 to prevent stack overflow from deeply nested payloads.
+
 ### Documentation
 
 - Added OCR Scanning guide with installation, usage, and configuration examples.

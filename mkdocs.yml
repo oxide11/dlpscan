@@ -50,6 +50,7 @@ nav:
       - Observability: enterprise/observability.md
       - Batch Scanning: enterprise/batch.md
       - Rate Limiting: enterprise/rate-limiting.md
+      - Security Hardening: enterprise/security.md
       - Environment Variables: enterprise/env-config.md
   - Deployment:
       - Docker: deployment/docker.md
