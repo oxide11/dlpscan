@@ -2,6 +2,32 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [1.5.0] - 2026-03-26
+
+### New Features
+
+- **OCR Scanning** (`dlpscan.ocr`): Extract and scan text from images and scanned
+  PDFs using Tesseract OCR. Supports PNG, JPEG, TIFF, BMP, and WebP formats.
+  Image preprocessing (grayscale, thresholding, DPI normalization) for improved
+  accuracy. Confidence scoring with low-quality warnings.
+  `pip install dlpscan[ocr]` for image OCR, `pip install dlpscan[pdf-ocr]` for
+  PDF OCR support.
+
+- **PDF OCR Fallback**: The PDF extractor now automatically falls back to OCR for
+  scanned pages that yield no extractable text. Mixed PDFs (typed + scanned pages)
+  are handled efficiently with per-page hybrid extraction.
+
+- **Image Extractors**: Image files (.png, .jpg, .jpeg, .tiff, .bmp, .webp) are now
+  registered in the extractor registry. `extract_text()`, `Pipeline`, and
+  `scan_directory()` all support image files natively when OCR is installed.
+
+- **Directory Scanning for Images**: `scan_directory()` now processes image and
+  document files via the extraction pipeline instead of skipping them as binary files.
+
+### Documentation
+
+- Added OCR Scanning guide with installation, usage, and configuration examples.
+
 ## [1.4.0] - 2026-03-26
 
 ### New Features

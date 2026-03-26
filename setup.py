@@ -5,7 +5,7 @@ long_description = Path('README.md').read_text(encoding='utf-8')
 
 setup(
     name='dlpscan',
-    version='1.4.0',
+    version='1.5.0',
     author='Moussa Noun',
     author_email='moussa@polygoncyber.com',
     packages=find_packages(),

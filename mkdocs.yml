@@ -39,6 +39,7 @@ nav:
       - Tokenization & Obfuscation: guide/transforms.md
       - Masking Profiles: guide/profiles.md
       - Policy Engine: guide/policy.md
+      - OCR Scanning: guide/ocr.md
       - Streaming & Webhooks: guide/streaming.md
   - Enterprise:
       - REST API: enterprise/api.md

@@ -662,20 +662,36 @@ _SKIP_DIRS = frozenset({
 
 _BINARY_EXTENSIONS = frozenset({
     '.pyc', '.pyo', '.so', '.dylib', '.dll', '.exe', '.bin',
-    '.png', '.jpg', '.jpeg', '.gif', '.ico', '.bmp', '.tiff',
+    '.gif', '.ico',
     '.mp3', '.mp4', '.avi', '.mov', '.mkv', '.wav', '.flac',
     '.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar',
-    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
     '.woff', '.woff2', '.ttf', '.eot', '.otf',
     '.sqlite', '.db', '.pickle', '.pkl',
 })
+
+# Extensions that require extractors (not raw text reading).
+# scan_directory delegates these to the extraction pipeline.
+_EXTRACTOR_EXTENSIONS = frozenset({
+    '.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif', '.webp',
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+})
+
+
+def _has_extractor(path: str) -> bool:
+    """Check if a file has a registered extractor (e.g. images, Office docs)."""
+    _, ext = os.path.splitext(path)
+    return ext.lower() in _EXTRACTOR_EXTENSIONS
 
 
 def _is_binary_file(path: str) -> bool:
     """Quick heuristic to detect binary files."""
     _, ext = os.path.splitext(path)
-    if ext.lower() in _BINARY_EXTENSIONS:
+    ext_lower = ext.lower()
+    if ext_lower in _BINARY_EXTENSIONS:
         return True
+    # Files with extractors are handled separately, not as binary.
+    if ext_lower in _EXTRACTOR_EXTENSIONS:
+        return False
     # Check first 8KB for null bytes
     try:
         with open(path, 'rb') as f:
@@ -738,6 +754,28 @@ def scan_directory(
                 continue
 
             try:
+                # Files with registered extractors (images, Office docs, PDFs)
+                # are processed via text extraction first.
+                if _has_extractor(file_path):
+                    try:
+                        from .extractors import extract_text as _extract
+                        result = _extract(file_path)
+                        if result.text:
+                            for m in enhanced_scan_text(
+                                result.text,
+                                categories=categories,
+                                require_context=require_context,
+                                max_matches=max_matches - total_yielded,
+                                deduplicate=deduplicate,
+                            ):
+                                yield (rel_path, m)
+                                total_yielded += 1
+                                if total_yielded >= max_matches:
+                                    return
+                    except Exception as exc:
+                        logger.debug("Extractor failed for %s: %s", file_path, exc)
+                    continue
+
                 for m in scan_file(
                     file_path,
                     categories=categories,

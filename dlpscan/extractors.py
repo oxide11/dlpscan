@@ -147,7 +147,11 @@ def _extract_plain_text(file_path: str) -> ExtractionResult:
 
 
 def _extract_pdf(file_path: str) -> ExtractionResult:
-    """Extract text from a PDF file using pdfplumber."""
+    """Extract text from a PDF file using pdfplumber with OCR fallback.
+
+    Pages that yield no text via pdfplumber are automatically processed
+    with OCR if pytesseract is available.
+    """
     try:
         import pdfplumber
     except ImportError:
@@ -158,6 +162,7 @@ def _extract_pdf(file_path: str) -> ExtractionResult:
 
     warnings = []
     pages_text = []
+    empty_pages = []
     metadata = {}
 
     try:
@@ -169,15 +174,60 @@ def _extract_pdf(file_path: str) -> ExtractionResult:
             for i, page in enumerate(pdf.pages):
                 try:
                     page_text = page.extract_text()
-                    if page_text:
-                        pages_text.append(page_text)
+                    if page_text and page_text.strip():
+                        pages_text.append((i, page_text))
+                    else:
+                        empty_pages.append(i)
                 except Exception as exc:
                     warnings.append(f"Page {i + 1}: extraction failed ({exc})")
+                    empty_pages.append(i)
     except Exception as exc:
         raise ExtractionError(f"Failed to open PDF: {exc}")
 
+    # OCR fallback for pages that yielded no text.
+    if empty_pages:
+        try:
+            from .ocr import ocr_available
+            if ocr_available():
+                from pdf2image import convert_from_path
+
+                from .ocr import DEFAULT_CONFIG, DEFAULT_LANG, _ensure_pytesseract
+                pytesseract = _ensure_pytesseract()
+                for page_idx in empty_pages:
+                    try:
+                        images = convert_from_path(
+                            file_path, dpi=300,
+                            first_page=page_idx + 1,
+                            last_page=page_idx + 1,
+                            thread_count=1,
+                        )
+                        if images:
+                            page_text = pytesseract.image_to_string(
+                                images[0], lang=DEFAULT_LANG, config=DEFAULT_CONFIG
+                            ).strip()
+                            if page_text:
+                                pages_text.append((page_idx, page_text))
+                                metadata.setdefault('ocr_pages', []).append(page_idx + 1)
+                    except Exception as exc:
+                        warnings.append(f"Page {page_idx + 1}: OCR fallback failed ({exc})")
+            else:
+                if empty_pages:
+                    warnings.append(
+                        f"{len(empty_pages)} page(s) had no extractable text. "
+                        "Install dlpscan[ocr] for OCR fallback."
+                    )
+        except ImportError:
+            warnings.append(
+                f"{len(empty_pages)} page(s) had no extractable text. "
+                "Install dlpscan[ocr] for OCR fallback."
+            )
+
+    # Sort pages by index and join.
+    pages_text.sort(key=lambda x: x[0])
+    combined = '\n\n'.join(text for _, text in pages_text)
+
     return ExtractionResult(
-        text='\n\n'.join(pages_text),
+        text=combined,
         format='pdf',
         metadata=metadata,
         warnings=warnings,
@@ -413,6 +463,40 @@ def _extract_msg(file_path: str) -> ExtractionResult:
     )
 
 
+def _extract_image_ocr(file_path: str) -> ExtractionResult:
+    """Extract text from an image file using OCR."""
+    try:
+        from .ocr import ocr_available, ocr_image
+    except ImportError:
+        raise ExtractionError(
+            "Image OCR requires 'pytesseract' and 'Pillow'. "
+            "Install with: pip install dlpscan[ocr]"
+        )
+
+    if not ocr_available():
+        raise ExtractionError(
+            "OCR is not available. Ensure Tesseract is installed: "
+            "apt install tesseract-ocr (Linux) or brew install tesseract (macOS). "
+            "Then: pip install dlpscan[ocr]"
+        )
+
+    try:
+        result = ocr_image(file_path)
+    except Exception as exc:
+        raise ExtractionError(f"Image OCR failed: {exc}")
+
+    return ExtractionResult(
+        text=result.text,
+        format='image_ocr',
+        metadata={
+            'ocr_confidence': result.confidence,
+            'ocr_language': result.language,
+            **result.metadata,
+        },
+        warnings=result.warnings,
+    )
+
+
 def _extract_legacy_office(file_path: str) -> ExtractionResult:
     """Placeholder for legacy Office formats (.doc, .xls, .ppt).
 
@@ -439,6 +523,10 @@ _EXTRACTORS['.msg'] = _extract_msg
 _EXTRACTORS['.doc'] = _extract_legacy_office
 _EXTRACTORS['.xls'] = _extract_legacy_office
 _EXTRACTORS['.ppt'] = _extract_legacy_office
+
+# Image formats — OCR extraction.
+for _ext in ('.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp', '.webp'):
+    _EXTRACTORS[_ext] = _extract_image_ocr
 
 # Common plain text extensions get explicit registration so they bypass
 # the binary-file heuristic in scan_directory.

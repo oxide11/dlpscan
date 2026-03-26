@@ -53,6 +53,14 @@ from .guard import (
 from .logging_config import configure_logging
 from .metrics import MetricsCollector, ScanMetrics, set_metrics_callback
 from .models import Match
+from .ocr import (
+    IMAGE_EXTENSIONS,
+    OCRResult,
+    ocr_available,
+    ocr_image,
+    ocr_pdf,
+    pdf_ocr_available,
+)
 from .patterns import PATTERNS
 from .pipeline import (
     FileJob,
@@ -97,4 +105,4 @@ from .siem import (
 )
 from .streaming import StreamScanner, WebhookScanner
 
-__version__ = '1.4.0'
+__version__ = '1.5.0'
