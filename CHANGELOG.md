@@ -70,6 +70,49 @@ All notable changes to dlpscan will be documented in this file.
 - **560 patterns** across **126 categories** (unchanged).
 - **178+ tests** (up from 148).
 
+## [1.0.2] - 2026-03-26
+
+### New Features
+
+- **InputGuard**: Developer-facing module for scanning and sanitizing application
+  inputs. Import into any Python app to protect against sensitive data ingestion.
+- **Denylist/Allowlist modes**: DENYLIST blocks specified categories (default: all).
+  ALLOWLIST permits only listed categories, blocking everything else detected.
+- **Compliance presets**: Pre-configured category bundles for common use cases:
+  - `Preset.PCI_DSS` — Credit card numbers, PANs, track data, card expiry
+  - `Preset.SSN_SIN` — US SSN/ITIN, Canada SIN
+  - `Preset.PII` — Personal identifiers, geolocation, device IDs, contact info
+  - `Preset.PII_STRICT` — All PII + all 80+ regional ID/passport/DL categories
+  - `Preset.CREDENTIALS` — API keys, tokens, secrets, webhooks
+  - `Preset.FINANCIAL` — Banking, credit cards, securities, crypto, wire transfers
+  - `Preset.HEALTHCARE` — Medical identifiers, insurance
+  - `Preset.CONTACT_INFO` — Email, phone, IP, MAC
+- **Actions**: `REJECT` (raise InputGuardError), `REDACT` (return sanitized text),
+  `FLAG` (return findings without modifying input).
+- **Decorator support**: `@guard.protect(param="user_input")` scans function
+  arguments before execution. Supports targeted params or all string args.
+- **Quick methods**: `guard.check(text)` returns bool, `guard.sanitize(text)`
+  always returns redacted text regardless of configured action.
+- **Detection callback**: `on_detect` callback invoked when sensitive data is found.
+- **Thread-safe**: InputGuard instances are immutable after init, safe to share.
+
+### New Files
+
+- `dlpscan/input_guard.py` — InputGuard, ScanResult, Preset, Action, Mode,
+  InputGuardError, PRESET_CATEGORIES
+
+### Tests
+
+- Expanded from 199 to 234 tests.
+- New test classes: `TestInputGuardBasic`, `TestInputGuardModes`,
+  `TestInputGuardPresets`, `TestInputGuardFiltering`, `TestInputGuardDecorator`,
+  `TestInputGuardScanResult`.
+
+### Totals
+
+- **560 patterns** across **126 categories** (unchanged).
+- **234 tests** (up from 199).
+
 ## [1.0.1] - 2026-03-26
 
 ### New Features

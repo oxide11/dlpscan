@@ -45,5 +45,14 @@ from .extractors import (
     supported_extensions,
 )
 from .pipeline import Pipeline, FileJob, PipelineResult
+from .input_guard import (
+    InputGuard,
+    ScanResult,
+    Preset,
+    Action,
+    Mode,
+    InputGuardError,
+    PRESET_CATEGORIES,
+)
 
 __version__ = '1.0.0'

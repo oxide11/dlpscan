@@ -34,6 +34,133 @@ pip install dlpscan[all-formats]  # Everything
 
 Supported formats: `.pdf`, `.docx`, `.xlsx`, `.pptx`, `.eml`, `.msg`, plus all plain text formats (`.txt`, `.csv`, `.json`, `.xml`, `.py`, `.js`, etc.). Files up to 100 MB by default.
 
+## Input Guard (Application Integration)
+
+The `InputGuard` module lets developers protect their applications against sensitive data ingestion. Import it, configure what to scan for, and use it to validate, sanitize, or reject user inputs.
+
+### Basic usage
+
+```python
+from dlpscan import InputGuard, Preset, Action
+
+# Block PCI-DSS data and SSN/SIN — raise on detection
+guard = InputGuard(presets=[Preset.PCI_DSS, Preset.SSN_SIN])
+guard.scan("My card is 4532015112830366")  # raises InputGuardError
+
+# Quick boolean check
+if guard.check(user_input):
+    process(user_input)  # Clean
+else:
+    reject(user_input)   # Contains sensitive data
+
+# Always get sanitized text
+clean = guard.sanitize("card: 4532015112830366")
+# "card: XXXXXXXXXXXXXXXX"
+```
+
+### Presets
+
+| Preset | What it blocks |
+|---|---|
+| `Preset.PCI_DSS` | Credit card numbers, PANs, track data, card expiry |
+| `Preset.SSN_SIN` | US SSN, ITIN, Canada SIN |
+| `Preset.PII` | Personal identifiers, geolocation, device IDs, contact info |
+| `Preset.PII_STRICT` | All PII + all 80+ regional national IDs, passports, DLs |
+| `Preset.CREDENTIALS` | API keys, tokens, secrets, database connection strings |
+| `Preset.FINANCIAL` | Banking, credit cards, securities, crypto, wire transfers |
+| `Preset.HEALTHCARE` | Medical identifiers, insurance codes |
+| `Preset.CONTACT_INFO` | Email, phone, IP, MAC |
+
+Combine multiple presets: `InputGuard(presets=[Preset.PCI_DSS, Preset.CREDENTIALS])`
+
+### Actions
+
+```python
+# REJECT: raise InputGuardError (default)
+guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REJECT)
+
+# REDACT: return sanitized text
+guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REDACT)
+result = guard.scan("card: 4532015112830366")
+print(result.redacted_text)  # "card: XXXXXXXXXXXXXXXX"
+
+# FLAG: return findings without modifying text
+guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
+result = guard.scan("card: 4532015112830366")
+print(result.is_clean)       # False
+print(result.findings)       # [Match(...)]
+```
+
+### Denylist vs Allowlist mode
+
+```python
+from dlpscan import InputGuard, Mode, Action
+
+# DENYLIST (default): block specific categories
+guard = InputGuard(
+    mode=Mode.DENYLIST,
+    categories={'Credit Card Numbers', 'Contact Information'},
+    action=Action.REJECT,
+)
+
+# ALLOWLIST: allow only specified categories, block everything else
+guard = InputGuard(
+    mode=Mode.ALLOWLIST,
+    categories={'Contact Information'},  # Only emails/phones are OK
+    action=Action.REJECT,
+)
+guard.scan("email: user@test.com")      # OK — email is allowed
+guard.scan("SSN: 123-45-6789")          # raises InputGuardError
+```
+
+### Decorator
+
+```python
+guard = InputGuard(presets=[Preset.PCI_DSS, Preset.SSN_SIN])
+
+# Protect specific parameters
+@guard.protect(param="comment")
+def save_comment(user_id: int, comment: str):
+    db.save(user_id, comment)
+
+# Protect multiple parameters
+@guard.protect(params=["name", "address"])
+def save_profile(name: str, address: str, age: int):
+    db.save(name, address, age)
+
+# Protect all string arguments
+@guard.protect()
+def handle_request(body: str, query: str):
+    process(body, query)
+
+# With REDACT action, arguments are sanitized before the function runs
+guard = InputGuard(presets=[Preset.CREDENTIALS], action=Action.REDACT)
+
+@guard.protect(param="log_message")
+def write_log(log_message: str):
+    # log_message is already sanitized — no secrets in logs
+    logger.info(log_message)
+```
+
+### Advanced options
+
+```python
+from dlpscan import InputGuard, Preset, Action, Allowlist
+
+guard = InputGuard(
+    presets=[Preset.PCI_DSS, Preset.SSN_SIN],
+    action=Action.REJECT,
+    min_confidence=0.5,          # Ignore low-confidence matches
+    require_context=True,        # Only flag matches with context keywords
+    redaction_char='*',          # Use * instead of X for redaction
+    allowlist=Allowlist(         # Suppress known false positives
+        texts=['test@example.com'],
+        patterns=['Hashtag'],
+    ),
+    on_detect=lambda r: log_alert(r),  # Callback on detection
+)
+```
+
 ## Quick Start
 
 ### Scan text for sensitive data
@@ -538,6 +665,7 @@ dlpscan/
 ├── async_scanner.py               # Async scanning wrappers
 ├── extractors.py                  # Text extraction from binary formats
 ├── pipeline.py                    # Queue-based file processing pipeline
+├── input_guard.py                 # Developer input guard (presets, modes, decorator)
 ├── exceptions.py                  # Exception hierarchy
 ├── py.typed                       # PEP 561 type marker
 ├── patterns/                      # Regex pattern definitions
@@ -563,7 +691,7 @@ coverage run -m unittest tests.unit -v
 coverage report
 ```
 
-199 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering, config loading, SARIF output, custom pattern registration, output redaction, metrics/observability, plugin system, structured logging, async scanning, text extraction, and the file processing pipeline.
+234 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering, config loading, SARIF output, custom pattern registration, output redaction, metrics/observability, plugin system, structured logging, async scanning, text extraction, the file processing pipeline, and the InputGuard module.
 
 ## Docker
 
