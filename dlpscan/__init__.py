@@ -44,7 +44,11 @@ from .extractors import (
     register_extractor,
     supported_extensions,
 )
-from .pipeline import Pipeline, FileJob, PipelineResult
+from .pipeline import (
+    Pipeline, FileJob, PipelineResult,
+    results_to_json, results_to_csv, results_to_sarif,
+)
+from .streaming import StreamScanner, WebhookScanner
 from .guard import (
     InputGuard,
     ScanResult,
@@ -55,4 +59,4 @@ from .guard import (
     PRESET_CATEGORIES,
 )
 
-__version__ = '1.0.0'
+__version__ = '1.1.0'

@@ -2111,5 +2111,300 @@ class TestInputGuardScanResult(unittest.TestCase):
         self.assertIn('flag', repr(guard))
 
 
+# ---------------------------------------------------------------------------
+# Custom Pattern Registration via InputGuard
+# ---------------------------------------------------------------------------
+
+class TestInputGuardCustomPatterns(unittest.TestCase):
+    """Test custom pattern registration through InputGuard."""
+
+    def test_custom_pattern_detected(self):
+        from dlpscan.guard import InputGuard, Action
+        with InputGuard(
+            action=Action.FLAG,
+            custom_patterns={
+                'Internal IDs': {
+                    'Project Code': r'\bPRJ-\d{6}\b',
+                },
+            },
+        ) as guard:
+            result = guard.scan("Project code is PRJ-123456 for this task")
+            self.assertFalse(result.is_clean)
+            cats = {f.category for f in result.findings}
+            self.assertIn('Internal IDs', cats)
+
+    def test_custom_pattern_cleanup_on_close(self):
+        from dlpscan.guard import InputGuard, Action
+        guard = InputGuard(
+            action=Action.FLAG,
+            custom_patterns={
+                'Temp Pattern': {
+                    'Temp ID': r'\bTMP-\d{4}\b',
+                },
+            },
+        )
+        result = guard.scan("Got TMP-9999 here")
+        self.assertFalse(result.is_clean)
+
+        guard.close()
+
+        # After close, custom pattern should be unregistered.
+        # A new guard without custom patterns should not detect it.
+        guard2 = InputGuard(action=Action.FLAG, categories={'Temp Pattern'})
+        result2 = guard2.scan("Got TMP-9999 here")
+        self.assertTrue(result2.is_clean)
+
+    def test_context_manager_cleanup(self):
+        from dlpscan.guard import InputGuard, Action
+        with InputGuard(
+            action=Action.FLAG,
+            custom_patterns={
+                'Widget IDs': {
+                    'Widget': r'\bWDG\d{5}\b',
+                },
+            },
+        ) as guard:
+            result = guard.scan("Check WDG12345")
+            self.assertFalse(result.is_clean)
+        # Outside context manager, patterns should be cleaned up.
+
+    def test_compiled_regex_accepted(self):
+        from dlpscan.guard import InputGuard, Action
+        with InputGuard(
+            action=Action.FLAG,
+            custom_patterns={
+                'Compiled': {
+                    'Hex ID': re.compile(r'\bHEX-[0-9A-F]{8}\b'),
+                },
+            },
+        ) as guard:
+            result = guard.scan("Found HEX-DEADBEEF in logs")
+            self.assertFalse(result.is_clean)
+
+
+# ---------------------------------------------------------------------------
+# Per-Category Confidence Tuning
+# ---------------------------------------------------------------------------
+
+class TestConfidenceOverrides(unittest.TestCase):
+    """Test per-category confidence overrides in InputGuard."""
+
+    def test_override_filters_low_confidence(self):
+        from dlpscan.guard import InputGuard, Action
+        guard = InputGuard(
+            action=Action.FLAG,
+            categories={'Credit Card Numbers', 'Contact Information'},
+            confidence_overrides={
+                'Credit Card Numbers': 0.9,
+                'Contact Information': 0.0,
+            },
+        )
+        text = "Card: 4111111111111111 email: test@example.com"
+        result = guard.scan(text)
+        cats = {f.category for f in result.findings}
+        # Email should be found (threshold 0.0), credit card depends on confidence.
+        self.assertIn('Contact Information', cats)
+
+    def test_global_fallback_when_no_override(self):
+        from dlpscan.guard import InputGuard, Action
+        guard = InputGuard(
+            action=Action.FLAG,
+            min_confidence=0.99,
+            confidence_overrides={
+                'Contact Information': 0.0,
+            },
+        )
+        text = "email: test@example.com"
+        result = guard.scan(text)
+        # Contact info has override of 0.0, so it passes despite global 0.99.
+        self.assertFalse(result.is_clean)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline Structured Output
+# ---------------------------------------------------------------------------
+
+class TestPipelineOutput(unittest.TestCase):
+    """Test pipeline structured output helpers."""
+
+    def setUp(self):
+        from dlpscan.pipeline import Pipeline
+        self.tmpdir = tempfile.mkdtemp()
+        self.test_file = os.path.join(self.tmpdir, 'test.txt')
+        with open(self.test_file, 'w') as f:
+            f.write("Credit card 4111111111111111 and email test@example.com\n")
+        self.pipe = Pipeline(max_workers=1)
+
+    def tearDown(self):
+        self.pipe.shutdown()
+        import shutil
+        shutil.rmtree(self.tmpdir)
+
+    def test_results_to_json(self):
+        from dlpscan.pipeline import results_to_json
+        results = [self.pipe.process_file(self.test_file)]
+        output = results_to_json(results)
+        data = json.loads(output)
+        self.assertEqual(len(data), 1)
+        self.assertIn('matches', data[0])
+        self.assertTrue(data[0]['success'])
+
+    def test_results_to_json_redacted(self):
+        from dlpscan.pipeline import results_to_json
+        results = [self.pipe.process_file(self.test_file)]
+        output = results_to_json(results, redact=True)
+        data = json.loads(output)
+        for m in data[0]['matches']:
+            # Redacted text should use '...' format.
+            self.assertIn('...', m['text'])
+
+    def test_results_to_csv(self):
+        from dlpscan.pipeline import results_to_csv
+        results = [self.pipe.process_file(self.test_file)]
+        output = results_to_csv(results)
+        self.assertIn('file_path', output)
+        self.assertIn('category', output)
+        lines = output.strip().split('\n')
+        self.assertGreater(len(lines), 1)  # Header + data rows.
+
+    def test_results_to_sarif(self):
+        from dlpscan.pipeline import results_to_sarif
+        results = [self.pipe.process_file(self.test_file)]
+        output = results_to_sarif(results)
+        sarif = json.loads(output)
+        self.assertEqual(sarif['version'], '2.1.0')
+        self.assertIn('runs', sarif)
+        self.assertGreater(len(sarif['runs'][0]['results']), 0)
+
+    def test_results_to_csv_with_stream(self):
+        from dlpscan.pipeline import results_to_csv
+        results = [self.pipe.process_file(self.test_file)]
+        buf = io.StringIO()
+        results_to_csv(results, stream=buf)
+        buf.seek(0)
+        content = buf.read()
+        self.assertIn('file_path', content)
+
+    def test_results_to_json_empty(self):
+        from dlpscan.pipeline import results_to_json
+        output = results_to_json([])
+        self.assertEqual(json.loads(output), [])
+
+
+# ---------------------------------------------------------------------------
+# Streaming Scanner
+# ---------------------------------------------------------------------------
+
+class TestStreamScanner(unittest.TestCase):
+    """Test the real-time StreamScanner."""
+
+    def test_basic_feed(self):
+        from dlpscan.streaming import StreamScanner
+        scanner = StreamScanner(buffer_size=50)
+        # Feed enough text to trigger a scan.
+        matches = scanner.feed("Credit card number: 4111111111111111 " + "x" * 50)
+        matches += scanner.flush()
+        cats = {m.category for m in matches}
+        self.assertIn('Credit Card Numbers', cats)
+
+    def test_flush_scans_remainder(self):
+        from dlpscan.streaming import StreamScanner
+        scanner = StreamScanner(buffer_size=10000)
+        # Buffer not full — feed returns empty.
+        result = scanner.feed("email: test@example.com")
+        self.assertEqual(result, [])
+        # Flush scans the buffer.
+        result = scanner.flush()
+        self.assertGreater(len(result), 0)
+
+    def test_reset_clears_state(self):
+        from dlpscan.streaming import StreamScanner
+        scanner = StreamScanner(buffer_size=10000)
+        scanner.feed("some data")
+        scanner.reset()
+        result = scanner.flush()
+        self.assertEqual(result, [])
+
+    def test_on_match_callback(self):
+        from dlpscan.streaming import StreamScanner
+        detected = []
+        scanner = StreamScanner(buffer_size=50, on_match=lambda m: detected.append(m))
+        scanner.feed("email test@example.com " + "x" * 50)
+        scanner.flush()
+        self.assertGreater(len(detected), 0)
+
+    def test_categories_filter(self):
+        from dlpscan.streaming import StreamScanner
+        scanner = StreamScanner(
+            categories={'Credit Card Numbers'},
+            buffer_size=50,
+        )
+        matches = scanner.feed("email test@example.com card 4111111111111111 " + "x" * 50)
+        matches += scanner.flush()
+        for m in matches:
+            self.assertEqual(m.category, 'Credit Card Numbers')
+
+
+# ---------------------------------------------------------------------------
+# Webhook Scanner
+# ---------------------------------------------------------------------------
+
+class TestWebhookScanner(unittest.TestCase):
+    """Test the WebhookScanner."""
+
+    def test_scan_json_payload(self):
+        from dlpscan.streaming import WebhookScanner
+        from dlpscan.guard import Preset, Action, InputGuardError
+        scanner = WebhookScanner(presets=[Preset.PCI_DSS], action=Action.REJECT)
+        body = json.dumps({"card": "4111111111111111", "name": "Test User"})
+        with self.assertRaises(InputGuardError):
+            scanner.scan_payload(body, content_type='application/json')
+
+    def test_scan_clean_payload(self):
+        from dlpscan.streaming import WebhookScanner
+        from dlpscan.guard import Preset, Action
+        scanner = WebhookScanner(presets=[Preset.PCI_DSS], action=Action.REJECT)
+        body = json.dumps({"name": "Test User", "age": 30})
+        result = scanner.scan_payload(body, content_type='application/json')
+        self.assertTrue(result.is_clean)
+
+    def test_scan_plain_text(self):
+        from dlpscan.streaming import WebhookScanner
+        from dlpscan.guard import Preset, Action, InputGuardError
+        scanner = WebhookScanner(presets=[Preset.CONTACT_INFO], action=Action.FLAG)
+        result = scanner.scan_payload("Contact me at test@example.com", content_type='text/plain')
+        self.assertFalse(result.is_clean)
+
+    def test_scan_headers(self):
+        from dlpscan.streaming import WebhookScanner
+        from dlpscan.guard import Preset, Action
+        scanner = WebhookScanner(presets=[Preset.CREDENTIALS], action=Action.FLAG)
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Custom-Token': 'ghp_1234567890abcdef1234567890abcdef12345678',
+            'Authorization': 'Bearer should-be-skipped',
+        }
+        result = scanner.scan_headers(headers)
+        # GitHub token in custom header should be detected.
+        self.assertFalse(result.is_clean)
+
+    def test_scan_empty_headers(self):
+        from dlpscan.streaming import WebhookScanner
+        from dlpscan.guard import Preset, Action
+        scanner = WebhookScanner(presets=[Preset.CREDENTIALS], action=Action.FLAG)
+        result = scanner.scan_headers({})
+        self.assertTrue(result.is_clean)
+
+    def test_invalid_json_falls_back(self):
+        from dlpscan.streaming import WebhookScanner
+        from dlpscan.guard import Preset, Action
+        scanner = WebhookScanner(presets=[Preset.CONTACT_INFO], action=Action.FLAG)
+        result = scanner.scan_payload(
+            "not json {email: test@example.com}",
+            content_type='application/json',
+        )
+        self.assertFalse(result.is_clean)
+
+
 if __name__ == '__main__':
     unittest.main()

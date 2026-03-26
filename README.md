@@ -142,6 +142,76 @@ def write_log(log_message: str):
     logger.info(log_message)
 ```
 
+### Custom patterns
+
+```python
+from dlpscan import InputGuard, Action
+
+# Register custom patterns directly in the guard
+with InputGuard(
+    action=Action.REJECT,
+    custom_patterns={
+        'Internal IDs': {
+            'Project Code': r'\bPRJ-\d{6}\b',
+            'Employee Badge': r'\bEMP\d{5}\b',
+        },
+    },
+) as guard:
+    guard.scan("Project PRJ-123456")  # raises InputGuardError
+# Patterns automatically unregistered on exit
+```
+
+### Per-category confidence tuning
+
+```python
+guard = InputGuard(
+    presets=[Preset.PCI_DSS, Preset.CONTACT_INFO],
+    action=Action.REJECT,
+    confidence_overrides={
+        'Credit Card Numbers': 0.9,    # High bar for credit cards
+        'Contact Information': 0.5,    # Lower bar for emails/phones
+    },
+)
+```
+
+### Streaming scanner
+
+```python
+from dlpscan.streaming import StreamScanner
+
+scanner = StreamScanner(
+    categories={'Credit Card Numbers'},
+    buffer_size=4096,
+    on_match=lambda m: alert(m),
+)
+
+for chunk in incoming_stream():
+    matches = scanner.feed(chunk)
+    for m in matches:
+        print(f"ALERT: {m.category}")
+
+# Flush remaining buffer
+matches = scanner.flush()
+```
+
+### Webhook scanner
+
+```python
+from dlpscan.streaming import WebhookScanner
+from dlpscan.guard import Preset, Action, InputGuardError
+
+webhook = WebhookScanner(presets=[Preset.PCI_DSS], action=Action.REJECT)
+
+# Scan JSON payload — extracts all nested string values
+try:
+    result = webhook.scan_payload(request.body, content_type='application/json')
+except InputGuardError:
+    return {"error": "Sensitive data detected"}, 400
+
+# Scan custom headers for leaked tokens
+result = webhook.scan_headers(dict(request.headers))
+```
+
 ### Advanced options
 
 ```python
@@ -665,6 +735,7 @@ dlpscan/
 ├── async_scanner.py               # Async scanning wrappers
 ├── extractors.py                  # Text extraction from binary formats
 ├── pipeline.py                    # Queue-based file processing pipeline
+├── streaming.py                   # Real-time stream & webhook scanners
 ├── guard/                         # Developer input guard subpackage
 │   ├── __init__.py                # Subpackage exports
 │   ├── core.py                    # InputGuard class, ScanResult, InputGuardError
@@ -687,7 +758,9 @@ dlpscan/
 ## Testing
 
 ```bash
-python -m unittest tests.unit -v
+python -m unittest tests.unit -v          # Unit tests (257 tests)
+python -m unittest tests.test_integration  # Integration tests
+python tests/benchmarks.py                 # Performance benchmarks
 
 # With coverage
 pip install dlpscan[dev]
@@ -695,7 +768,7 @@ coverage run -m unittest tests.unit -v
 coverage report
 ```
 
-234 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering, config loading, SARIF output, custom pattern registration, output redaction, metrics/observability, plugin system, structured logging, async scanning, text extraction, the file processing pipeline, and the InputGuard module.
+257 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering, config loading, SARIF output, custom pattern registration, output redaction, metrics/observability, plugin system, structured logging, async scanning, text extraction, the file processing pipeline, InputGuard module, custom patterns via InputGuard, per-category confidence tuning, pipeline structured output, streaming scanner, and webhook scanner.
 
 ## Docker
 

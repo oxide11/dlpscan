@@ -24,11 +24,12 @@ Usage::
 import functools
 import inspect
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Set, Union
+from typing import Callable, Dict, List, Optional, Set, Union
 
 from ..models import Match
-from ..scanner import enhanced_scan_text, redact_sensitive_info
+from ..scanner import enhanced_scan_text, redact_sensitive_info, register_patterns, unregister_patterns
 from ..allowlist import Allowlist
 from ..exceptions import EmptyInputError, ShortInputError
 from .enums import Action, Mode
@@ -143,6 +144,8 @@ class InputGuard:
         redaction_char: str = 'X',
         allowlist: Optional[Allowlist] = None,
         on_detect: Optional[Callable[['ScanResult'], None]] = None,
+        custom_patterns: Optional[Dict[str, Dict[str, str]]] = None,
+        confidence_overrides: Optional[Dict[str, float]] = None,
     ):
         # Normalize enum values from strings.
         self.mode = Mode(mode) if isinstance(mode, str) else mode
@@ -152,6 +155,18 @@ class InputGuard:
         self.redaction_char = redaction_char
         self.allowlist = allowlist
         self.on_detect = on_detect
+        self._confidence_overrides = confidence_overrides or {}
+        self._registered_categories: List[str] = []
+
+        # Register custom patterns if provided.
+        if custom_patterns:
+            for cat_name, sub_patterns in custom_patterns.items():
+                compiled = {
+                    name: re.compile(pattern) if isinstance(pattern, str) else pattern
+                    for name, pattern in sub_patterns.items()
+                }
+                register_patterns(category=cat_name, patterns=compiled)
+                self._registered_categories.append(cat_name)
 
         # Resolve categories from presets + explicit categories.
         resolved: Set[str] = set()
@@ -160,6 +175,9 @@ class InputGuard:
                 resolved |= PRESET_CATEGORIES.get(p, frozenset())
         if categories:
             resolved |= categories
+        # Include custom pattern categories in scan scope.
+        if self._registered_categories:
+            resolved |= set(self._registered_categories)
 
         if self.mode == Mode.DENYLIST:
             # In denylist mode, these are the categories to scan for.
@@ -187,8 +205,17 @@ class InputGuard:
         if self.allowlist:
             raw_matches = self.allowlist.filter_matches(raw_matches)
 
-        # Apply confidence threshold.
-        matches = [m for m in raw_matches if m.confidence >= self.min_confidence]
+        # Apply per-category confidence overrides.
+        if self._confidence_overrides:
+            filtered = []
+            for m in raw_matches:
+                threshold = self._confidence_overrides.get(m.category, self.min_confidence)
+                if m.confidence >= threshold:
+                    filtered.append(m)
+            matches = filtered
+        else:
+            # Apply global confidence threshold.
+            matches = [m for m in raw_matches if m.confidence >= self.min_confidence]
 
         # For allowlist mode: keep only findings NOT in the allowed set.
         if self.mode == Mode.ALLOWLIST and self._allowed_categories:
@@ -343,6 +370,19 @@ class InputGuard:
             result = result[:start] + redacted + result[end:]
 
         return result
+
+    def close(self) -> None:
+        """Unregister any custom patterns registered by this guard instance."""
+        for cat in self._registered_categories:
+            unregister_patterns(cat)
+        self._registered_categories.clear()
+
+    def __enter__(self) -> 'InputGuard':
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
 
     def __repr__(self) -> str:
         parts = [f"mode={self.mode.value}", f"action={self.action.value}"]

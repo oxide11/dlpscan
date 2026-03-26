@@ -1,0 +1,10 @@
+services:
+  dlpscan:
+    build: .
+    image: dlpscan:latest
+    volumes:
+      # Mount a host directory to scan.
+      # Replace ./scan-target with the path to your files.
+      - ./scan-target:/data:ro
+    # Override CMD to scan everything under /data
+    command: ["/data"]

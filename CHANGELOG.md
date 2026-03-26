@@ -2,6 +2,56 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [1.1.0] - 2026-03-26
+
+### New Features
+
+- **Custom pattern registration via InputGuard**: Define custom regex patterns
+  directly in the `InputGuard` constructor via `custom_patterns={}`. Patterns
+  are auto-compiled and registered, auto-cleaned on `close()` or context manager exit.
+- **Per-category confidence tuning**: New `confidence_overrides` parameter on
+  `InputGuard` allows setting different confidence thresholds per category
+  (e.g., `{'Credit Card Numbers': 0.9, 'Contact Information': 0.5}`).
+- **Streaming scanner** (`dlpscan.streaming.StreamScanner`): Stateful scanner for
+  real-time text streams (chat, logs, tails). Buffer-based with configurable
+  flush intervals and overlap for boundary match detection. Thread-safe.
+- **Webhook scanner** (`dlpscan.streaming.WebhookScanner`): Scan HTTP webhook
+  payloads (JSON, form data, plain text) and headers. Extracts nested JSON string
+  values. Skips standard auth headers automatically.
+- **Pipeline structured output**: New `results_to_json()`, `results_to_csv()`,
+  and `results_to_sarif()` helper functions for exporting pipeline results.
+- **Dockerfile**: Multi-stage production build with non-root user, all-formats
+  support, and Docker Compose example.
+- **CI/CD pipeline**: GitHub Actions workflows for testing (Python 3.9–3.13 matrix),
+  PyPI publishing (trusted publisher OIDC), and Docker image builds (multi-arch).
+- **Examples directory**: Integration examples for Flask, FastAPI, Django, and
+  standalone usage with InputGuard.
+- **Integration tests**: End-to-end tests covering the full pipeline, InputGuard,
+  streaming scanner, and webhook scanner.
+- **Performance benchmarks**: Configurable benchmarks for text scanning, file
+  processing, pipeline throughput, and InputGuard latency.
+- **PyPI publishing setup**: MANIFEST.in, version bump to 1.1.0, all packaging
+  metadata complete.
+
+### New Files
+
+- `dlpscan/streaming.py` — StreamScanner, WebhookScanner
+- `dlpscan/guard/core.py` — Added custom_patterns, confidence_overrides, close(), context manager
+- `Dockerfile`, `.dockerignore`, `docker-compose.yml`
+- `.github/workflows/ci.yml`, `publish.yml`, `docker.yml`
+- `examples/basic_usage.py`, `flask_example.py`, `fastapi_example.py`, `django_example.py`
+- `tests/test_integration.py`, `tests/benchmarks.py`
+- `MANIFEST.in`
+
+### Tests
+
+- Expanded from 234 to 257 unit tests.
+- New test classes: `TestInputGuardCustomPatterns`, `TestConfidenceOverrides`,
+  `TestPipelineOutput`, `TestStreamScanner`, `TestWebhookScanner`.
+- Added integration test suite (`tests/test_integration.py`).
+
+---
+
 ## [1.0.0] - 2026-03-26
 
 ### Enterprise Features

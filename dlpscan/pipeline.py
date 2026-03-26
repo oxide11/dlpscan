@@ -28,7 +28,9 @@ Usage::
         result = future.result()  # blocks until done
 """
 
+import csv
 import io
+import json
 import logging
 import os
 import time
@@ -391,3 +393,94 @@ class Pipeline:
 def _elapsed_ms(start: float) -> float:
     """Calculate elapsed time in milliseconds from a monotonic start time."""
     return round((time.monotonic() - start) * 1000, 2)
+
+
+# ---------------------------------------------------------------------------
+# Structured output helpers
+# ---------------------------------------------------------------------------
+
+def results_to_json(results: List[PipelineResult], redact: bool = False, indent: int = 2) -> str:
+    """Export pipeline results as a JSON string."""
+    return json.dumps([r.to_dict(redact=redact) for r in results], indent=indent)
+
+
+def results_to_csv(results: List[PipelineResult], stream: io.StringIO = None,
+                   redact: bool = False) -> str:
+    """Export pipeline results as CSV. Returns CSV string if no stream given."""
+    buf = stream or io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        'file_path', 'format', 'text', 'category', 'sub_category',
+        'has_context', 'confidence', 'span_start', 'span_end', 'error',
+    ])
+    for r in results:
+        if r.matches:
+            for m in r.matches:
+                display = m.redacted_text if redact else m.text
+                writer.writerow([
+                    r.file_path, r.format_detected, display,
+                    m.category, m.sub_category, m.has_context,
+                    m.confidence, m.span[0], m.span[1], '',
+                ])
+        else:
+            writer.writerow([
+                r.file_path, r.format_detected, '', '', '', '', '', '', '',
+                r.error or '',
+            ])
+    if stream is None:
+        return buf.getvalue()
+    return ''
+
+
+def results_to_sarif(results: List[PipelineResult]) -> str:
+    """Export pipeline results as SARIF 2.1.0 JSON (safe — no matched text)."""
+    rules_map: Dict[str, dict] = {}
+    sarif_results: List[dict] = []
+
+    for r in results:
+        for m in r.matches:
+            rule_id = f"dlpscan/{m.category}/{m.sub_category}".replace(' ', '-')
+            if rule_id not in rules_map:
+                rules_map[rule_id] = {
+                    'id': rule_id,
+                    'name': m.sub_category,
+                    'shortDescription': {'text': f"Detects {m.sub_category} patterns"},
+                    'properties': {'category': m.category},
+                }
+            sarif_results.append({
+                'ruleId': rule_id,
+                'level': 'warning' if m.confidence >= 0.5 else 'note',
+                'message': {
+                    'text': f"Potential {m.sub_category} detected "
+                            f"(confidence: {m.confidence:.0%})",
+                },
+                'locations': [{
+                    'physicalLocation': {
+                        'artifactLocation': {'uri': r.file_path},
+                        'region': {
+                            'charOffset': m.span[0],
+                            'charLength': m.span[1] - m.span[0],
+                        },
+                    },
+                }],
+                'properties': {
+                    'confidence': m.confidence,
+                    'has_context': m.has_context,
+                },
+            })
+
+    sarif = {
+        '$schema': 'https://docs.oasis-open.org/sarif/sarif/v2.1.0/cos02/schemas/sarif-schema-2.1.0.json',
+        'version': '2.1.0',
+        'runs': [{
+            'tool': {
+                'driver': {
+                    'name': 'dlpscan',
+                    'informationUri': 'https://github.com/oxide11/dlpscan',
+                    'rules': list(rules_map.values()),
+                },
+            },
+            'results': sarif_results,
+        }],
+    }
+    return json.dumps(sarif, indent=2)
