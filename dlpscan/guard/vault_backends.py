@@ -57,8 +57,8 @@ def _derive_key(key: str | bytes, salt: bytes | None = None) -> bytes:
     if isinstance(key, str):
         key = key.encode("utf-8")
     if salt is None:
-        salt = b"dlpscan-vault-default-salt"
-    return hashlib.pbkdf2_hmac("sha256", key, salt, iterations=100_000)
+        salt = os.urandom(16)
+    return hashlib.pbkdf2_hmac("sha256", key, salt, iterations=600_000)
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +191,10 @@ class FileBackend:
         path: str | Path,
         encryption_key: Optional[str] = None,
     ) -> None:
-        self._path = Path(path)
+        self._path = Path(path).resolve()
+        # Reject symlinks to prevent symlink attacks
+        if self._path.exists() and self._path.is_symlink():
+            raise ValueError(f"Refusing to use symlink path: {self._path}")
         self._lock = threading.Lock()
 
         # In-memory indices rebuilt from the file on init.
@@ -269,7 +272,8 @@ class FileBackend:
         )
         entry = {"token": token, "original": original_stored, "category": category}
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._path, "a", encoding="utf-8") as fh:
+        fd = os.open(str(self._path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     def _rewrite(self) -> None:
@@ -278,7 +282,8 @@ class FileBackend:
         Used after :meth:`clear` or :meth:`import_all`.
         """
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._path, "w", encoding="utf-8") as fh:
+        fd = os.open(str(self._path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             for token, original in self._token_to_original.items():
                 original_stored = (
                     self._encrypt(original)
@@ -346,7 +351,7 @@ class EncryptedVault:
     and decrypts them on retrieval.  Tokens and categories are stored
     in plaintext so lookups by token remain fast.
 
-    Key derivation uses PBKDF2-HMAC-SHA256 with 100 000 iterations.
+    Key derivation uses PBKDF2-HMAC-SHA256 with 600 000 iterations.
 
     Args:
         backend: The underlying :class:`VaultBackend` to delegate to.

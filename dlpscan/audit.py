@@ -141,13 +141,17 @@ class FileAuditHandler:
     """
 
     def __init__(self, path: str) -> None:
-        self._path = path
+        self._path = os.path.realpath(path)
+        # Reject symlinks to prevent symlink attacks
+        if os.path.islink(path):
+            raise ValueError(f"Refusing to use symlink path: {path}")
         self._lock = threading.Lock()
 
     def handle(self, event: AuditEvent) -> None:
         line = json.dumps(event.to_dict(), default=str) + "\n"
         with self._lock:
-            with open(self._path, "a", encoding="utf-8") as fh:
+            fd = os.open(self._path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            with os.fdopen(fd, "a", encoding="utf-8") as fh:
                 fh.write(line)
                 fh.flush()
 

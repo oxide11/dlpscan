@@ -1,0 +1,81 @@
+site_name: dlpscan
+site_description: Enterprise data security scanning and protection SDK
+site_url: https://oxide11.github.io/dlpscan
+repo_url: https://github.com/oxide11/dlpscan
+repo_name: oxide11/dlpscan
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Configuration: getting-started/configuration.md
+  - User Guide:
+      - InputGuard: guide/inputguard.md
+      - Scanning: guide/scanning.md
+      - Tokenization & Obfuscation: guide/transforms.md
+      - Masking Profiles: guide/profiles.md
+      - Policy Engine: guide/policy.md
+      - OCR Scanning: guide/ocr.md
+      - Streaming & Webhooks: guide/streaming.md
+  - Enterprise:
+      - REST API: enterprise/api.md
+      - Audit Logging: enterprise/audit.md
+      - RBAC: enterprise/rbac.md
+      - SIEM Integration: enterprise/siem.md
+      - Compliance Reporting: enterprise/compliance.md
+      - Observability: enterprise/observability.md
+      - Batch Scanning: enterprise/batch.md
+      - Rate Limiting: enterprise/rate-limiting.md
+      - Security Hardening: enterprise/security.md
+      - Environment Variables: enterprise/env-config.md
+  - Deployment:
+      - Docker: deployment/docker.md
+      - CI/CD: deployment/cicd.md
+      - Pre-commit Hook: deployment/pre-commit.md
+      - PyPI: deployment/pypi.md
+  - API Reference: api-reference.md
+  - Changelog: changelog.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/oxide11/dlpscan

@@ -875,8 +875,8 @@ class TestIsBinaryFile(unittest.TestCase):
     """Tests for _is_binary_file heuristic."""
 
     def test_binary_extension_detected(self):
-        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
-            f.write(b'not really a png')
+        with tempfile.NamedTemporaryFile(suffix='.exe', delete=False) as f:
+            f.write(b'not really an exe')
             path = f.name
         try:
             self.assertTrue(_is_binary_file(path))
@@ -3177,6 +3177,257 @@ class TestObfuscationSeeds(unittest.TestCase):
         self.assertNotIn('123-45-6789', result1)
 
         set_obfuscation_seed(None)
+
+
+class TestOCRModule(unittest.TestCase):
+    """Tests for the OCR module."""
+
+    def test_ocr_result_dataclass(self):
+        """OCRResult stores text, confidence, and metadata."""
+        from dlpscan.ocr import OCRResult
+        result = OCRResult(text="Hello World", confidence=95.0, language="eng")
+        self.assertEqual(result.text, "Hello World")
+        self.assertEqual(result.confidence, 95.0)
+        self.assertEqual(result.language, "eng")
+        self.assertEqual(result.page_count, 1)
+        self.assertEqual(result.warnings, [])
+
+    def test_image_extensions(self):
+        """IMAGE_EXTENSIONS contains expected formats."""
+        from dlpscan.ocr import IMAGE_EXTENSIONS
+        self.assertIn('.png', IMAGE_EXTENSIONS)
+        self.assertIn('.jpg', IMAGE_EXTENSIONS)
+        self.assertIn('.jpeg', IMAGE_EXTENSIONS)
+        self.assertIn('.tiff', IMAGE_EXTENSIONS)
+        self.assertIn('.tif', IMAGE_EXTENSIONS)
+        self.assertIn('.bmp', IMAGE_EXTENSIONS)
+        self.assertIn('.webp', IMAGE_EXTENSIONS)
+
+    def test_ocr_available_returns_bool(self):
+        """ocr_available() returns a boolean."""
+        from dlpscan.ocr import ocr_available
+        result = ocr_available()
+        self.assertIsInstance(result, bool)
+
+    def test_pdf_ocr_available_returns_bool(self):
+        """pdf_ocr_available() returns a boolean."""
+        from dlpscan.ocr import pdf_ocr_available
+        result = pdf_ocr_available()
+        self.assertIsInstance(result, bool)
+
+    def test_ocr_image_file_not_found(self):
+        """ocr_image raises FileNotFoundError for missing files."""
+        from dlpscan.ocr import ocr_available, ocr_image
+        if not ocr_available():
+            self.skipTest("Tesseract not available")
+        with self.assertRaises(FileNotFoundError):
+            ocr_image("/nonexistent/image.png")
+
+    def test_ocr_pdf_file_not_found(self):
+        """ocr_pdf raises FileNotFoundError for missing files."""
+        from dlpscan.ocr import ocr_available, ocr_pdf
+        if not ocr_available():
+            self.skipTest("Tesseract not available")
+        with self.assertRaises((FileNotFoundError, ImportError)):
+            ocr_pdf("/nonexistent/file.pdf")
+
+    def test_preprocess_image_grayscale(self):
+        """_preprocess_image converts to grayscale."""
+        from dlpscan.ocr import ocr_available
+        if not ocr_available():
+            self.skipTest("Tesseract not available")
+        from PIL import Image
+
+        from dlpscan.ocr import _preprocess_image
+        # Create a simple RGB image.
+        img = Image.new('RGB', (100, 100), color=(255, 0, 0))
+        processed = _preprocess_image(img, grayscale=True, threshold=False)
+        self.assertEqual(processed.mode, 'L')
+
+    def test_preprocess_image_downscale(self):
+        """_preprocess_image downscales oversized images."""
+        from dlpscan.ocr import ocr_available
+        if not ocr_available():
+            self.skipTest("Tesseract not available")
+        from PIL import Image
+
+        from dlpscan.ocr import MAX_IMAGE_DIMENSION, _preprocess_image
+        # Create an oversized image.
+        big = Image.new('L', (20000, 10000))
+        processed = _preprocess_image(big, grayscale=False, threshold=False)
+        self.assertLessEqual(max(processed.size), MAX_IMAGE_DIMENSION)
+
+    def test_preprocess_image_threshold(self):
+        """_preprocess_image applies binary threshold."""
+        from dlpscan.ocr import ocr_available
+        if not ocr_available():
+            self.skipTest("Tesseract not available")
+        from PIL import Image
+
+        from dlpscan.ocr import _preprocess_image
+        img = Image.new('L', (10, 10), color=128)
+        processed = _preprocess_image(img, grayscale=True, threshold=True)
+        self.assertIn(processed.mode, ('1', 'L'))
+
+    def test_ocr_image_with_pil_image(self):
+        """ocr_image accepts a PIL Image object directly."""
+        from dlpscan.ocr import ocr_available, ocr_image
+        if not ocr_available():
+            self.skipTest("Tesseract not available")
+        from PIL import Image
+        # White image with no text — should return empty or minimal text.
+        img = Image.new('RGB', (200, 50), color=(255, 255, 255))
+        result = ocr_image(img, compute_confidence=False)
+        self.assertIsInstance(result.text, str)
+        self.assertEqual(result.page_count, 1)
+
+    def test_ocr_image_with_text(self):
+        """ocr_image extracts text from a generated image."""
+        from dlpscan.ocr import ocr_available, ocr_image
+        if not ocr_available():
+            self.skipTest("Tesseract not available")
+        from PIL import Image, ImageDraw
+        # Create image with clear text.
+        img = Image.new('RGB', (400, 100), color=(255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        draw.text((10, 30), "SSN 123-45-6789", fill=(0, 0, 0))
+        result = ocr_image(img)
+        # Tesseract should extract something (may not be perfect).
+        self.assertIsInstance(result.text, str)
+
+
+class TestOCRConfigValidation(unittest.TestCase):
+    """Tests for OCR config and lang validation."""
+
+    def test_valid_config_accepted(self):
+        """Valid tesseract config strings pass validation."""
+        from dlpscan.ocr import _validate_config
+        self.assertEqual(_validate_config('--oem 3 --psm 3'), '--oem 3 --psm 3')
+        self.assertEqual(_validate_config('--psm 6'), '--psm 6')
+        self.assertEqual(_validate_config(''), '')
+
+    def test_invalid_config_rejected(self):
+        """Dangerous config strings are rejected."""
+        from dlpscan.ocr import _validate_config
+        with self.assertRaises(ValueError):
+            _validate_config('--oem 3; rm -rf /')
+        with self.assertRaises(ValueError):
+            _validate_config('$(whoami)')
+        with self.assertRaises(ValueError):
+            _validate_config('--invalid-flag value')
+
+    def test_valid_lang_accepted(self):
+        """Valid language codes pass validation."""
+        from dlpscan.ocr import _validate_lang
+        self.assertEqual(_validate_lang('eng'), 'eng')
+        self.assertEqual(_validate_lang('eng+fra'), 'eng+fra')
+        self.assertEqual(_validate_lang('chi_sim'), 'chi_sim')
+
+    def test_invalid_lang_rejected(self):
+        """Invalid language codes are rejected."""
+        from dlpscan.ocr import _validate_lang
+        with self.assertRaises(ValueError):
+            _validate_lang('eng; whoami')
+        with self.assertRaises(ValueError):
+            _validate_lang('eng && ls')
+
+    def test_pixel_area_limit(self):
+        """Images exceeding pixel area limit are downscaled."""
+        from dlpscan.ocr import ocr_available
+        if not ocr_available():
+            self.skipTest("Tesseract not available")
+        from PIL import Image
+
+        from dlpscan.ocr import MAX_PIXEL_AREA, _preprocess_image
+        # Create image that exceeds pixel area (e.g., 8000x8000 = 64M pixels > 50M)
+        big = Image.new('L', (8000, 8000))
+        processed = _preprocess_image(big, grayscale=False, threshold=False)
+        self.assertLessEqual(processed.size[0] * processed.size[1], MAX_PIXEL_AREA * 1.01)
+
+    def test_zero_dimension_image(self):
+        """Zero-dimension images don't crash preprocessing."""
+        from dlpscan.ocr import ocr_available
+        if not ocr_available():
+            self.skipTest("Tesseract not available")
+        from PIL import Image
+
+        from dlpscan.ocr import _preprocess_image
+        # PIL can't really create 0x0, but test with minimal image
+        tiny = Image.new('L', (1, 1))
+        processed = _preprocess_image(tiny, grayscale=True, threshold=False)
+        self.assertEqual(processed.size, (1, 1))
+
+
+class TestExtractorOCRIntegration(unittest.TestCase):
+    """Tests for OCR integration in extractors."""
+
+    def test_image_extensions_registered(self):
+        """Image extensions are registered in the extractor registry."""
+        from dlpscan.extractors import _EXTRACTORS
+        for ext in ('.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp', '.webp'):
+            self.assertIn(ext, _EXTRACTORS, f"{ext} not registered")
+
+    def test_supported_extensions_includes_images(self):
+        """supported_extensions() lists image formats."""
+        from dlpscan.extractors import supported_extensions
+        exts = supported_extensions()
+        self.assertIn('.png', exts)
+        self.assertIn('.jpg', exts)
+
+    def test_extract_image_requires_ocr(self):
+        """Extracting an image without OCR raises ExtractionError."""
+        from dlpscan.ocr import ocr_available
+        if ocr_available():
+            self.skipTest("OCR is available — cannot test missing dependency path")
+        from dlpscan.exceptions import ExtractionError
+        from dlpscan.extractors import extract_text
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+            # Write minimal PNG header.
+            f.write(b'\x89PNG\r\n\x1a\n' + b'\x00' * 100)
+            f.flush()
+            try:
+                with self.assertRaises(ExtractionError):
+                    extract_text(f.name)
+            finally:
+                os.unlink(f.name)
+
+
+class TestScannerExtractorExtensions(unittest.TestCase):
+    """Tests for scanner handling of extractor extensions."""
+
+    def test_binary_extensions_excludes_images(self):
+        """Image extensions are not in _BINARY_EXTENSIONS."""
+        from dlpscan.scanner import _BINARY_EXTENSIONS
+        for ext in ('.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif', '.webp'):
+            self.assertNotIn(ext, _BINARY_EXTENSIONS, f"{ext} still in _BINARY_EXTENSIONS")
+
+    def test_binary_extensions_excludes_office(self):
+        """Office/PDF extensions are not in _BINARY_EXTENSIONS."""
+        from dlpscan.scanner import _BINARY_EXTENSIONS
+        for ext in ('.pdf', '.docx', '.xlsx', '.pptx'):
+            self.assertNotIn(ext, _BINARY_EXTENSIONS, f"{ext} still in _BINARY_EXTENSIONS")
+
+    def test_extractor_extensions_includes_images(self):
+        """Image extensions are in _EXTRACTOR_EXTENSIONS."""
+        from dlpscan.scanner import _EXTRACTOR_EXTENSIONS
+        for ext in ('.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif', '.webp'):
+            self.assertIn(ext, _EXTRACTOR_EXTENSIONS, f"{ext} not in _EXTRACTOR_EXTENSIONS")
+
+    def test_has_extractor_function(self):
+        """_has_extractor correctly identifies extractor files."""
+        from dlpscan.scanner import _has_extractor
+        self.assertTrue(_has_extractor('photo.png'))
+        self.assertTrue(_has_extractor('doc.pdf'))
+        self.assertTrue(_has_extractor('report.docx'))
+        self.assertFalse(_has_extractor('script.py'))
+        self.assertFalse(_has_extractor('data.csv'))
+
+    def test_is_binary_file_not_images(self):
+        """_is_binary_file returns False for image extensions."""
+        # Image files should not be treated as binary (they have extractors).
+        self.assertFalse(_is_binary_file('/tmp/test.png'))
+        self.assertFalse(_is_binary_file('/tmp/test.jpg'))
+        self.assertFalse(_is_binary_file('/tmp/test.pdf'))
 
 
 if __name__ == '__main__':

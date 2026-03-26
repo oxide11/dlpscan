@@ -270,16 +270,19 @@ class WebhookScanner:
             return body
 
         strings: List[str] = []
+        _MAX_DEPTH = 64
 
-        def _walk(obj):
+        def _walk(obj, depth=0):
+            if depth > _MAX_DEPTH:
+                return
             if isinstance(obj, str):
                 strings.append(obj)
             elif isinstance(obj, dict):
                 for v in obj.values():
-                    _walk(v)
+                    _walk(v, depth + 1)
             elif isinstance(obj, (list, tuple)):
                 for item in obj:
-                    _walk(item)
+                    _walk(item, depth + 1)
 
         _walk(data)
         return '\n'.join(strings)
