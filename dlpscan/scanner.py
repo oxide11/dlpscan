@@ -1,11 +1,19 @@
+import io
+import os
 import re
 import signal
 import threading
 import logging
-from typing import Generator, Tuple, Optional, Set
+from typing import Generator, List, Optional, Set
 
 from .patterns import PATTERNS
 from .context import CONTEXT_KEYWORDS
+from .models import (
+    Match,
+    PATTERN_SPECIFICITY,
+    DEFAULT_SPECIFICITY,
+    CONTEXT_REQUIRED_PATTERNS,
+)
 from .exceptions import (
     EmptyInputError,
     ShortInputError,
@@ -27,17 +35,105 @@ MAX_MATCHES = 50_000
 # Maximum total scan time in seconds across all patterns (0 = no limit).
 MAX_SCAN_SECONDS = 120
 
+# -- Custom pattern registry --
+_custom_patterns: dict = {}
+_custom_context: dict = {}
+
 # Pre-compile context keyword patterns for proximity matching.
 compiled_context_patterns: dict = {}
-for _category, _details in CONTEXT_KEYWORDS.items():
-    _identifiers = _details.get('Identifiers', {})
-    for _sub_category, _keywords in _identifiers.items():
-        if _keywords:
-            compiled_context_patterns[(_category, _sub_category)] = re.compile(
-                r'\b(' + '|'.join(map(re.escape, _keywords)) + r')\b',
-                re.IGNORECASE,
-            )
 
+
+def _rebuild_context_patterns():
+    """Rebuild compiled context patterns from CONTEXT_KEYWORDS + custom context."""
+    compiled_context_patterns.clear()
+    for source in (CONTEXT_KEYWORDS, _custom_context):
+        for _category, _details in source.items():
+            _identifiers = _details.get('Identifiers', {})
+            for _sub_category, _keywords in _identifiers.items():
+                if _keywords:
+                    compiled_context_patterns[(_category, _sub_category)] = re.compile(
+                        r'\b(' + '|'.join(map(re.escape, _keywords)) + r')\b',
+                        re.IGNORECASE,
+                    )
+
+
+_rebuild_context_patterns()
+
+
+# -- Custom pattern registration API --
+
+def register_patterns(category: str, patterns: dict, context: Optional[dict] = None,
+                      specificity: Optional[dict] = None,
+                      context_required: Optional[set] = None):
+    """Register custom patterns at runtime.
+
+    Args:
+        category: Category name (e.g., 'My Custom Patterns').
+        patterns: Dict of {sub_category: compiled_regex_pattern}.
+        context: Optional context keywords dict with 'Identifiers' and 'distance'.
+        specificity: Optional dict of {sub_category: float} specificity scores.
+        context_required: Optional set of sub_category names that require context.
+
+    Example::
+
+        import re
+        from dlpscan import register_patterns
+
+        register_patterns(
+            category='Internal IDs',
+            patterns={
+                'Project Code': re.compile(r'\\bPRJ-\\d{6}\\b'),
+                'Employee Badge': re.compile(r'\\bEMP\\d{5}\\b'),
+            },
+            context={
+                'Identifiers': {
+                    'Project Code': ['project', 'project id', 'project code'],
+                    'Employee Badge': ['badge', 'employee', 'badge number'],
+                },
+                'distance': 50,
+            },
+            specificity={
+                'Project Code': 0.80,
+                'Employee Badge': 0.70,
+            },
+        )
+    """
+    if not isinstance(category, str) or not category:
+        raise ValueError("category must be a non-empty string.")
+    if not isinstance(patterns, dict) or not patterns:
+        raise ValueError("patterns must be a non-empty dict of {name: compiled_regex}.")
+
+    _custom_patterns[category] = patterns
+
+    if context:
+        _custom_context[category] = context
+        _rebuild_context_patterns()
+
+    if specificity:
+        PATTERN_SPECIFICITY.update(specificity)
+
+    if context_required:
+        # Module-level frozenset can't be mutated — use global replacement
+        global CONTEXT_REQUIRED_PATTERNS
+        CONTEXT_REQUIRED_PATTERNS = CONTEXT_REQUIRED_PATTERNS | frozenset(context_required)
+
+
+def unregister_patterns(category: str):
+    """Remove previously registered custom patterns."""
+    _custom_patterns.pop(category, None)
+    if category in _custom_context:
+        _custom_context.pop(category)
+        _rebuild_context_patterns()
+
+
+def _get_all_patterns() -> dict:
+    """Return merged built-in + custom patterns."""
+    merged = dict(PATTERNS)
+    merged.update(_custom_patterns)
+    return merged
+
+
+# -- Internal helpers --
 
 class _RegexTimeout(Exception):
     """Raised when a regex operation exceeds the time limit."""
@@ -55,28 +151,6 @@ def _can_use_sigalrm() -> bool:
     )
 
 
-def _safe_finditer(pattern: re.Pattern, text: str, timeout: int = REGEX_TIMEOUT_SECONDS):
-    """Yield regex matches with an optional per-pattern timeout guard.
-
-    Falls back to unguarded matching on platforms that lack SIGALRM (Windows)
-    or when called from a non-main thread.
-    """
-    if timeout <= 0 or not _can_use_sigalrm():
-        yield from pattern.finditer(text)
-        return
-
-    old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-    signal.alarm(timeout)
-    try:
-        for m in pattern.finditer(text):
-            yield m
-    except _RegexTimeout:
-        logger.warning("Regex timeout: pattern %r skipped (exceeded %ds)", pattern.pattern, timeout)
-    finally:
-        signal.signal(signal.SIGALRM, old_handler)
-        signal.alarm(0)
-
-
 def _validate_text_input(text) -> str:
     """Validate and sanitize scanner input text."""
     if text is None:
@@ -92,6 +166,68 @@ def _validate_text_input(text) -> str:
         )
     return text
 
+
+# -- Confidence scoring --
+
+def _compute_confidence(sub_category: str, has_context: bool, context_required: bool) -> float:
+    """Compute a 0.0-1.0 confidence score for a match.
+
+    Factors:
+    - Base specificity of the pattern (how unique the regex is)
+    - Context keyword presence (boosts score)
+    - Context required but missing (caps at low score)
+    """
+    base = PATTERN_SPECIFICITY.get(sub_category, DEFAULT_SPECIFICITY)
+
+    if has_context:
+        # Context keywords found — boost confidence.
+        confidence = min(1.0, base + 0.20)
+    elif context_required:
+        # Pattern is broad AND no context found — very low confidence.
+        confidence = base * 0.3
+    else:
+        # No context but pattern is specific enough to stand alone.
+        confidence = base
+
+    return round(confidence, 2)
+
+
+# -- Overlap deduplication --
+
+def _deduplicate_overlapping(matches: List[Match]) -> List[Match]:
+    """Remove overlapping matches, keeping the highest-confidence one.
+
+    When two matches overlap in character span, keep the one with higher
+    confidence. If tied, prefer the longer match.
+    """
+    if not matches:
+        return matches
+
+    # Sort by span start, then by span length descending.
+    sorted_matches = sorted(matches, key=lambda m: (m.span[0], -(m.span[1] - m.span[0])))
+
+    result = []
+    last_end = -1
+
+    for m in sorted_matches:
+        if m.span[0] >= last_end:
+            # No overlap — add directly.
+            result.append(m)
+            last_end = m.span[1]
+        else:
+            # Overlaps with previous — keep higher confidence.
+            prev = result[-1]
+            if m.confidence > prev.confidence:
+                result[-1] = m
+                last_end = m.span[1]
+            elif m.confidence == prev.confidence and (m.span[1] - m.span[0]) > (prev.span[1] - prev.span[0]):
+                result[-1] = m
+                last_end = m.span[1]
+
+    return result
+
+
+# -- Public API --
 
 def redact_sensitive_info(match: str, redaction_char: str = 'X') -> str:
     """Replace printable characters in *match* with *redaction_char*, preserving separators."""
@@ -126,12 +262,14 @@ def redact_sensitive_info_with_patterns(text: str, category: str, sub_category: 
     """
     text = _validate_text_input(text)
 
-    if category not in PATTERNS or sub_category not in PATTERNS[category]:
+    all_patterns = _get_all_patterns()
+
+    if category not in all_patterns or sub_category not in all_patterns[category]:
         raise SubCategoryNotFoundError(
             f"Sub-Category '{sub_category}' not found in PATTERNS for category '{category}'."
         )
 
-    pattern = PATTERNS[category][sub_category]
+    pattern = all_patterns[category][sub_category]
 
     def _redact_match(m):
         matched = m.group()
@@ -185,7 +323,8 @@ def scan_for_context(text: str, start_index: int, end_index: int,
     if start_index > end_index:
         raise ValueError("start_index must not exceed end_index.")
 
-    distance_config = CONTEXT_KEYWORDS.get(category, {})
+    # Check built-in context, then custom context.
+    distance_config = CONTEXT_KEYWORDS.get(category, _custom_context.get(category, {}))
     distance = distance_config.get('distance', 50)
 
     # Clamp indices to valid range.
@@ -207,7 +346,8 @@ def enhanced_scan_text(
     categories: Optional[Set[str]] = None,
     require_context: bool = False,
     max_matches: int = MAX_MATCHES,
-) -> Generator[Tuple[str, str, bool, str], None, None]:
+    deduplicate: bool = True,
+) -> Generator[Match, None, None]:
     """Scan *text* for sensitive data using PATTERNS, with optional context verification.
 
     Args:
@@ -215,9 +355,12 @@ def enhanced_scan_text(
         categories: Optional set of category names to scan. If None, scans all.
         require_context: If True, only yield matches that have contextual keyword support.
         max_matches: Maximum number of matches to return (default MAX_MATCHES).
+        deduplicate: If True (default), remove overlapping matches keeping highest confidence.
 
     Yields:
-        Tuples of (matched_text, sub_category, has_context, category).
+        Match objects with text, category, sub_category, has_context, confidence, span.
+        Match objects support tuple unpacking for backward compatibility:
+        ``text, sub_category, has_context, category = match``
 
     Note:
         The SIGALRM-based timeout only works on Unix in the main thread.
@@ -225,11 +368,13 @@ def enhanced_scan_text(
     """
     text = _validate_text_input(text)
 
-    patterns_to_scan = PATTERNS
-    if categories is not None:
-        patterns_to_scan = {k: v for k, v in PATTERNS.items() if k in categories}
+    all_patterns = _get_all_patterns()
 
-    match_count = 0
+    patterns_to_scan = all_patterns
+    if categories is not None:
+        patterns_to_scan = {k: v for k, v in all_patterns.items() if k in categories}
+
+    raw_matches: List[Match] = []
     scan_timed_out = False
 
     # Set up global scan timeout if available.
@@ -240,12 +385,14 @@ def enhanced_scan_text(
 
     try:
         for category, sub_categories in patterns_to_scan.items():
-            if scan_timed_out or match_count >= max_matches:
+            if scan_timed_out or len(raw_matches) >= max_matches:
                 break
 
             for sub_category, pattern in sub_categories.items():
-                if scan_timed_out or match_count >= max_matches:
+                if scan_timed_out or len(raw_matches) >= max_matches:
                     break
+
+                is_ctx_required = sub_category in CONTEXT_REQUIRED_PATTERNS
 
                 try:
                     for match in pattern.finditer(text):
@@ -261,27 +408,40 @@ def enhanced_scan_text(
                             text, match.start(), match.end(), category, sub_category
                         )
 
+                        # Context-required patterns are silently skipped without context.
+                        if is_ctx_required and not has_context:
+                            continue
+
+                        # User-requested require_context filter.
                         if require_context and not has_context:
                             continue
 
-                        yield (match.group(), sub_category, has_context, category)
+                        confidence = _compute_confidence(sub_category, has_context, is_ctx_required)
 
-                        match_count += 1
-                        if match_count >= max_matches:
+                        m = Match(
+                            text=match.group(),
+                            category=category,
+                            sub_category=sub_category,
+                            has_context=has_context,
+                            confidence=confidence,
+                            span=(match.start(), match.end()),
+                            context_required=is_ctx_required,
+                        )
+                        raw_matches.append(m)
+
+                        if len(raw_matches) >= max_matches:
                             logger.warning(
                                 "Match limit reached (%d). Scan truncated.", max_matches
                             )
                             break
                 except _RegexTimeout:
                     if _global_old_handler is not None:
-                        # Global timeout hit — stop everything.
                         scan_timed_out = True
                         logger.warning(
                             "Global scan timeout (%ds) reached. Scan truncated.",
                             MAX_SCAN_SECONDS,
                         )
                     else:
-                        # Per-pattern timeout — skip this pattern.
                         logger.warning(
                             "Regex timeout: pattern %r skipped.", pattern.pattern
                         )
@@ -289,3 +449,154 @@ def enhanced_scan_text(
         if _global_old_handler is not None:
             signal.signal(signal.SIGALRM, _global_old_handler)
             signal.alarm(0)
+
+    if deduplicate:
+        raw_matches = _deduplicate_overlapping(raw_matches)
+
+    yield from raw_matches
+
+
+# -- File / stream scanning --
+
+def scan_file(
+    file_path: str,
+    categories: Optional[Set[str]] = None,
+    require_context: bool = False,
+    max_matches: int = MAX_MATCHES,
+    deduplicate: bool = True,
+    encoding: str = 'utf-8',
+    chunk_size: int = 1024 * 1024,
+    chunk_overlap: int = 1024,
+) -> Generator[Match, None, None]:
+    """Scan a file for sensitive data, processing in chunks for memory efficiency.
+
+    Args:
+        file_path: Path to the file to scan.
+        categories: Optional set of category names to scan.
+        require_context: If True, only yield matches with context.
+        max_matches: Maximum total matches to return.
+        deduplicate: If True, deduplicate overlapping matches per chunk.
+        encoding: File encoding (default 'utf-8').
+        chunk_size: Size of each chunk in bytes (default 1 MB).
+        chunk_overlap: Overlap between chunks to catch matches at boundaries (default 1 KB).
+
+    Yields:
+        Match objects with span offsets relative to the full file.
+    """
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    file_size = os.path.getsize(file_path)
+    if file_size == 0:
+        return
+
+    total_yielded = 0
+
+    with open(file_path, 'r', encoding=encoding, errors='replace') as f:
+        offset = 0
+        prev_tail = ''
+
+        while True:
+            raw = f.read(chunk_size)
+            if not raw:
+                break
+
+            # Prepend overlap from previous chunk to catch boundary matches.
+            chunk = prev_tail + raw
+            chunk_offset = offset - len(prev_tail)
+
+            try:
+                for m in enhanced_scan_text(
+                    chunk,
+                    categories=categories,
+                    require_context=require_context,
+                    max_matches=max_matches - total_yielded,
+                    deduplicate=deduplicate,
+                ):
+                    # Adjust span to be relative to the full file.
+                    adjusted = Match(
+                        text=m.text,
+                        category=m.category,
+                        sub_category=m.sub_category,
+                        has_context=m.has_context,
+                        confidence=m.confidence,
+                        span=(m.span[0] + chunk_offset, m.span[1] + chunk_offset),
+                        context_required=m.context_required,
+                    )
+                    yield adjusted
+                    total_yielded += 1
+
+                    if total_yielded >= max_matches:
+                        return
+            except (EmptyInputError, ValueError):
+                pass  # Skip empty/oversized chunks
+
+            # Keep tail for overlap with next chunk.
+            prev_tail = raw[-chunk_overlap:] if len(raw) >= chunk_overlap else raw
+            offset += len(raw)
+
+
+def scan_stream(
+    stream: io.TextIOBase,
+    categories: Optional[Set[str]] = None,
+    require_context: bool = False,
+    max_matches: int = MAX_MATCHES,
+    deduplicate: bool = True,
+    chunk_size: int = 1024 * 1024,
+    chunk_overlap: int = 1024,
+) -> Generator[Match, None, None]:
+    """Scan a text stream for sensitive data.
+
+    Works like scan_file but accepts any text stream (StringIO, stdin, etc.).
+
+    Args:
+        stream: A readable text stream.
+        categories: Optional set of category names to scan.
+        require_context: If True, only yield matches with context.
+        max_matches: Maximum total matches to return.
+        deduplicate: If True, deduplicate overlapping matches per chunk.
+        chunk_size: Characters to read per chunk (default 1M).
+        chunk_overlap: Overlap between chunks (default 1K).
+
+    Yields:
+        Match objects with span offsets relative to stream start.
+    """
+    total_yielded = 0
+    offset = 0
+    prev_tail = ''
+
+    while True:
+        raw = stream.read(chunk_size)
+        if not raw:
+            break
+
+        chunk = prev_tail + raw
+        chunk_offset = offset - len(prev_tail)
+
+        try:
+            for m in enhanced_scan_text(
+                chunk,
+                categories=categories,
+                require_context=require_context,
+                max_matches=max_matches - total_yielded,
+                deduplicate=deduplicate,
+            ):
+                adjusted = Match(
+                    text=m.text,
+                    category=m.category,
+                    sub_category=m.sub_category,
+                    has_context=m.has_context,
+                    confidence=m.confidence,
+                    span=(m.span[0] + chunk_offset, m.span[1] + chunk_offset),
+                    context_required=m.context_required,
+                )
+                yield adjusted
+                total_yielded += 1
+
+                if total_yielded >= max_matches:
+                    return
+        except (EmptyInputError, ValueError):
+            pass
+
+        prev_tail = raw[-chunk_overlap:] if len(raw) >= chunk_overlap else raw
+        offset += len(raw)
