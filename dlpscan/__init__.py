@@ -45,7 +45,7 @@ from .extractors import (
     supported_extensions,
 )
 from .pipeline import Pipeline, FileJob, PipelineResult
-from .input_guard import (
+from .guard import (
     InputGuard,
     ScanResult,
     Preset,

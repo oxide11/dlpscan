@@ -1,12 +1,8 @@
-"""Input guard for scanning and sanitizing application inputs.
-
-Provides a developer-facing API for protecting application inputs against
-sensitive data ingestion. Supports denylist/allowlist modes, compliance
-presets, and configurable actions (reject, redact, flag).
+"""Core InputGuard class for scanning and sanitizing application inputs.
 
 Usage::
 
-    from dlpscan import InputGuard, Preset, Action, Mode
+    from dlpscan.guard import InputGuard, Preset, Action, Mode
 
     # Block PCI and SSN/SIN data — raise on detection
     guard = InputGuard(presets=[Preset.PCI_DSS, Preset.SSN_SIN])
@@ -15,15 +11,7 @@ Usage::
     # Redact credentials from user input
     guard = InputGuard(presets=[Preset.CREDENTIALS], action=Action.REDACT)
     result = guard.scan("key: ghp_abc123def456ghi789jkl012mno345pqr678")
-    print(result.redacted_text)  # "key: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-
-    # Allowlist mode: only allow emails, block everything else
-    guard = InputGuard(
-        categories={'Contact Information'},
-        mode=Mode.ALLOWLIST,
-    )
-    guard.scan("email: user@test.com")    # OK
-    guard.scan("SSN: 123-45-6789")        # raises InputGuardError
+    print(result.redacted_text)
 
     # Decorator
     guard = InputGuard(presets=[Preset.PCI_DSS])
@@ -37,141 +25,16 @@ import functools
 import inspect
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Callable, Dict, FrozenSet, List, Optional, Set, Union
+from typing import Callable, List, Optional, Set, Union
 
-from .models import Match
-from .scanner import enhanced_scan_text, redact_sensitive_info
-from .allowlist import Allowlist
-from .patterns import PATTERNS
-from .exceptions import EmptyInputError, ShortInputError
+from ..models import Match
+from ..scanner import enhanced_scan_text, redact_sensitive_info
+from ..allowlist import Allowlist
+from ..exceptions import EmptyInputError, ShortInputError
+from .enums import Action, Mode
+from .presets import Preset, PRESET_CATEGORIES
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
-
-class Preset(Enum):
-    """Compliance presets mapping to sets of pattern categories."""
-    PCI_DSS = "pci_dss"
-    SSN_SIN = "ssn_sin"
-    PII = "pii"
-    PII_STRICT = "pii_strict"
-    CREDENTIALS = "credentials"
-    FINANCIAL = "financial"
-    HEALTHCARE = "healthcare"
-    CONTACT_INFO = "contact_info"
-
-
-class Action(Enum):
-    """What to do when sensitive data is detected."""
-    REJECT = "reject"    # Raise InputGuardError
-    REDACT = "redact"    # Return sanitized text with sensitive data replaced
-    FLAG = "flag"        # Return ScanResult with findings, text unmodified
-
-
-class Mode(Enum):
-    """Guard operating mode."""
-    DENYLIST = "denylist"    # Block the listed categories (default: all)
-    ALLOWLIST = "allowlist"  # Allow only the listed categories; block everything else
-
-
-# ---------------------------------------------------------------------------
-# Preset -> category mappings
-# ---------------------------------------------------------------------------
-
-def _regional_categories() -> FrozenSet[str]:
-    """Gather all regional pattern categories dynamically from PATTERNS."""
-    prefixes = ('North America', 'Europe', 'Asia-Pacific', 'Latin America',
-                'Middle East', 'Africa')
-    return frozenset(k for k in PATTERNS if any(k.startswith(p) for p in prefixes))
-
-
-PRESET_CATEGORIES: Dict[Preset, FrozenSet[str]] = {
-    Preset.PCI_DSS: frozenset({
-        'Credit Card Numbers',
-        'Primary Account Numbers',
-        'Card Track Data',
-        'Card Expiration Dates',
-        'PCI Sensitive Data',
-    }),
-
-    Preset.SSN_SIN: frozenset({
-        'North America - United States',
-        'North America - Canada',
-    }),
-
-    Preset.PII: frozenset({
-        'Personal Identifiers',
-        'Postal Codes',
-        'Geolocation',
-        'Device Identifiers',
-        'Contact Information',
-        'Social Media Identifiers',
-        'Education Identifiers',
-        'Employment Identifiers',
-        'Legal Identifiers',
-        'Biometric Identifiers',
-        'Property Identifiers',
-    }),
-
-    # PII_STRICT includes all PII categories plus all regional IDs/passports/DLs
-    Preset.PII_STRICT: frozenset({
-        'Personal Identifiers',
-        'Postal Codes',
-        'Geolocation',
-        'Device Identifiers',
-        'Contact Information',
-        'Social Media Identifiers',
-        'Education Identifiers',
-        'Employment Identifiers',
-        'Legal Identifiers',
-        'Biometric Identifiers',
-        'Property Identifiers',
-        'Dates',
-        'Vehicle Identification',
-    }) | _regional_categories(),
-
-    Preset.CREDENTIALS: frozenset({
-        'Generic Secrets',
-        'Cloud Provider Secrets',
-        'Code Platform Secrets',
-        'Payment Service Secrets',
-        'Messaging Service Secrets',
-        'Banking Authentication',
-        'Authentication Tokens',
-        'URLs with Credentials',
-    }),
-
-    Preset.FINANCIAL: frozenset({
-        'Credit Card Numbers',
-        'Primary Account Numbers',
-        'Card Track Data',
-        'Card Expiration Dates',
-        'PCI Sensitive Data',
-        'Banking and Financial',
-        'Wire Transfer Data',
-        'Check and MICR Data',
-        'Securities Identifiers',
-        'Loan and Mortgage Data',
-        'Customer Financial Data',
-        'Internal Banking References',
-        'Regulatory Identifiers',
-        'Cryptocurrency',
-        'Financial Regulatory Labels',
-    }),
-
-    Preset.HEALTHCARE: frozenset({
-        'Medical Identifiers',
-        'Insurance Identifiers',
-    }),
-
-    Preset.CONTACT_INFO: frozenset({
-        'Contact Information',
-    }),
-}
 
 
 # ---------------------------------------------------------------------------

@@ -98,8 +98,11 @@ All notable changes to dlpscan will be documented in this file.
 
 ### New Files
 
-- `dlpscan/input_guard.py` — InputGuard, ScanResult, Preset, Action, Mode,
-  InputGuardError, PRESET_CATEGORIES
+- `dlpscan/guard/` — InputGuard subpackage:
+  - `__init__.py` — Public exports (InputGuard, ScanResult, Preset, Action, Mode, InputGuardError, PRESET_CATEGORIES)
+  - `core.py` — InputGuard class, ScanResult, InputGuardError
+  - `enums.py` — Action and Mode enums
+  - `presets.py` — Preset enum and PRESET_CATEGORIES mapping
 
 ### Tests
 

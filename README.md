@@ -665,7 +665,11 @@ dlpscan/
 ├── async_scanner.py               # Async scanning wrappers
 ├── extractors.py                  # Text extraction from binary formats
 ├── pipeline.py                    # Queue-based file processing pipeline
-├── input_guard.py                 # Developer input guard (presets, modes, decorator)
+├── guard/                         # Developer input guard subpackage
+│   ├── __init__.py                # Subpackage exports
+│   ├── core.py                    # InputGuard class, ScanResult, InputGuardError
+│   ├── enums.py                   # Action, Mode enums
+│   └── presets.py                 # Preset enum, PRESET_CATEGORIES mappings
 ├── exceptions.py                  # Exception hierarchy
 ├── py.typed                       # PEP 561 type marker
 ├── patterns/                      # Regex pattern definitions
