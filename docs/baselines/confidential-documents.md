@@ -14,9 +14,34 @@ explicitly marked as restricted.
 
 ---
 
-## Patterns & Keywords
+## Patterns
 
-### RBC Classification Labels
+### RBC Classification
+
+| Category | Source |
+|----------|--------|
+| TT_Confidential | [rbc_classification](../patterns/generic/rbc_classification.md) |
+| TT_MBI | [rbc_classification](../patterns/generic/rbc_classification.md) |
+| TT_SPI | [rbc_classification](../patterns/generic/rbc_classification.md) |
+| CNB_Confidential | [rbc_classification](../patterns/generic/rbc_classification.md) |
+| Sensitive - Business | [rbc_classification](../patterns/generic/rbc_classification.md) |
+| Sensitive - Personal | [rbc_classification](../patterns/generic/rbc_classification.md) |
+| CNB_Restricted | [rbc_classification](../patterns/generic/rbc_classification.md) |
+| CNB_Internal | [rbc_classification](../patterns/generic/rbc_classification.md) |
+| CNB_Public | [rbc_classification](../patterns/generic/rbc_classification.md) |
+| Public | [rbc_classification](../patterns/generic/rbc_classification.md) |
+
+### Financial Regulatory Labels
+
+| Category | Source |
+|----------|--------|
+| MNPI | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+| Inside Information | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+| Pre-Decisional | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+| Draft Not for Circulation | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+| Market Sensitive | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+| Information Barrier | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
+| Investment Restricted | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
 
 | Pattern Name | Regex | Keywords (proximity: 80 chars) |
 |---|---|---|
@@ -33,26 +58,28 @@ explicitly marked as restricted.
 
 ### Legal Privilege Markings
 
-| Pattern Name | Regex | Keywords (proximity: 100 chars) |
-|---|---|---|
-| Attorney-Client Privilege | `\b[Aa]ttorney[-\s][Cc]lient\s+[Pp]rivileged?\b` | `attorney`, `client`, `privilege`, `legal counsel`, `law firm`, `privileged communication` |
-| Privileged and Confidential | `\b[Pp]rivileged\s+(?:and\|&)\s+[Cc]onfidential\b` | `privileged`, `confidential`, `legal`, `attorney`, `counsel` |
-| Work Product | `\b[Ww]ork\s+[Pp]roduct(?:\s+[Dd]octrine)?\b` | `work product`, `attorney`, `litigation`, `legal`, `prepared in anticipation` |
-| Privileged Information | `\b[Pp]rivileged\s+[Ii]nformation\b` | `privileged`, `legal`, `attorney`, `counsel`, `protected` |
-| Legal Privilege | `\b[Ll]egal(?:ly)?\s+[Pp]rivileged\b` | `legal`, `privilege`, `attorney`, `counsel`, `protected communication` |
-| Litigation Hold | `\b(?:[Ll]itigation\|[Ll]egal)\s+[Hh]old\b` | `litigation`, `legal hold`, `preservation`, `hold notice`, `document retention` |
-| Protected by Privilege | `\b[Pp]rotected\s+(?:by\|under)\s+[Pp]rivilege\b` | `privilege`, `protected`, `attorney`, `legal`, `exempt from disclosure` |
+### Legal Privilege Markings
+
+| Category | Source |
+|----------|--------|
+| Attorney-Client Privilege | [privileged_information](../patterns/generic/privileged_information.md) |
+| Privileged and Confidential | [privileged_information](../patterns/generic/privileged_information.md) |
+| Work Product | [privileged_information](../patterns/generic/privileged_information.md) |
+| Privileged Information | [privileged_information](../patterns/generic/privileged_information.md) |
+| Legal Privilege | [privileged_information](../patterns/generic/privileged_information.md) |
+| Litigation Hold | [privileged_information](../patterns/generic/privileged_information.md) |
+| Protected by Privilege | [privileged_information](../patterns/generic/privileged_information.md) |
+
+---
 
 ### Supervisory Information
 
-| Pattern Name | Regex | Keywords (proximity: 80 chars) |
-|---|---|---|
-| Supervisory Controlled | `\b[Ss]upervisory\s+[Cc]ontrolled\s+[Ii]nformation\b` | `supervisory`, `controlled`, `occ`, `fdic`, `federal reserve`, `regulator`, `examination` |
-| Supervisory Confidential | `\b[Ss]upervisory\s+[Cc]onfidential\b` | `supervisory`, `confidential`, `regulator`, `examination`, `bank examination` |
-| CSI | `\b(?:[Cc]onfidential\s+[Ss]upervisory\s+[Ii]nformation\|CSI)\b` | `confidential supervisory`, `csi`, `examination report`, `regulatory report`, `supervisory letter` |
-| Non-Public Supervisory | `\b[Nn]on-?[Pp]ublic\s+[Ss]upervisory\s+[Ii]nformation\b` | `non-public`, `supervisory`, `regulatory`, `examination`, `not for release` |
-| Restricted Supervisory | `\b[Rr]estricted\s+[Ss]upervisory\s+[Ii]nformation\b` | `restricted`, `supervisory`, `regulatory`, `compliance`, `enforcement` |
-| Examination Findings | `\b(?:MRA\|MRIA\|[Mm]atter[s]?\s+[Rr]equiring\s+(?:[Ii]mmediate\s+)?[Aa]ttention)\b` | `examination`, `mra`, `mria`, `findings`, `regulatory`, `corrective action`, `consent order` |
+| Keyword Source | Proximity | Mapped Patterns |
+|---------------|-----------|-----------------|
+| [rbc_classification](../keywords/generic/rbc_classification.md) | 80 chars | TT_Confidential, TT_MBI, TT_SPI, CNB_Confidential, Sensitive - Business, Sensitive - Personal, CNB_Restricted, CNB_Internal, CNB_Public, Public |
+| [financial_regulatory_labels](../keywords/generic/financial_regulatory_labels.md) | 80 chars | MNPI, Inside Info, Market Sensitive |
+| [supervisory_information](../keywords/generic/supervisory_information.md) | 80 chars | Supervisory, CSI, Examination |
+| [privileged_information](../keywords/generic/privileged_information.md) | 100 chars | Attorney-Client, Work Product, Litigation Hold |
 
 ---
 
@@ -60,11 +87,10 @@ explicitly marked as restricted.
 
 | Tier | Labels | Typical Handling |
 |------|--------|-----------------|
-| **Public** | CNB_Public, Public | No restrictions |
+| **Public** | Public, CNB_Public | No restrictions |
 | **Internal** | CNB_Internal | Employees only |
-| **Sensitive** | Sensitive - Business, Sensitive - Personal | Need-to-know, role-based access |
-| **Confidential** | TT_Confidential, CNB_Confidential | Encrypted storage, audit trail |
-| **Restricted** | CNB_Restricted, TT_MBI, TT_SPI | Strict access control, no external sharing |
+| **Confidential** | TT_Confidential, CNB_Confidential, Sensitive - Business, Sensitive - Personal | Need-to-know, encrypted storage |
+| **Highly Restricted** | TT_MBI, TT_SPI, CNB_Restricted | Strict access control, audit trail |
 | **Legally Protected** | Attorney-Client Privilege, Work Product, Litigation Hold | Legal department control, no external sharing |
 | **Supervisory** | CSI, Supervisory Controlled | Information barriers, regulatory compliance |
 
