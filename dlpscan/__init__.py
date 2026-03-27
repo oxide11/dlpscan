@@ -81,6 +81,16 @@ from .plugins import (
     unregister_validators,
 )
 from .rate_limit import RateLimiter, RateLimitExceeded, rate_limited
+from .rulesets import (
+    CategoryOverride,
+    CustomPattern,
+    Ruleset,
+    available_baselines,
+    available_categories,
+    available_presets,
+    load_ruleset,
+    load_ruleset_from_string,
+)
 from .scanner import (
     MAX_INPUT_SIZE,
     MAX_MATCHES,

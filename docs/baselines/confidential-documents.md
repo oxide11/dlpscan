@@ -1,16 +1,16 @@
 # Confidential Documents Policy
 
-Detects classification labels, privilege markings, regulatory designations,
-and sensitivity markers that indicate a document is confidential, restricted,
-or subject to special handling requirements. Covers corporate, government,
-financial, legal, and privacy classification schemes.
+Detects classification labels, privilege markings, and sensitivity markers
+that indicate a document is confidential, restricted, or subject to special
+handling requirements. Covers RBC classification labels, legal privilege
+designations, and confidential supervisory information.
 
 ## Control Objective
 
 Prevent the unauthorized distribution of documents bearing confidentiality
-markings, legal privilege designations, regulatory classification labels,
-or privacy sensitivity indicators. Enforce document handling policies by
-detecting content that has been explicitly marked as restricted.
+markings, legal privilege designations, or supervisory classification labels.
+Enforce document handling policies by detecting content that has been
+explicitly marked as restricted.
 
 ---
 
@@ -43,16 +43,20 @@ detecting content that has been explicitly marked as restricted.
 | Information Barrier | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
 | Investment Restricted | [financial_regulatory_labels](../patterns/generic/financial_regulatory_labels.md) |
 
-### Supervisory Information
+| Pattern Name | Regex | Keywords (proximity: 80 chars) |
+|---|---|---|
+| TT_Confidential | `\bTT_Confidential\b` | `confidential`, `classification`, `label`, `sensitive`, `restricted` |
+| TT_MBI | `\bTT_MBI\b` | `mbi`, `material business information`, `classification`, `sensitive` |
+| TT_SPI | `\bTT_SPI\b` | `spi`, `sensitive personal information`, `classification`, `personal` |
+| CNB_Confidential | `\bCNB_Confidential\b` | `confidential`, `cnb`, `classification`, `restricted`, `sensitive` |
+| Sensitive - Business | `\b[Ss]ensitive\s*[-–—]\s*[Bb]usiness\b` | `sensitive`, `business`, `classification`, `restricted`, `internal` |
+| Sensitive - Personal | `\b[Ss]ensitive\s*[-–—]\s*[Pp]ersonal\b` | `sensitive`, `personal`, `classification`, `pii`, `privacy` |
+| CNB_Restricted | `\bCNB_Restricted\b` | `restricted`, `cnb`, `classification`, `limited distribution`, `need to know` |
+| CNB_Internal | `\bCNB_Internal\b` | `internal`, `cnb`, `classification`, `employees only`, `not for external` |
+| CNB_Public | `\bCNB_Public\b` | `public`, `cnb`, `classification`, `unrestricted` |
+| Public | `\b[Pp]ublic\b` | `public`, `unrestricted`, `open`, `classification` |
 
-| Category | Source |
-|----------|--------|
-| Supervisory Controlled | [supervisory_information](../patterns/generic/supervisory_information.md) |
-| Supervisory Confidential | [supervisory_information](../patterns/generic/supervisory_information.md) |
-| CSI | [supervisory_information](../patterns/generic/supervisory_information.md) |
-| Non-Public Supervisory | [supervisory_information](../patterns/generic/supervisory_information.md) |
-| Restricted Supervisory | [supervisory_information](../patterns/generic/supervisory_information.md) |
-| Examination Findings | [supervisory_information](../patterns/generic/supervisory_information.md) |
+### Legal Privilege Markings
 
 ### Legal Privilege Markings
 
@@ -68,7 +72,7 @@ detecting content that has been explicitly marked as restricted.
 
 ---
 
-## Keywords
+### Supervisory Information
 
 | Keyword Source | Proximity | Mapped Patterns |
 |---------------|-----------|-----------------|
@@ -88,7 +92,7 @@ detecting content that has been explicitly marked as restricted.
 | **Confidential** | TT_Confidential, CNB_Confidential, Sensitive - Business, Sensitive - Personal | Need-to-know, encrypted storage |
 | **Highly Restricted** | TT_MBI, TT_SPI, CNB_Restricted | Strict access control, audit trail |
 | **Legally Protected** | Attorney-Client Privilege, Work Product, Litigation Hold | Legal department control, no external sharing |
-| **Regulatory** | MNPI, CSI, Supervisory Controlled | Information barriers, regulatory compliance |
+| **Supervisory** | CSI, Supervisory Controlled | Information barriers, regulatory compliance |
 
 ## Use Cases
 

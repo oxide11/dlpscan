@@ -27,6 +27,12 @@ All notable changes to dlpscan will be documented in this file.
 - **GitHub Actions Action**: Composite action at `.github/actions/dlpscan/` for
   CI/CD pipeline scanning with configurable path, format, and fail-on-findings.
 
+- **YAML Scan Rulesets** (`dlpscan.rulesets`): Declarative YAML configuration
+  for scan rules. Select patterns by baseline (PII, PCI, PHI, financial,
+  secrets, confidential docs), preset, or individual category. Supports
+  per-category overrides, custom inline regex patterns, and allowlists.
+  Ships with 7 ready-to-use rulesets in `rulesets/`.
+
 ### Improvements
 
 - **Drop Python 3.8**: Minimum version is now Python 3.9. Removed all
