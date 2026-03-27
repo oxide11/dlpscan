@@ -3489,7 +3489,7 @@ class TestRulesets(unittest.TestCase):
         self.assertNotIn("Credit Card Numbers", cats)
 
     def test_ruleset_override_disables_category(self):
-        from dlpscan.rulesets import load_ruleset_from_string, CategoryOverride
+        from dlpscan.rulesets import CategoryOverride, load_ruleset_from_string
         yaml_str = '{"name": "test", "baselines": ["pci"]}'
         rs = load_ruleset_from_string(yaml_str)
         rs.overrides.append(CategoryOverride(
