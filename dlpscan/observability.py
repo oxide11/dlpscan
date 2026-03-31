@@ -26,6 +26,7 @@ Usage::
 import logging
 import math
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -375,6 +376,72 @@ dlpscan_rate_limit_rejections_total = registry.register(
     )
 )
 
+# -- Availability / uptime metrics --
+
+_start_time: float = time.time()
+
+dlpscan_start_time_seconds = registry.register(
+    Gauge(
+        name="dlpscan_start_time_seconds",
+        description="Unix timestamp when dlpscan was initialized",
+    )
+)
+dlpscan_start_time_seconds.set(_start_time)
+
+dlpscan_uptime_seconds = registry.register(
+    Gauge(
+        name="dlpscan_uptime_seconds",
+        description="Seconds since dlpscan was initialized",
+    )
+)
+
+dlpscan_health_status = registry.register(
+    Gauge(
+        name="dlpscan_health_status",
+        description="Health status (1=healthy, 0=degraded)",
+    )
+)
+dlpscan_health_status.set(1)  # Healthy on startup.
+
+dlpscan_scans_in_flight = registry.register(
+    Gauge(
+        name="dlpscan_scans_in_flight",
+        description="Number of scans currently in progress",
+    )
+)
+
+dlpscan_bytes_scanned_total = registry.register(
+    Counter(
+        name="dlpscan_bytes_scanned_total",
+        description="Total bytes of text scanned",
+    )
+)
+
+dlpscan_patterns_timed_out_total = registry.register(
+    Counter(
+        name="dlpscan_patterns_timed_out_total",
+        description="Total regex patterns that hit timeout across all scans",
+    )
+)
+
+
+def get_uptime() -> float:
+    """Return seconds since dlpscan was initialized."""
+    return time.time() - _start_time
+
+
+def get_health() -> dict:
+    """Return a health-check dictionary suitable for HTTP /healthz endpoints."""
+    uptime = get_uptime()
+    dlpscan_uptime_seconds.set(uptime)
+    return {
+        "status": "healthy" if dlpscan_health_status.get() == 1 else "degraded",
+        "uptime_seconds": round(uptime, 2),
+        "scans_total": int(dlpscan_scans_total.get()),
+        "errors_total": int(dlpscan_scan_errors_total.get()),
+        "scans_in_flight": int(dlpscan_scans_in_flight.get()),
+    }
+
 
 # ---------------------------------------------------------------------------
 # record_scan helper
@@ -401,6 +468,44 @@ def record_scan(result: Any, duration_seconds: float) -> None:
         # Edge case: result flagged dirty but no findings — treat as error.
         dlpscan_scan_errors_total.inc()
 
+    # Update uptime gauge on each scan.
+    dlpscan_uptime_seconds.set(get_uptime())
+
+
+def record_scan_metrics(scan_metrics: Any) -> None:
+    """Bridge a ``ScanMetrics`` (from ``dlpscan.metrics``) into Prometheus counters.
+
+    This is intended to be registered as the metrics callback so that every
+    ``enhanced_scan_text`` call automatically feeds the observability registry.
+    """
+    dlpscan_scans_total.inc()
+    dlpscan_scan_duration_seconds.observe(scan_metrics.duration_ms / 1000.0)
+
+    if scan_metrics.match_count:
+        dlpscan_findings_total.inc(scan_metrics.match_count)
+
+    if scan_metrics.bytes_scanned:
+        dlpscan_bytes_scanned_total.inc(scan_metrics.bytes_scanned)
+
+    if scan_metrics.patterns_timed_out:
+        dlpscan_patterns_timed_out_total.inc(scan_metrics.patterns_timed_out)
+        dlpscan_health_status.set(0)  # Degraded when patterns time out.
+
+    if scan_metrics.error is not None:
+        dlpscan_scan_errors_total.inc()
+
+    dlpscan_uptime_seconds.set(get_uptime())
+
+
+def enable_auto_instrumentation() -> None:
+    """Wire observability into the scanning pipeline automatically.
+
+    Registers ``record_scan_metrics`` as the ``MetricsCollector`` callback
+    so every call to ``enhanced_scan_text`` feeds Prometheus metrics.
+    """
+    from .metrics import set_metrics_callback
+    set_metrics_callback(record_scan_metrics)
+
 
 # ---------------------------------------------------------------------------
 # PrometheusExporter — lightweight /metrics HTTP server
@@ -411,9 +516,21 @@ class _MetricsHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path == "/metrics":
+            # Update uptime before serving.
+            dlpscan_uptime_seconds.set(get_uptime())
             body = registry.to_prometheus().encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/healthz":
+            import json
+            health = get_health()
+            body = json.dumps(health).encode("utf-8")
+            status = 200 if health["status"] == "healthy" else 503
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

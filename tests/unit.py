@@ -4261,5 +4261,942 @@ class TestWildcardAllowlist(unittest.TestCase):
         self.assertEqual(filtered[0].text, '4532015112830366')
 
 
+# =====================================================================
+# Aho-Corasick context backend tests
+# =====================================================================
+
+class TestAhoCorasick(unittest.TestCase):
+    """Tests for the Aho-Corasick context matching backend."""
+
+    def test_pure_python_automaton_basic(self):
+        """Pure-Python automaton should find keywords in text."""
+        from dlpscan.ahocorasick import _PurePythonAutomaton
+        auto = _PurePythonAutomaton()
+        auto.add_word('visa', ('visa', 'Credit Card Numbers', 'Visa'))
+        auto.add_word('credit card', ('credit card', 'Credit Card Numbers', 'Visa'))
+        auto.make_automaton()
+        hits = list(auto.iter('my visa credit card number'))
+        keywords_found = [v[0] for _, vals in hits for v in vals]
+        self.assertIn('visa', keywords_found)
+        self.assertIn('credit card', keywords_found)
+
+    def test_matcher_build_and_search(self):
+        """AhoCorasickMatcher should build and find context keywords."""
+        from dlpscan.ahocorasick import AhoCorasickMatcher
+        matcher = AhoCorasickMatcher()
+        test_context = {
+            'TestCat': {
+                'Identifiers': {'TestSub': ['hello', 'world']},
+                'distance': 50,
+            }
+        }
+        matcher.build(context_keywords=test_context)
+        self.assertTrue(matcher.is_built)
+        self.assertEqual(matcher.keyword_count, 2)
+
+        hit_index = matcher.search('hello world test')
+        self.assertTrue(hit_index.has_hit_in_range('TestCat', 'TestSub', 0, 20))
+        self.assertFalse(hit_index.has_hit_in_range('TestCat', 'Missing', 0, 20))
+
+    def test_matcher_context_near(self):
+        """has_context_near should find keywords within distance."""
+        from dlpscan.ahocorasick import AhoCorasickMatcher
+        matcher = AhoCorasickMatcher()
+        test_context = {
+            'Cat': {
+                'Identifiers': {'Sub': ['keyword']},
+                'distance': 20,
+            }
+        }
+        matcher.build(context_keywords=test_context)
+        text = 'keyword is far away from the match here XXXX'
+        hit_index = matcher.search(text)
+        # keyword is at position 0, match at 41
+        self.assertTrue(matcher.has_context_near(hit_index, 0, 7, 'Cat', 'Sub', distance=20))
+        self.assertFalse(matcher.has_context_near(hit_index, 41, 45, 'Cat', 'Sub', distance=10))
+
+    def test_hit_index_empty(self):
+        """Empty hit index should report empty."""
+        from dlpscan.ahocorasick import ContextHitIndex
+        idx = ContextHitIndex([])
+        self.assertTrue(idx.empty)
+        self.assertFalse(idx.has_hit_in_range('X', 'Y', 0, 100))
+
+    def test_backend_toggle_regex(self):
+        """Default backend should be regex."""
+        from dlpscan.scanner import get_context_backend
+        self.assertEqual(get_context_backend(), 'regex')
+
+    def test_backend_toggle_ahocorasick(self):
+        """Setting backend to ahocorasick should work and scan correctly."""
+        from dlpscan.scanner import get_context_backend, set_context_backend
+        original = get_context_backend()
+        try:
+            set_context_backend('ahocorasick')
+            self.assertEqual(get_context_backend(), 'ahocorasick')
+
+            # Scan should still find credit card with context
+            from dlpscan.scanner import enhanced_scan_text
+            text = 'credit card number 4111111111111111'
+            matches = list(enhanced_scan_text(text))
+            cc_matches = [m for m in matches if m.category == 'Credit Card Numbers']
+            self.assertTrue(len(cc_matches) > 0)
+        finally:
+            set_context_backend(original)
+
+    def test_backend_invalid_raises(self):
+        """Invalid backend name should raise ValueError."""
+        from dlpscan.scanner import set_context_backend
+        with self.assertRaises(ValueError):
+            set_context_backend('invalid_backend')
+
+    def test_guard_context_backend_param(self):
+        """InputGuard should accept context_backend parameter."""
+        from dlpscan.guard.core import InputGuard
+        from dlpscan.guard.enums import Action
+        from dlpscan.scanner import get_context_backend, set_context_backend
+        original = get_context_backend()
+        try:
+            guard = InputGuard(context_backend='ahocorasick', action=Action.FLAG)
+            self.assertEqual(get_context_backend(), 'ahocorasick')
+            result = guard.scan('credit card number 4111111111111111')
+            self.assertFalse(result.is_clean)
+        finally:
+            set_context_backend(original)
+
+    def test_config_context_backend(self):
+        """Config _DEFAULTS should include context_backend."""
+        from dlpscan.config import _DEFAULTS
+        self.assertIn('context_backend', _DEFAULTS)
+        self.assertEqual(_DEFAULTS['context_backend'], 'regex')
+
+    def test_env_context_backend(self):
+        """DLPSCAN_CONTEXT_BACKEND env var should be loaded."""
+        from dlpscan.env_config import load_env_config
+        os.environ['DLPSCAN_CONTEXT_BACKEND'] = 'ahocorasick'
+        try:
+            config = load_env_config()
+            self.assertEqual(config['context_backend'], 'ahocorasick')
+        finally:
+            del os.environ['DLPSCAN_CONTEXT_BACKEND']
+
+    def test_global_matcher_singleton(self):
+        """get_matcher should return a built matcher."""
+        from dlpscan.ahocorasick import get_matcher
+        matcher = get_matcher()
+        self.assertTrue(matcher.is_built)
+        self.assertGreater(matcher.keyword_count, 0)
+
+    def test_rebuild_matcher(self):
+        """rebuild_matcher should create fresh matcher with custom context."""
+        from dlpscan.ahocorasick import get_matcher, rebuild_matcher
+        rebuild_matcher(custom_context={
+            'Custom': {
+                'Identifiers': {'MySub': ['custom_keyword']},
+                'distance': 30,
+            }
+        })
+        matcher = get_matcher()
+        hit_index = matcher.search('this has custom_keyword in it')
+        self.assertTrue(hit_index.has_hit_in_range('Custom', 'MySub', 0, 30))
+
+
+# =====================================================================
+# Exact Data Match (EDM) tests
+# =====================================================================
+
+class TestExactDataMatch(unittest.TestCase):
+    """Tests for the Exact Data Match module."""
+
+    def test_register_and_scan(self):
+        """Registered values should be detected in text."""
+        from dlpscan.edm import ExactDataMatcher
+        matcher = ExactDataMatcher(salt=b'test-salt-1234567890123456')
+        matcher.register_values('ssn', ['123-45-6789', '987-65-4321'])
+        self.assertEqual(matcher.total_hashes, 2)
+
+        hits = matcher.scan('Employee SSN is 123-45-6789 on file.')
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].category, 'ssn')
+        self.assertEqual(hits[0].confidence, 1.0)
+
+    def test_normalization(self):
+        """Values with different formatting should match."""
+        from dlpscan.edm import ExactDataMatcher
+        matcher = ExactDataMatcher(salt=b'test-salt-1234567890123456')
+        matcher.register_values('cc', ['4111-1111-1111-1111'])
+        # Space-separated should also match
+        self.assertTrue(matcher.check_value('4111 1111 1111 1111', 'cc'))
+        # No separators
+        self.assertTrue(matcher.check_value('4111111111111111', 'cc'))
+
+    def test_no_false_positive(self):
+        """Unregistered values should not match."""
+        from dlpscan.edm import ExactDataMatcher
+        matcher = ExactDataMatcher(salt=b'test-salt-1234567890123456')
+        matcher.register_values('ssn', ['123-45-6789'])
+        self.assertFalse(matcher.check_value('999-99-9999', 'ssn'))
+
+    def test_category_isolation(self):
+        """check_value with category should only check that category."""
+        from dlpscan.edm import ExactDataMatcher
+        matcher = ExactDataMatcher(salt=b'test-salt-1234567890123456')
+        matcher.register_values('ssn', ['123-45-6789'])
+        matcher.register_values('other', ['999-88-7777'])
+        self.assertTrue(matcher.check_value('123-45-6789', 'ssn'))
+        self.assertFalse(matcher.check_value('123-45-6789', 'other'))
+
+    def test_save_and_load(self):
+        """Save/load round-trip should preserve hash sets."""
+        from dlpscan.edm import ExactDataMatcher
+        matcher = ExactDataMatcher(salt=b'test-salt-1234567890123456')
+        matcher.register_values('ssn', ['123-45-6789', '987-65-4321'])
+
+        with tempfile.NamedTemporaryFile(suffix='.json', delete=False, mode='w') as f:
+            path = f.name
+        try:
+            matcher.save(path)
+            loaded = ExactDataMatcher.load(path)
+            self.assertEqual(loaded.total_hashes, 2)
+            self.assertTrue(loaded.check_value('123-45-6789', 'ssn'))
+        finally:
+            os.unlink(path)
+
+    def test_clear(self):
+        """clear should remove hashes."""
+        from dlpscan.edm import ExactDataMatcher
+        matcher = ExactDataMatcher(salt=b'test-salt-1234567890123456')
+        matcher.register_values('ssn', ['123-45-6789'])
+        self.assertEqual(matcher.total_hashes, 1)
+        matcher.clear('ssn')
+        self.assertEqual(matcher.total_hashes, 0)
+
+    def test_edm_match_to_dict(self):
+        """EDMMatch.to_dict should truncate hash."""
+        from dlpscan.edm import EDMMatch
+        m = EDMMatch(value_hash='a' * 64, category='ssn',
+                     span=(0, 11), matched_text='123-45-6789')
+        d = m.to_dict()
+        self.assertTrue(d['value_hash'].endswith('...'))
+        self.assertEqual(d['confidence'], 1.0)
+
+    def test_email_tokenizer(self):
+        """Email tokenizer should extract emails for scanning."""
+        from dlpscan.edm import ExactDataMatcher
+        matcher = ExactDataMatcher(
+            salt=b'test-salt-1234567890123456',
+            tokenizers=['email'],
+        )
+        matcher.register_values('emails', ['john@example.com'])
+        hits = matcher.scan('Contact john@example.com for info.')
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].category, 'emails')
+
+    def test_scan_empty_matcher(self):
+        """Scanning with no registered values should return empty list."""
+        from dlpscan.edm import ExactDataMatcher
+        matcher = ExactDataMatcher(salt=b'test-salt-1234567890123456')
+        self.assertEqual(matcher.scan('any text'), [])
+
+
+# =====================================================================
+# LSH / MinHash document similarity tests
+# =====================================================================
+
+class TestLSH(unittest.TestCase):
+    """Tests for the Locality-Sensitive Hashing module."""
+
+    def test_register_and_query_similar(self):
+        """Similar documents should be detected."""
+        from dlpscan.lsh import DocumentVault
+        vault = DocumentVault(threshold=0.5)
+        doc = 'This is a confidential document about project alpha with sensitive details.'
+        vault.register('doc1', doc, sensitivity='confidential')
+        self.assertEqual(vault.document_count, 1)
+
+        # Slightly modified version should still match
+        query = 'This is a confidential document about project alpha with sensitive information.'
+        matches = vault.query(query, threshold=0.5)
+        self.assertTrue(len(matches) > 0)
+        self.assertEqual(matches[0].doc_id, 'doc1')
+        self.assertEqual(matches[0].sensitivity, 'confidential')
+
+    def test_dissimilar_no_match(self):
+        """Completely different documents should not match."""
+        from dlpscan.lsh import DocumentVault
+        vault = DocumentVault(threshold=0.8)
+        vault.register('doc1', 'The quick brown fox jumps over the lazy dog ' * 10)
+        matches = vault.query('Python is a programming language used for many tasks ' * 10)
+        self.assertEqual(len(matches), 0)
+
+    def test_contains_similar(self):
+        """contains_similar should return boolean."""
+        from dlpscan.lsh import DocumentVault
+        vault = DocumentVault(threshold=0.5)
+        text = 'Lorem ipsum dolor sit amet consectetur adipiscing elit ' * 10
+        vault.register('lorem', text)
+        self.assertTrue(vault.contains_similar(text))
+
+    def test_unregister(self):
+        """unregister should remove document from vault."""
+        from dlpscan.lsh import DocumentVault
+        vault = DocumentVault()
+        vault.register('doc1', 'test document content ' * 20)
+        self.assertEqual(vault.document_count, 1)
+        self.assertTrue(vault.unregister('doc1'))
+        self.assertEqual(vault.document_count, 0)
+        self.assertFalse(vault.unregister('nonexistent'))
+
+    def test_save_and_load(self):
+        """Save/load round-trip should preserve vault."""
+        from dlpscan.lsh import DocumentVault
+        vault = DocumentVault(num_hashes=64, bands=8, threshold=0.7)
+        vault.register('doc1', 'important document content ' * 20, sensitivity='high')
+
+        with tempfile.NamedTemporaryFile(suffix='.json', delete=False, mode='w') as f:
+            path = f.name
+        try:
+            vault.save(path)
+            loaded = DocumentVault.load(path)
+            self.assertEqual(loaded.document_count, 1)
+            self.assertEqual(loaded.threshold, 0.7)
+        finally:
+            os.unlink(path)
+
+    def test_similarity_match_to_dict(self):
+        """SimilarityMatch.to_dict should serialize properly."""
+        from dlpscan.lsh import SimilarityMatch
+        m = SimilarityMatch(doc_id='doc1', similarity=0.85,
+                            sensitivity='high', doc_metadata={'author': 'test'})
+        d = m.to_dict()
+        self.assertEqual(d['doc_id'], 'doc1')
+        self.assertEqual(d['similarity'], 0.85)
+        self.assertEqual(d['sensitivity'], 'high')
+
+    def test_invalid_params(self):
+        """Invalid parameters should raise ValueError."""
+        from dlpscan.lsh import DocumentVault
+        with self.assertRaises(ValueError):
+            DocumentVault(num_hashes=100, bands=7)  # 100 not divisible by 7
+        with self.assertRaises(ValueError):
+            DocumentVault(threshold=0.0)
+        with self.assertRaises(ValueError):
+            DocumentVault(threshold=1.5)
+
+    def test_clear(self):
+        """clear should empty the vault."""
+        from dlpscan.lsh import DocumentVault
+        vault = DocumentVault()
+        vault.register('doc1', 'content ' * 50)
+        vault.register('doc2', 'other content ' * 50)
+        self.assertEqual(vault.document_count, 2)
+        vault.clear()
+        self.assertEqual(vault.document_count, 0)
+
+    def test_jaccard_signatures(self):
+        """Identical signatures should have jaccard=1.0."""
+        from dlpscan.lsh import _jaccard_from_signatures
+        sig = [1, 2, 3, 4, 5]
+        self.assertEqual(_jaccard_from_signatures(sig, sig), 1.0)
+        self.assertEqual(_jaccard_from_signatures(sig, [6, 7, 8, 9, 10]), 0.0)
+
+    def test_shingle_function(self):
+        """_shingle should produce overlapping word n-grams."""
+        from dlpscan.lsh import _shingle
+        shingles = _shingle('the quick brown fox jumps', k=3)
+        self.assertIn('the quick brown', shingles)
+        self.assertIn('quick brown fox', shingles)
+        self.assertIn('brown fox jumps', shingles)
+        self.assertEqual(len(shingles), 3)
+
+
+###############################################################################
+# Count-Min Sketch tests
+###############################################################################
+
+class TestCountMinSketch(unittest.TestCase):
+    def test_basic_increment_and_estimate(self):
+        from dlpscan.countmin import CountMinSketch
+        cms = CountMinSketch(width=1000, depth=5)
+        cms.increment("foo")
+        cms.increment("foo")
+        cms.increment("foo")
+        self.assertEqual(cms.estimate("foo"), 3)
+
+    def test_never_undercounts(self):
+        from dlpscan.countmin import CountMinSketch
+        cms = CountMinSketch(width=500, depth=5)
+        for _ in range(100):
+            cms.increment("key")
+        self.assertGreaterEqual(cms.estimate("key"), 100)
+
+    def test_zero_for_unseen(self):
+        from dlpscan.countmin import CountMinSketch
+        cms = CountMinSketch()
+        self.assertEqual(cms.estimate("never_seen"), 0)
+
+    def test_total_property(self):
+        from dlpscan.countmin import CountMinSketch
+        cms = CountMinSketch()
+        cms.increment("a", 5)
+        cms.increment("b", 3)
+        self.assertEqual(cms.total, 8)
+
+    def test_clear(self):
+        from dlpscan.countmin import CountMinSketch
+        cms = CountMinSketch()
+        cms.increment("x", 10)
+        cms.clear()
+        self.assertEqual(cms.estimate("x"), 0)
+        self.assertEqual(cms.total, 0)
+
+    def test_merge(self):
+        from dlpscan.countmin import CountMinSketch
+        a = CountMinSketch(width=1000, depth=5)
+        b = CountMinSketch(width=1000, depth=5)
+        a.increment("k", 3)
+        b.increment("k", 7)
+        a.merge(b)
+        self.assertEqual(a.estimate("k"), 10)
+        self.assertEqual(a.total, 10)
+
+    def test_merge_different_dims_raises(self):
+        from dlpscan.countmin import CountMinSketch
+        a = CountMinSketch(width=100, depth=3)
+        b = CountMinSketch(width=200, depth=3)
+        with self.assertRaises(ValueError):
+            a.merge(b)
+
+    def test_invalid_params(self):
+        from dlpscan.countmin import CountMinSketch
+        with self.assertRaises(ValueError):
+            CountMinSketch(width=0, depth=5)
+        with self.assertRaises(ValueError):
+            CountMinSketch(width=100, depth=-1)
+
+    def test_properties(self):
+        from dlpscan.countmin import CountMinSketch
+        cms = CountMinSketch(width=500, depth=3)
+        self.assertEqual(cms.width, 500)
+        self.assertEqual(cms.depth, 3)
+
+
+###############################################################################
+# HyperLogLog tests
+###############################################################################
+
+class TestHyperLogLog(unittest.TestCase):
+    def test_empty_count(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        hll = HyperLogLog(precision=10)
+        self.assertEqual(hll.count(), 0)
+
+    def test_single_item(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        hll = HyperLogLog(precision=14)
+        hll.add("hello")
+        self.assertGreaterEqual(hll.count(), 1)
+        self.assertLessEqual(hll.count(), 3)  # within error
+
+    def test_cardinality_estimate(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        hll = HyperLogLog(precision=14)
+        n = 1000
+        for i in range(n):
+            hll.add(f"item_{i}")
+        estimate = hll.count()
+        # Should be within ~5% for precision=14
+        self.assertGreater(estimate, n * 0.9)
+        self.assertLess(estimate, n * 1.1)
+
+    def test_duplicates_dont_increase_count(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        hll = HyperLogLog(precision=14)
+        for _ in range(1000):
+            hll.add("same_value")
+        self.assertLessEqual(hll.count(), 3)
+
+    def test_merge(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        a = HyperLogLog(precision=12)
+        b = HyperLogLog(precision=12)
+        for i in range(500):
+            a.add(f"a_{i}")
+        for i in range(500):
+            b.add(f"b_{i}")
+        a.merge(b)
+        estimate = a.count()
+        self.assertGreater(estimate, 800)
+        self.assertLess(estimate, 1200)
+
+    def test_merge_different_precision_raises(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        a = HyperLogLog(precision=10)
+        b = HyperLogLog(precision=12)
+        with self.assertRaises(ValueError):
+            a.merge(b)
+
+    def test_invalid_precision(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        with self.assertRaises(ValueError):
+            HyperLogLog(precision=2)
+        with self.assertRaises(ValueError):
+            HyperLogLog(precision=20)
+
+    def test_clear(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        hll = HyperLogLog(precision=10)
+        for i in range(100):
+            hll.add(f"val_{i}")
+        hll.clear()
+        self.assertEqual(hll.count(), 0)
+
+    def test_properties(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        hll = HyperLogLog(precision=12)
+        self.assertEqual(hll.precision, 12)
+        self.assertEqual(hll.memory_bytes, 4096)
+        self.assertAlmostEqual(hll.standard_error, 1.04 / (4096 ** 0.5), places=3)
+
+
+###############################################################################
+# Cuckoo Filter tests
+###############################################################################
+
+class TestCuckooFilter(unittest.TestCase):
+    def test_insert_and_contains(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=1000)
+        self.assertTrue(cf.insert("hello"))
+        self.assertTrue(cf.contains("hello"))
+        self.assertFalse(cf.contains("world"))
+
+    def test_delete(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=1000)
+        cf.insert("item")
+        self.assertTrue(cf.contains("item"))
+        self.assertTrue(cf.delete("item"))
+        self.assertFalse(cf.contains("item"))
+
+    def test_delete_nonexistent(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=1000)
+        self.assertFalse(cf.delete("nope"))
+
+    def test_count(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=1000)
+        cf.insert("a")
+        cf.insert("b")
+        cf.insert("c")
+        self.assertEqual(cf.count, 3)
+        cf.delete("b")
+        self.assertEqual(cf.count, 2)
+
+    def test_clear(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=1000)
+        for i in range(50):
+            cf.insert(f"item_{i}")
+        cf.clear()
+        self.assertEqual(cf.count, 0)
+        self.assertFalse(cf.contains("item_0"))
+
+    def test_load_factor(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=100)
+        self.assertEqual(cf.load_factor, 0.0)
+        cf.insert("x")
+        self.assertGreater(cf.load_factor, 0.0)
+
+    def test_capacity_and_memory(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=1000, fingerprint_bits=16)
+        self.assertGreater(cf.capacity, 0)
+        self.assertGreater(cf.memory_bytes, 0)
+
+    def test_invalid_capacity(self):
+        from dlpscan.cuckoo import CuckooFilter
+        with self.assertRaises(ValueError):
+            CuckooFilter(capacity=0)
+
+    def test_invalid_fingerprint_bits(self):
+        from dlpscan.cuckoo import CuckooFilter
+        with self.assertRaises(ValueError):
+            CuckooFilter(fingerprint_bits=7)
+
+    def test_many_inserts_no_false_negatives(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=10000, fingerprint_bits=16)
+        items = [f"item_{i}" for i in range(500)]
+        for item in items:
+            cf.insert(item)
+        for item in items:
+            self.assertTrue(cf.contains(item), f"False negative for {item}")
+
+
+###############################################################################
+# Rabin-Karp tests
+###############################################################################
+
+class TestRabinKarp(unittest.TestCase):
+    def test_register_and_scan(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=10)
+        doc = "This is a confidential document with sensitive information inside."
+        m.register("doc1", doc)
+        hits = m.scan(doc)
+        self.assertGreater(len(hits), 0)
+        self.assertEqual(hits[0].doc_id, "doc1")
+
+    def test_no_match_on_unrelated_text(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=10)
+        m.register("doc1", "the quick brown fox jumps over the lazy dog repeatedly")
+        hits = m.scan("completely different unrelated text with no overlap whatsoever")
+        self.assertEqual(len(hits), 0)
+
+    def test_partial_fragment_match(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=15)
+        doc = "This contract grants exclusive rights to the licensee for perpetual use of all materials."
+        m.register("contract", doc)
+        # Scan text containing a verbatim fragment of the document
+        fragment = "Someone wrote: this contract grants exclusive rights to the licensee for perpetual use of all materials."
+        hits = m.scan(fragment)
+        self.assertGreater(len(hits), 0)
+
+    def test_unregister(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=10)
+        m.register("doc1", "a long enough document for window size ten characters")
+        self.assertTrue(m.unregister("doc1"))
+        self.assertFalse(m.unregister("doc1"))
+        self.assertEqual(m.document_count, 0)
+
+    def test_contains_fragment(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=10)
+        doc = "sensitive financial report containing quarterly earnings data"
+        m.register("report", doc)
+        self.assertTrue(m.contains_fragment(doc))
+
+    def test_short_document_skipped(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=50)
+        count = m.register("short", "too short")
+        self.assertEqual(count, 0)
+
+    def test_window_size_minimum(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        with self.assertRaises(ValueError):
+            PartialDocumentMatcher(window_size=5)
+
+    def test_properties(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=20)
+        m.register("d1", "a document that is certainly long enough for twenty characters")
+        self.assertEqual(m.document_count, 1)
+        self.assertGreater(m.fingerprint_count, 0)
+        self.assertEqual(m.window_size, 20)
+
+    def test_clear(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=10)
+        m.register("d1", "a reasonably long document string for testing purposes")
+        m.clear()
+        self.assertEqual(m.document_count, 0)
+        self.assertEqual(m.fingerprint_count, 0)
+
+    def test_fragment_match_to_dict(self):
+        from dlpscan.rabin_karp import FragmentMatch
+        fm = FragmentMatch(doc_id="d1", doc_position=10, scan_position=5,
+                           fragment_length=50)
+        d = fm.to_dict()
+        self.assertEqual(d['doc_id'], 'd1')
+        self.assertEqual(d['fragment_length'], 50)
+
+
+###############################################################################
+# Entropy Analysis tests
+###############################################################################
+
+class TestEntropyAnalysis(unittest.TestCase):
+    def test_zero_entropy(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        result = analyzer.analyze_bytes(b'\x00' * 1000)
+        self.assertAlmostEqual(result.entropy, 0.0, places=1)
+
+    def test_max_entropy(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        # All 256 byte values equally represented
+        data = bytes(range(256)) * 100
+        analyzer = EntropyAnalyzer()
+        result = analyzer.analyze_bytes(data)
+        self.assertGreater(result.entropy, 7.9)
+
+    def test_text_entropy(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        text = b"Hello world this is normal English text with typical entropy levels."
+        result = analyzer.analyze_bytes(text, format_hint=".txt")
+        self.assertGreater(result.entropy, 2.0)
+        self.assertLess(result.entropy, 6.0)
+
+    def test_suspicious_for_format(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        # Random-looking data claimed to be a .txt file
+        import os as _os
+        data = _os.urandom(1000)
+        result = analyzer.analyze_bytes(data, format_hint=".txt")
+        self.assertTrue(result.is_suspicious)
+
+    def test_classification_normal(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        result = analyzer.analyze_bytes(b"aaabbbccc" * 100)
+        self.assertEqual(result.classification, "normal")
+
+    def test_classification_encrypted(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        data = bytes(range(256)) * 100
+        result = analyzer.analyze_bytes(data)
+        self.assertIn(result.classification, ("likely_encrypted", "compressed_or_encrypted"))
+
+    def test_analyze_file(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        with tempfile.NamedTemporaryFile(suffix='.txt', delete=False) as f:
+            f.write(b"Normal text content for testing entropy analysis module.")
+            f.flush()
+            try:
+                result = analyzer.analyze_file(f.name)
+                self.assertIsNotNone(result.file_path)
+                self.assertGreater(result.file_size, 0)
+            finally:
+                os.unlink(f.name)
+
+    def test_empty_data(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        result = analyzer.analyze_bytes(b"")
+        self.assertEqual(result.entropy, 0.0)
+
+    def test_entropy_result_to_dict(self):
+        from dlpscan.entropy import EntropyResult
+        r = EntropyResult(entropy=7.5, is_suspicious=True,
+                          classification="compressed_or_encrypted",
+                          file_size=1024, format_hint=".bin")
+        d = r.to_dict()
+        self.assertEqual(d['entropy'], 7.5)
+        self.assertTrue(d['is_suspicious'])
+
+
+###############################################################################
+# Recursive Extractor tests
+###############################################################################
+
+class TestRecursiveExtractor(unittest.TestCase):
+    def test_extract_non_archive(self):
+        from dlpscan.entropy import RecursiveExtractor
+        with tempfile.NamedTemporaryFile(suffix='.txt', delete=False) as f:
+            f.write(b"Just a plain text file, not an archive.")
+            f.flush()
+            try:
+                with RecursiveExtractor() as ext:
+                    items = ext.extract(f.name)
+                    self.assertEqual(len(items), 1)
+                    self.assertEqual(items[0].depth, 0)
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_zip(self):
+        import zipfile as _zf
+
+        from dlpscan.entropy import RecursiveExtractor
+        with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as zf:
+            with _zf.ZipFile(zf, 'w') as z:
+                z.writestr("inner.txt", "Secret data inside the zip archive.")
+            try:
+                with RecursiveExtractor() as ext:
+                    items = ext.extract(zf.name)
+                    # Should have the zip itself + the inner file
+                    self.assertGreaterEqual(len(items), 2)
+                    names = [i.original_name for i in items]
+                    self.assertIn("inner.txt", names)
+            finally:
+                os.unlink(zf.name)
+
+    def test_extract_gzip(self):
+        import gzip as _gz
+
+        from dlpscan.entropy import RecursiveExtractor
+        with tempfile.NamedTemporaryFile(suffix='.gz', delete=False) as f:
+            with _gz.open(f.name, 'wb') as gz:
+                gz.write(b"Compressed content for testing gzip extraction.")
+            try:
+                with RecursiveExtractor() as ext:
+                    items = ext.extract(f.name)
+                    self.assertGreaterEqual(len(items), 2)
+            finally:
+                os.unlink(f.name)
+
+    def test_max_depth_limit(self):
+        from dlpscan.entropy import RecursiveExtractor
+        ext = RecursiveExtractor(max_depth=0)
+        with tempfile.NamedTemporaryFile(suffix='.txt', delete=False) as f:
+            f.write(b"test")
+            f.flush()
+            try:
+                items = ext.extract(f.name)
+                # depth=0 item is allowed, but no recursion into archives
+                self.assertEqual(len(items), 1)
+            finally:
+                os.unlink(f.name)
+
+    def test_extracted_item_to_dict(self):
+        from dlpscan.entropy import ExtractedItem
+        item = ExtractedItem(path="/tmp/test", original_name="test.txt",
+                             depth=1, entropy=4.5, classification="normal",
+                             is_suspicious=False, size=100)
+        d = item.to_dict()
+        self.assertEqual(d['original_name'], 'test.txt')
+        self.assertEqual(d['depth'], 1)
+
+    def test_context_manager_cleanup(self):
+        import zipfile as _zf
+
+        from dlpscan.entropy import RecursiveExtractor
+        with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as zf:
+            with _zf.ZipFile(zf, 'w') as z:
+                z.writestr("inner.txt", "test content")
+            try:
+                ext = RecursiveExtractor()
+                with ext:
+                    ext.extract(zf.name)
+                    temp_dirs = list(ext._temp_dirs)
+                # After context manager, dirs should be cleaned up
+                for d in temp_dirs:
+                    self.assertFalse(os.path.exists(d))
+            finally:
+                os.unlink(zf.name)
+
+
+###############################################################################
+# Session Correlator tests
+###############################################################################
+
+class TestSessionCorrelator(unittest.TestCase):
+    def _make_match(self, category, text):
+        """Create a simple Match-like object."""
+        class FakeMatch:
+            def __init__(self, cat, txt):
+                self.category = cat
+                self.text = txt
+        return FakeMatch(category, text)
+
+    def test_basic_record_no_alert(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator(window_seconds=3600)
+        sc.set_policy("SSN", max_total=10)
+
+        class FakeResult:
+            findings = []
+        alerts = sc.record_scan(FakeResult(), user_id="user1")
+        self.assertEqual(len(alerts), 0)
+
+    def test_total_threshold_alert(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator(window_seconds=3600)
+        sc.set_policy("SSN", max_total=3)
+
+        matches = [self._make_match("SSN", f"123-45-678{i}") for i in range(5)]
+        alerts = sc.record_matches(matches, user_id="user1")
+        # Should alert once total >= 3
+        ssn_alerts = [a for a in alerts if a.category == "SSN"]
+        self.assertGreater(len(ssn_alerts), 0)
+
+    def test_unique_threshold_alert(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator(window_seconds=3600)
+        sc.set_policy("CC", max_unique=2)
+
+        matches = [
+            self._make_match("CC", "4111111111111111"),
+            self._make_match("CC", "5500000000000004"),
+            self._make_match("CC", "340000000000009"),
+        ]
+        alerts = sc.record_matches(matches, user_id="user1")
+        unique_alerts = [a for a in alerts if a.alert_type == "unique_threshold"]
+        self.assertGreater(len(unique_alerts), 0)
+
+    def test_user_stats(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator()
+        matches = [self._make_match("SSN", "123-45-6789")]
+        sc.record_matches(matches, user_id="bob")
+        stats = sc.get_user_stats("bob")
+        self.assertIsNotNone(stats)
+        self.assertEqual(stats.total_matches, 1)
+
+    def test_estimate_total(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator()
+        matches = [self._make_match("SSN", f"val{i}") for i in range(10)]
+        sc.record_matches(matches, user_id="alice")
+        est = sc.estimate_total("alice", "SSN")
+        self.assertGreaterEqual(est, 10)
+
+    def test_reset(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator()
+        matches = [self._make_match("SSN", "123")]
+        sc.record_matches(matches, user_id="user1")
+        sc.reset()
+        self.assertEqual(sc.active_users, 0)
+        self.assertEqual(sc.total_alerts, 0)
+
+    def test_properties(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator(window_seconds=1800)
+        self.assertEqual(sc.window_seconds, 1800)
+        self.assertGreater(sc.window_remaining, 0)
+        self.assertEqual(sc.active_users, 0)
+
+    def test_policy_management(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator()
+        sc.set_policy("SSN", max_total=10)
+        sc.set_policy("CC", max_total=20)
+        self.assertEqual(len(sc.policies), 2)
+        # Replace existing policy
+        sc.set_policy("SSN", max_total=5)
+        self.assertEqual(len(sc.policies), 2)
+
+    def test_correlation_alert_to_dict(self):
+        from dlpscan.session import CorrelationAlert
+        alert = CorrelationAlert(
+            alert_type="total_threshold", user_id="bob",
+            category="SSN", count=50, limit=10, window_seconds=3600)
+        d = alert.to_dict()
+        self.assertEqual(d['alert_type'], 'total_threshold')
+        self.assertEqual(d['user_id'], 'bob')
+        self.assertEqual(d['count'], 50)
+
+    def test_user_pattern_filtering(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator()
+        sc.set_policy("SSN", max_total=1, user_pattern="admin@*")
+        matches = [self._make_match("SSN", "123-45-6789")]
+        # Non-matching user should not trigger alert
+        alerts = sc.record_matches(matches, user_id="regular@company.com")
+        policy_alerts = [a for a in alerts if a.category == "SSN"]
+        self.assertEqual(len(policy_alerts), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

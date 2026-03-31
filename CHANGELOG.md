@@ -2,6 +2,57 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [1.7.0] - 2026-03-31
+
+### New Features
+
+- **Aho-Corasick Context Matching** (`dlpscan.ahocorasick`): Optional trie-based
+  multi-keyword matching engine that scans text in a single O(n) pass instead of
+  running 560+ separate regex alternation patterns. Wraps the `pyahocorasick` C
+  extension for native-speed trie traversal with a pure-Python fallback.
+  Configurable via `DLPSCAN_CONTEXT_BACKEND=ahocorasick` env var,
+  `context_backend` config key, or `InputGuard(context_backend="ahocorasick")`.
+  Default remains `"regex"` for backward compatibility.
+
+- **Exact Data Match** (`dlpscan.edm`): Zero false-positive detection of known
+  sensitive values using salted HMAC-SHA256 hashes. Register known SSNs, credit
+  cards, emails, etc. as hashes (never stored in plaintext). Configurable
+  tokenizers (numeric, email, word n-grams) extract candidates from text.
+  Supports save/load for hash set persistence.
+
+- **Locality-Sensitive Hashing** (`dlpscan.lsh`): Fuzzy document similarity
+  detection using MinHash signatures with LSH banding. Detects documents similar
+  to known sensitive documents even after editing, reformatting, or cropping.
+  Configurable threshold (default 80%), 128-hash signatures, sub-linear query
+  time via band indexing. Thread-safe with save/load persistence.
+
+- **Count-Min Sketch** (`dlpscan.countmin`): Probabilistic frequency estimation
+  using a width×depth counter grid. Answers "how many times has X been seen?"
+  using constant memory. Never undercounts; configurable accuracy via dimensions.
+
+- **HyperLogLog** (`dlpscan.hyperloglog`): Cardinality estimation using ~1.5 KB
+  of memory. Estimates unique item counts in streams with ±0.81% standard error
+  at precision=14. Supports merge for distributed counting.
+
+- **Cuckoo Filter** (`dlpscan.cuckoo`): Space-efficient probabilistic set with
+  deletion support. 100K items in ~150 KB vs ~6.4 MB for a Python set. Uses
+  cuckoo hashing with configurable fingerprint size (8/12/16/32 bits).
+
+- **Session Correlator** (`dlpscan.session`): Stateful drip-exfiltration
+  detection combining Count-Min Sketch (frequency) and HyperLogLog (cardinality)
+  with per-user tracking across sliding time windows. Policy-based alerting when
+  total or unique value thresholds are exceeded. Thread-safe.
+
+- **Rabin-Karp Rolling Hash** (`dlpscan.rabin_karp`): Partial document matching
+  via sliding window fingerprints. Pre-computes hashes for registered documents,
+  scans incoming text in O(n) to detect copied fragments. Catches paragraph-level
+  copying that LSH (whole-document) and pattern matching (structured data) miss.
+
+- **Entropy Analysis & Recursive Unpacking** (`dlpscan.entropy`): Shannon
+  entropy analyzer detecting encrypted/compressed payloads with format-specific
+  thresholds. Recursive extractor unpacks nested ZIP/tar/gzip archives up to
+  configurable depth with zip bomb protection.
+
 ## [1.6.0] - 2026-03-26
 
 ### New Features

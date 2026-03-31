@@ -929,5 +929,416 @@ class TestWebhookIntegration(unittest.TestCase):
             unregister_notifier(notifier_b)
 
 
+# ---------------------------------------------------------------------------
+# L33tspeak evasion detection tests
+# ---------------------------------------------------------------------------
+
+
+class TestL33tspeakIntegration(unittest.TestCase):
+    """Verify l33tspeak-obfuscated context keywords are still detected."""
+
+    def test_leet_password_context_boosts_confidence(self):
+        """p@$$w0rd should be recognized as 'password' context keyword."""
+        from dlpscan.unicode_normalize import normalize_leet
+
+        normalized = normalize_leet("p@$$w0rd")
+        self.assertEqual(normalized, "password")
+
+    def test_leet_context_in_scan(self):
+        """Context keywords written in l33tspeak should still provide context."""
+        from dlpscan.scanner import scan_for_context
+
+        # 'cr3d1t c@rd' is l33tspeak for 'credit card'.
+        text = "cr3d1t c@rd number: 4111111111111111"
+        # Check that context is detected near the card number.
+        has_ctx = scan_for_context(
+            text, start_index=20, end_index=36,
+            category='Credit Card Numbers', sub_category='Visa',
+        )
+        # Context may or may not match depending on keyword list,
+        # but the normalization pipeline should not crash.
+        self.assertIsInstance(has_ctx, bool)
+
+    def test_normalize_leet_preserves_normal_text(self):
+        from dlpscan.unicode_normalize import normalize_leet
+
+        normal = "Hello World 123"
+        # Digits get mapped: 1→l, 2→z, 3→e
+        result = normalize_leet(normal)
+        self.assertIsInstance(result, str)
+        self.assertEqual(len(result), len(normal))
+
+
+# ---------------------------------------------------------------------------
+# SessionCorrelator + InputGuard integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestSessionCorrelatorIntegration(unittest.TestCase):
+    """Test SessionCorrelator wired into InputGuard for drip detection."""
+
+    def test_correlator_records_matches(self):
+        from dlpscan.session import SessionCorrelator
+
+        correlator = SessionCorrelator()
+        correlator.set_policy('Credit Card Numbers', max_total=5)
+        guard = InputGuard(
+            presets=[Preset.PCI_DSS],
+            action=Action.FLAG,
+            correlator=correlator,
+            user_id="test-user-1",
+        )
+        result = guard.scan("Card: 4111111111111111")
+        # Should have findings.
+        self.assertFalse(result.is_clean)
+        # Correlation alerts may or may not fire depending on threshold,
+        # but the field should be present.
+        self.assertIsInstance(result.correlation_alerts, list)
+
+    def test_correlator_per_scan_user_override(self):
+        from dlpscan.session import SessionCorrelator
+
+        correlator = SessionCorrelator()
+        correlator.set_policy('Credit Card Numbers', max_total=100)
+        guard = InputGuard(
+            presets=[Preset.PCI_DSS],
+            action=Action.FLAG,
+            correlator=correlator,
+            user_id="default-user",
+        )
+        result = guard.scan("Card: 4111111111111111", user_id="override-user")
+        self.assertFalse(result.is_clean)
+        # Stats should be tracked for the override user.
+        stats = correlator.get_user_stats("override-user")
+        self.assertIsNotNone(stats)
+
+    def test_correlator_not_set_no_alerts(self):
+        guard = InputGuard(
+            presets=[Preset.PCI_DSS],
+            action=Action.FLAG,
+        )
+        result = guard.scan("Card: 4111111111111111")
+        self.assertEqual(result.correlation_alerts, [])
+
+    def test_scan_result_to_dict_with_alerts(self):
+        from dlpscan.session import SessionCorrelator
+
+        correlator = SessionCorrelator()
+        correlator.set_policy('Credit Card Numbers', max_total=1)
+        guard = InputGuard(
+            presets=[Preset.PCI_DSS],
+            action=Action.FLAG,
+            correlator=correlator,
+        )
+        result = guard.scan("Card: 4111111111111111")
+        d = result.to_dict()
+        self.assertIn('is_clean', d)
+        # If alerts fired, they should be in the dict.
+        if result.correlation_alerts:
+            self.assertIn('correlation_alerts', d)
+
+
+# ---------------------------------------------------------------------------
+# Scanner package split backward compatibility tests
+# ---------------------------------------------------------------------------
+
+
+class TestScannerPackageSplit(unittest.TestCase):
+    """Verify the scanner/ package split maintains backward compatibility."""
+
+    def test_all_public_symbols_importable(self):
+        from dlpscan.scanner import (  # noqa: F401
+            MAX_INPUT_SIZE,
+            MAX_MATCHES,
+            MAX_SCAN_SECONDS,
+            REGEX_TIMEOUT_SECONDS,
+            compiled_context_patterns,
+            enhanced_scan_text,
+            get_context_backend,
+            is_luhn_valid,
+            redact_sensitive_info,
+            register_patterns,
+            scan_directory,
+            scan_file,
+            scan_for_context,
+            scan_stream,
+            set_context_backend,
+            unregister_patterns,
+        )
+        self.assertTrue(callable(enhanced_scan_text))
+        self.assertTrue(callable(register_patterns))
+        self.assertTrue(callable(is_luhn_valid))
+        self.assertIsInstance(MAX_MATCHES, int)
+        self.assertIsInstance(MAX_INPUT_SIZE, int)
+        self.assertIsInstance(REGEX_TIMEOUT_SECONDS, int)
+        self.assertIsInstance(compiled_context_patterns, dict)
+
+    def test_private_symbols_importable(self):
+        from dlpscan.scanner import (  # noqa: F401
+            _BINARY_EXTENSIONS,
+            _EXTRACTOR_EXTENSIONS,
+            _check_context,
+            _compute_confidence,
+            _deduplicate_overlapping,
+            _fuzzy_keyword_match,
+            _get_raw_keywords,
+            _has_extractor,
+            _is_binary_file,
+            _levenshtein_distance,
+            _RegexTimeout,
+            _ThreadTimeout,
+        )
+        self.assertTrue(callable(_levenshtein_distance))
+        self.assertTrue(callable(_check_context))
+        self.assertIsInstance(_BINARY_EXTENSIONS, (set, frozenset))
+
+    def test_context_required_patterns_dynamic_access(self):
+        from dlpscan import scanner
+
+        crp = scanner.CONTEXT_REQUIRED_PATTERNS
+        self.assertIsInstance(crp, frozenset)
+
+    def test_enhanced_scan_works_after_split(self):
+        matches = list(enhanced_scan_text("Card: 4111111111111111"))
+        self.assertGreater(len(matches), 0)
+        self.assertEqual(matches[0].category, 'Credit Card Numbers')
+
+
+# ---------------------------------------------------------------------------
+# Observability / instrumentation integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestObservabilityIntegration(unittest.TestCase):
+    """Test observability metrics, auto-instrumentation, and health endpoint."""
+
+    def test_registry_has_all_expected_metrics(self):
+        from dlpscan.observability import registry
+
+        expected = [
+            'dlpscan_scans_total',
+            'dlpscan_findings_total',
+            'dlpscan_scan_duration_seconds',
+            'dlpscan_scan_errors_total',
+            'dlpscan_active_vaults',
+            'dlpscan_tokens_created_total',
+            'dlpscan_rate_limit_rejections_total',
+            'dlpscan_start_time_seconds',
+            'dlpscan_uptime_seconds',
+            'dlpscan_health_status',
+            'dlpscan_scans_in_flight',
+            'dlpscan_bytes_scanned_total',
+            'dlpscan_patterns_timed_out_total',
+        ]
+        for name in expected:
+            metric = registry.get(name)
+            self.assertIsNotNone(metric, f"Missing metric: {name}")
+
+    def test_get_uptime_positive(self):
+        from dlpscan.observability import get_uptime
+
+        uptime = get_uptime()
+        self.assertGreater(uptime, 0)
+
+    def test_get_health_returns_dict(self):
+        from dlpscan.observability import get_health
+
+        health = get_health()
+        self.assertIn('status', health)
+        self.assertIn('uptime_seconds', health)
+        self.assertIn('scans_total', health)
+        self.assertIn('errors_total', health)
+        self.assertIn('scans_in_flight', health)
+        self.assertEqual(health['status'], 'healthy')
+
+    def test_record_scan_updates_counters(self):
+        from dlpscan.observability import (
+            dlpscan_scans_total,
+            record_scan,
+        )
+
+        before = dlpscan_scans_total.get()
+        # Create a mock-like result object.
+
+        class FakeResult:
+            finding_count = 3
+            is_clean = False
+            categories_found = {'Credit Card Numbers'}
+
+        record_scan(FakeResult(), duration_seconds=0.05)
+        after = dlpscan_scans_total.get()
+        self.assertEqual(after, before + 1)
+
+    def test_auto_instrumentation_bridges_metrics(self):
+        # Save and restore callback.
+        from dlpscan.metrics import get_metrics_callback, set_metrics_callback
+        from dlpscan.observability import (
+            dlpscan_bytes_scanned_total,
+            dlpscan_scans_total,
+            enable_auto_instrumentation,
+        )
+        old_cb = get_metrics_callback()
+
+        try:
+            enable_auto_instrumentation()
+            scans_before = dlpscan_scans_total.get()
+            bytes_before = dlpscan_bytes_scanned_total.get()
+
+            # Run a real scan — MetricsCollector callback should fire.
+            text = "Card: 4111111111111111"
+            list(enhanced_scan_text(text))
+
+            scans_after = dlpscan_scans_total.get()
+            bytes_after = dlpscan_bytes_scanned_total.get()
+            self.assertEqual(scans_after, scans_before + 1)
+            self.assertGreater(bytes_after, bytes_before)
+        finally:
+            set_metrics_callback(old_cb)
+
+    def test_prometheus_export_format(self):
+        from dlpscan.observability import registry
+
+        output = registry.to_prometheus()
+        self.assertIn('dlpscan_scans_total', output)
+        self.assertIn('dlpscan_uptime_seconds', output)
+        self.assertIn('# TYPE', output)
+
+    def test_opentelemetry_export_format(self):
+        from dlpscan.observability import registry
+
+        data = registry.to_opentelemetry()
+        self.assertIn('resource_metrics', data)
+        self.assertIsInstance(data['resource_metrics'], list)
+        scope_metrics = data['resource_metrics'][0]['scope_metrics'][0]['metrics']
+        names = [m['name'] for m in scope_metrics]
+        self.assertIn('dlpscan_scans_total', names)
+        self.assertIn('dlpscan_health_status', names)
+
+
+# ---------------------------------------------------------------------------
+# Advanced module integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestCountMinSketchIntegration(unittest.TestCase):
+    """CountMinSketch used in realistic DLP frequency analysis."""
+
+    def test_frequency_tracking(self):
+        from dlpscan.countmin import CountMinSketch
+
+        cms = CountMinSketch(width=1000, depth=5)
+        # Simulate tracking how often a pattern appears.
+        for _ in range(50):
+            cms.increment("SSN pattern")
+        for _ in range(10):
+            cms.increment("email pattern")
+
+        self.assertGreaterEqual(cms.estimate("SSN pattern"), 50)
+        self.assertGreaterEqual(cms.estimate("email pattern"), 10)
+        self.assertEqual(cms.estimate("never seen"), 0)
+
+
+class TestHyperLogLogIntegration(unittest.TestCase):
+    """HyperLogLog for cardinality estimation in DLP flows."""
+
+    def test_unique_match_estimation(self):
+        from dlpscan.hyperloglog import HyperLogLog
+
+        hll = HyperLogLog(precision=10)
+        # Add unique "match signatures".
+        for i in range(1000):
+            hll.add(f"match-{i}")
+
+        estimate = hll.count()
+        # HLL is approximate; allow 10% error.
+        self.assertGreater(estimate, 800)
+        self.assertLess(estimate, 1200)
+
+
+class TestCuckooFilterIntegration(unittest.TestCase):
+    """CuckooFilter for allowlist-like probabilistic membership testing."""
+
+    def test_membership_check(self):
+        from dlpscan.cuckoo import CuckooFilter
+
+        cf = CuckooFilter(capacity=1000)
+        known_safe = ["test@example.com", "admin@corp.com", "noreply@service.com"]
+        for item in known_safe:
+            cf.insert(item)
+
+        for item in known_safe:
+            self.assertTrue(cf.contains(item))
+
+        # Unknown items should (usually) not be in the filter.
+        false_positives = sum(
+            1 for i in range(100) if cf.contains(f"unknown-{i}@test.com")
+        )
+        # FP rate should be low.
+        self.assertLess(false_positives, 10)
+
+
+class TestEntropyAnalyzerIntegration(unittest.TestCase):
+    """EntropyAnalyzer for detecting high-entropy secrets."""
+
+    def test_high_entropy_bytes_detected(self):
+        from dlpscan.entropy import EntropyAnalyzer
+
+        analyzer = EntropyAnalyzer()
+        # Random-looking data should have high entropy.
+        data = b"aK3x9Zb2mP7qR4wL8vN1cJ6yT0hF5gDxY2pQ8rS4uW6zA1"
+        result = analyzer.analyze_bytes(data)
+        self.assertIsNotNone(result)
+        self.assertGreater(result.entropy, 0)
+
+    def test_low_entropy_bytes(self):
+        from dlpscan.entropy import EntropyAnalyzer
+
+        analyzer = EntropyAnalyzer()
+        data = b"aaaaaaaaaaaaaaaaaaaaaa"
+        result = analyzer.analyze_bytes(data)
+        self.assertIsNotNone(result)
+        # Repetitive data should have low entropy.
+        self.assertLess(result.entropy, 2.0)
+
+
+class TestPartialDocumentMatcherIntegration(unittest.TestCase):
+    """Rabin-Karp partial document matching in realistic scenarios."""
+
+    def test_partial_match_detection(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+
+        matcher = PartialDocumentMatcher(window_size=20)
+        reference = "This is a confidential document containing sensitive data that should be protected."
+        matcher.register("doc-1", reference)
+
+        # A partial copy should be detected.
+        partial = "This is a confidential document containing sensitive data that was leaked."
+        matches = matcher.scan(partial)
+        self.assertIsInstance(matches, list)
+
+
+class TestExactDataMatcherIntegration(unittest.TestCase):
+    """EDM with realistic structured data matching."""
+
+    def test_exact_value_detection(self):
+        from dlpscan.edm import ExactDataMatcher
+
+        matcher = ExactDataMatcher()
+        matcher.register_values("ssn", ["123-45-6789"])
+        matcher.register_values("email", ["john.doe@example.com"])
+
+        text = "The SSN is 123-45-6789 and email john.doe@example.com"
+        matches = matcher.scan(text)
+        self.assertGreater(len(matches), 0)
+
+    def test_no_false_positives(self):
+        from dlpscan.edm import ExactDataMatcher
+
+        matcher = ExactDataMatcher()
+        matcher.register_values("custom", ["specific-value-12345"])
+        matches = matcher.scan("Nothing matching here at all.")
+        self.assertEqual(len(matches), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

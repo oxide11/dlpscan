@@ -36,8 +36,10 @@ from ..scanner import (
     enhanced_scan_text,
     redact_sensitive_info,
     register_patterns,
+    set_context_backend,
     unregister_patterns,
 )
+from ..session import CorrelationAlert, SessionCorrelator
 from ..unicode_normalize import strip_zero_width
 from .enums import Action, Mode
 from .presets import PRESET_CATEGORIES, Preset
@@ -70,6 +72,7 @@ class ScanResult:
     categories_found: Set[str] = field(default_factory=set)
     token_vault: Optional[TokenVault] = None
     scan_truncated: bool = False
+    correlation_alerts: List['CorrelationAlert'] = field(default_factory=list)
 
     @property
     def scan_complete(self) -> bool:
@@ -83,7 +86,7 @@ class ScanResult:
 
     def to_dict(self, redact: bool = True) -> dict:
         """Convert to a plain dictionary for JSON serialization."""
-        return {
+        d = {
             'is_clean': self.is_clean,
             'finding_count': self.finding_count,
             'categories_found': sorted(self.categories_found),
@@ -91,6 +94,9 @@ class ScanResult:
             'redacted_text': self.redacted_text,
             'scan_truncated': self.scan_truncated,
         }
+        if self.correlation_alerts:
+            d['correlation_alerts'] = [a.to_dict() for a in self.correlation_alerts]
+        return d
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +137,16 @@ class InputGuard:
         allowlist: Optional Allowlist for suppressing known false positives.
         on_detect: Optional callback invoked when sensitive data is found.
                    Receives the ScanResult as argument.
+        context_backend: Context keyword matching backend. ``"regex"`` (default)
+                         uses compiled alternation patterns. ``"ahocorasick"``
+                         uses a single-pass trie-based matcher for faster
+                         context matching on large texts.
+        correlator: Optional SessionCorrelator for tracking cumulative exposure
+                    across scans. When provided, each scan records findings and
+                    checks threshold policies. Alerts are returned in
+                    ``ScanResult.correlation_alerts``.
+        user_id: Default user identifier for session correlation. Can be
+                 overridden per-scan via ``scan(text, user_id=...)``.
 
     Thread Safety:
         InputGuard instances are safe to share across threads — all config
@@ -165,7 +181,14 @@ class InputGuard:
         custom_patterns: Optional[Dict[str, Dict[str, str]]] = None,
         confidence_overrides: Optional[Dict[str, float]] = None,
         token_vault: Optional[TokenVault] = None,
+        context_backend: Optional[str] = None,
+        correlator: Optional[SessionCorrelator] = None,
+        user_id: Optional[str] = None,
     ):
+        # Set context backend if specified.
+        if context_backend is not None:
+            set_context_backend(context_backend)
+
         # Normalize enum values from strings.
         self.mode = Mode(mode) if isinstance(mode, str) else mode
         self.action = Action(action) if isinstance(action, str) else action
@@ -176,6 +199,10 @@ class InputGuard:
         self.on_detect = on_detect
         self._confidence_overrides = confidence_overrides or {}
         self._registered_categories: List[str] = []
+
+        # Session correlator for drip exfiltration detection.
+        self._correlator = correlator
+        self._user_id = user_id or "anonymous"
 
         # Token vault for TOKENIZE action — auto-create if not provided.
         if token_vault is not None:
@@ -216,7 +243,7 @@ class InputGuard:
             self._scan_categories = None  # Scan all
             self._allowed_categories = resolved
 
-    def _do_scan(self, text: str) -> ScanResult:
+    def _do_scan(self, text: str, user_id: Optional[str] = None) -> ScanResult:
         """Run scanning and build ScanResult (no action enforcement)."""
         # Run scanner.
         try:
@@ -266,6 +293,13 @@ class InputGuard:
             elif self.action == Action.OBFUSCATE:
                 redacted_text = obfuscate_matches(text, matches)
 
+        # Session correlation — track cumulative exposure.
+        correlation_alerts: List[CorrelationAlert] = []
+        if self._correlator is not None and matches:
+            effective_user = user_id or self._user_id
+            correlation_alerts = self._correlator.record_matches(
+                matches, user_id=effective_user)
+
         return ScanResult(
             text=text,
             is_clean=is_clean,
@@ -274,10 +308,15 @@ class InputGuard:
             categories_found=categories_found,
             token_vault=vault,
             scan_truncated=scan_truncated,
+            correlation_alerts=correlation_alerts,
         )
 
-    def scan(self, text: str) -> ScanResult:
+    def scan(self, text: str, *, user_id: Optional[str] = None) -> ScanResult:
         """Scan text and apply the configured action.
+
+        Args:
+            text: Text to scan.
+            user_id: Override the default user_id for session correlation.
 
         Returns:
             ScanResult with findings and optional redacted text.
@@ -285,7 +324,7 @@ class InputGuard:
         Raises:
             InputGuardError: If action=REJECT and sensitive data is found.
         """
-        result = self._do_scan(text)
+        result = self._do_scan(text, user_id=user_id)
 
         # Invoke detection callback.
         if not result.is_clean and self.on_detect is not None:

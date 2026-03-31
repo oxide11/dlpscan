@@ -1,6 +1,6 @@
-"""Unicode normalization to defeat evasion via zero-width characters and homoglyphs.
+"""Unicode normalization to defeat evasion via zero-width characters, homoglyphs, and l33tspeak.
 
-This module provides two layers of text preprocessing:
+This module provides three layers of text preprocessing:
 
 1. **Zero-width character stripping** — removes invisible Unicode characters
    (zero-width space, joiner, non-joiner, BOM, soft hyphen, etc.) that can be
@@ -10,7 +10,11 @@ This module provides two layers of text preprocessing:
    (confusables) back to their ASCII equivalents so that digit/letter
    substitutions (e.g. Cyrillic "а" for Latin "a") do not bypass detection.
 
-Both transforms preserve string length parity via an offset map so that
+3. **L33tspeak normalization** — maps common alphanumeric substitutions
+   (e.g. ``@`` → ``a``, ``$`` → ``s``, ``0`` → ``o``) back to letters so
+   that obfuscated keywords like ``p@$$w0rd`` are detected.
+
+All transforms preserve string length parity via an offset map so that
 match spans in the normalized text can be mapped back to the original.
 """
 
@@ -282,6 +286,47 @@ _LETTER_HOMOGLYPHS: dict[str, str] = {
 
 # Combined map for fast lookup.
 _HOMOGLYPH_MAP: dict[str, str] = {**_DIGIT_HOMOGLYPHS, **_LETTER_HOMOGLYPHS}
+
+# ── L33tspeak / character substitution map ──────────────────────────────────
+# Maps common alphanumeric substitutions back to their letter equivalents.
+# Only applied in context-keyword normalization, NOT to the full text
+# (digits in credit card numbers must remain digits).
+
+_LEET_MAP: dict[str, str] = {
+    # Symbol → letter
+    '@': 'a',
+    '$': 's',
+    '!': 'i',
+    '|': 'l',
+    '+': 't',
+    # Digit → letter (most common l33tspeak)
+    '0': 'o',
+    '1': 'l',
+    '3': 'e',
+    '4': 'a',
+    '5': 's',
+    '7': 't',
+    '8': 'b',
+    '9': 'g',
+    # Less common but documented
+    '(': 'c',
+    '{': 'c',
+    '6': 'g',
+    '2': 'z',
+}
+
+
+def normalize_leet(text: str) -> str:
+    """Replace common l33tspeak substitutions with their letter equivalents.
+
+    This is intentionally aggressive — it converts ALL digit/symbol
+    substitutions. Use only on context keywords or small windows where
+    you want to detect obfuscated words like ``p@$$w0rd`` or ``cr3d1t``.
+
+    Do NOT apply to full text containing credit card numbers or SSNs,
+    as digits would be corrupted.
+    """
+    return ''.join(_LEET_MAP.get(ch, ch) for ch in text)
 
 
 def normalize_homoglyphs(text: str) -> str:
