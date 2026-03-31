@@ -389,9 +389,85 @@ def is_luhn_valid(card_number: str) -> bool:
     return total % 10 == 0
 
 
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """Compute Levenshtein edit distance between two strings.
+
+    Uses a single-row dynamic programming approach for O(min(m,n)) space.
+    """
+    if len(s1) < len(s2):
+        return _levenshtein_distance(s2, s1)
+    if not s2:
+        return len(s1)
+
+    prev_row = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        curr_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            # Cost is 0 if characters match, 1 otherwise.
+            cost = 0 if c1 == c2 else 1
+            curr_row.append(min(
+                curr_row[j] + 1,        # insertion
+                prev_row[j + 1] + 1,    # deletion
+                prev_row[j] + cost,     # substitution
+            ))
+        prev_row = curr_row
+    return prev_row[-1]
+
+
+# Maximum edit distance for fuzzy context keyword matching.
+FUZZY_MAX_DISTANCE = 2
+
+# Minimum keyword length for fuzzy matching (short keywords produce too many
+# false positives with edit distance > 0).
+FUZZY_MIN_KEYWORD_LENGTH = 5
+
+
+def _fuzzy_keyword_match(text_window: str, keywords: list[str],
+                         max_distance: int = FUZZY_MAX_DISTANCE) -> bool:
+    """Check if any keyword appears in text_window with fuzzy matching.
+
+    Handles both single-word and multi-word keywords by generating
+    n-grams from the text window. Compares each n-gram against each
+    keyword using Levenshtein edit distance.
+    """
+    text_lower = text_window.lower()
+    words = re.findall(r'\b\w+\b', text_lower)
+
+    for keyword in keywords:
+        kw_lower = keyword.lower()
+        # Skip short keywords for fuzzy matching — too many false positives.
+        if len(kw_lower) < FUZZY_MIN_KEYWORD_LENGTH:
+            continue
+
+        kw_word_count = len(kw_lower.split())
+
+        if kw_word_count == 1:
+            # Single-word keyword: compare against individual words.
+            for word in words:
+                if abs(len(word) - len(kw_lower)) > max_distance:
+                    continue
+                if _levenshtein_distance(word, kw_lower) <= max_distance:
+                    return True
+        else:
+            # Multi-word keyword: generate n-grams of matching word count
+            # and compare the joined n-gram against the keyword.
+            for i in range(len(words) - kw_word_count + 1):
+                ngram = ' '.join(words[i:i + kw_word_count])
+                if abs(len(ngram) - len(kw_lower)) > max_distance:
+                    continue
+                if _levenshtein_distance(ngram, kw_lower) <= max_distance:
+                    return True
+    return False
+
+
 def scan_for_context(text: str, start_index: int, end_index: int,
                      category: str, sub_category: str) -> bool:
     """Check whether contextual keywords appear near the match span.
+
+    Uses two-pass matching:
+    1. Exact regex match against compiled keyword patterns (fast path).
+    2. Fuzzy Levenshtein match (edit distance ≤ 2) for keywords ≥ 5 chars,
+       catching typos, abbreviations, and close misspellings.
 
     Returns True if any keyword is found within the configured distance,
     False otherwise. Returns False if no context keywords are configured
@@ -423,7 +499,30 @@ def scan_for_context(text: str, start_index: int, end_index: int,
     if not context_pattern:
         return False
 
-    return bool(context_pattern.search(pre_text) or context_pattern.search(post_text))
+    # Fast path: exact regex match.
+    if context_pattern.search(pre_text) or context_pattern.search(post_text):
+        return True
+
+    # Slow path: fuzzy matching for typos/misspellings.
+    # Retrieve the raw keyword list for this sub_category.
+    raw_keywords = _get_raw_keywords(category, sub_category)
+    if raw_keywords:
+        context_window = pre_text + ' ' + post_text
+        if _fuzzy_keyword_match(context_window, raw_keywords):
+            return True
+
+    return False
+
+
+def _get_raw_keywords(category: str, sub_category: str) -> list[str]:
+    """Retrieve the raw keyword list for a given category/sub_category."""
+    for source in (CONTEXT_KEYWORDS, _custom_context):
+        cat_data = source.get(category, {})
+        identifiers = cat_data.get('Identifiers', {})
+        keywords = identifiers.get(sub_category, [])
+        if keywords:
+            return keywords
+    return []
 
 
 def enhanced_scan_text(

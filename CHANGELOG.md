@@ -38,8 +38,32 @@ All notable changes to dlpscan will be documented in this file.
   status matrix and priority remediation roadmap.
 
 - **Evasion Defenses Guide** (`docs/evasion_defenses.md`): Technical reference
-  for all built-in defenses including architecture diagrams, character tables,
+  for all 15 built-in defenses including architecture diagrams, character tables,
   usage examples, and coverage summary.
+
+- **Expanded Homoglyph Coverage**: Homoglyph map expanded from ~80 to 200+
+  entries. Added Armenian (13 letters), Cherokee (23 letters), small capitals
+  (26 letters), circled/dingbat/parenthesized digits (28 entries), fullwidth
+  symbols (20 entries), and additional Cyrillic/Greek/Latin variants.
+
+- **Fuzzy Context Keyword Matching**: `scan_for_context()` now uses two-pass
+  matching — exact regex (fast path) + Levenshtein fuzzy matching (edit
+  distance ≤ 2) for keywords ≥ 5 characters. Multi-word keywords use n-gram
+  matching. Catches typos like "credti card" → "credit card".
+
+- **RTF Extractor**: Built-in RTF text extraction with control word parsing,
+  Unicode/hex escape handling, and nested group support. No external dependencies.
+
+- **Content-Type Detection**: `_detect_format_by_content()` reads file magic
+  bytes (PDF, RTF, ZIP-based Office) as fallback when file extension is missing
+  or misleading.
+
+- **Wildcard Allowlist**: `Allowlist` text entries now support `fnmatch` glob
+  syntax (`*`, `?`, `[seq]`). Enables prefix-based suppression like `4111*`
+  alongside exact match.
+
+- **OCR Confidence Hardening**: `MIN_OCR_CONFIDENCE` raised from 30 to 60,
+  reducing false matches from degraded or adversarial images.
 
 - **PHI/PII Baseline Doc Split**: PHI and PII baseline documentation split into
   separate pattern and keyword files (`phi-patterns.md`, `phi-keywords.md`,

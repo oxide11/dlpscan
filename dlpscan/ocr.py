@@ -49,7 +49,8 @@ DEFAULT_LANG = 'eng'
 DEFAULT_CONFIG = '--oem 3 --psm 3'
 
 # Minimum average OCR confidence to consider text reliable (0-100 scale).
-MIN_OCR_CONFIDENCE = 30
+# Raised from 30 to 60 to reduce false matches from degraded/adversarial images.
+MIN_OCR_CONFIDENCE = 60
 
 # Maximum image dimension (pixels) before downscaling to avoid memory issues.
 MAX_IMAGE_DIMENSION = 10000

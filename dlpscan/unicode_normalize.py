@@ -119,21 +119,31 @@ _DIGIT_HOMOGLYPHS: dict[str, str] = {
     # Superscript digits
     '\u2070': '0', '\u00b9': '1', '\u00b2': '2', '\u00b3': '3', '\u2074': '4',
     '\u2075': '5', '\u2076': '6', '\u2077': '7', '\u2078': '8', '\u2079': '9',
-    # Mathematical bold/monospace/sans digits (U+1D7CE-U+1D7FF) — common block
-    # We handle these via NFKD normalization below.
-    # Other lookalikes
+    # Circled digits (①-⑨ → 1-9; ⓪ → 0) — NFKC handles some, explicit for safety
+    '\u2460': '1', '\u2461': '2', '\u2462': '3', '\u2463': '4', '\u2464': '5',
+    '\u2465': '6', '\u2466': '7', '\u2467': '8', '\u2468': '9', '\u24ea': '0',
+    # Enclosed alphanumeric (parenthesized digits)
+    '\u2474': '1', '\u2475': '2', '\u2476': '3', '\u2477': '4', '\u2478': '5',
+    '\u2479': '6', '\u247a': '7', '\u247b': '8', '\u247c': '9',
+    # Dingbat circled digits (❶-❾)
+    '\u2776': '1', '\u2777': '2', '\u2778': '3', '\u2779': '4', '\u277a': '5',
+    '\u277b': '6', '\u277c': '7', '\u277d': '8', '\u277e': '9',
+    # Other digit lookalikes
     '\u04e8': '0',  # Cyrillic О with diaeresis (resembles 0)
+    '\u0b66': '0',  # Oriya digit zero (round shape)
+    '\u0966': '0',  # Devanagari digit zero
 }
 
-# Letter confusables: Cyrillic, Greek, and other scripts that mimic Latin.
+# Letter confusables: Cyrillic, Greek, Armenian, Georgian, Cherokee, and others.
 _LETTER_HOMOGLYPHS: dict[str, str] = {
     # Cyrillic → Latin
     '\u0410': 'A', '\u0430': 'a',  # А/а
-    '\u0412': 'B', '\u0432': 'b',  # В/в (sometimes)
+    '\u0412': 'B', '\u0432': 'b',  # В/в
     '\u0421': 'C', '\u0441': 'c',  # С/с
     '\u0415': 'E', '\u0435': 'e',  # Е/е
     '\u041d': 'H', '\u043d': 'h',  # Н/н
     '\u0406': 'I', '\u0456': 'i',  # І/і (Ukrainian)
+    '\u0408': 'J', '\u0458': 'j',  # Ј/ј (Serbian)
     '\u041a': 'K', '\u043a': 'k',  # К/к
     '\u041c': 'M', '\u043c': 'm',  # М/м
     '\u041e': 'O', '\u043e': 'o',  # О/о
@@ -142,9 +152,14 @@ _LETTER_HOMOGLYPHS: dict[str, str] = {
     '\u0422': 'T', '\u0442': 't',  # Т/т
     '\u0425': 'X', '\u0445': 'x',  # Х/х
     '\u0423': 'Y', '\u0443': 'y',  # У/у
+    '\u0417': 'Z',                  # З (resembles Z)
+    '\u0404': 'E',                  # Є (Ukrainian Ye, resembles E)
+    '\u0429': 'W',                  # Щ (loosely resembles W)
+    '\u0490': 'G', '\u0491': 'g',  # Ґ/ґ (Ukrainian)
     # Greek → Latin
     '\u0391': 'A', '\u03b1': 'a',  # Α/α
     '\u0392': 'B', '\u03b2': 'b',  # Β/β
+    '\u0393': 'G',                  # Γ (Gamma, resembles G)
     '\u0395': 'E', '\u03b5': 'e',  # Ε/ε
     '\u0397': 'H', '\u03b7': 'h',  # Η/η
     '\u0399': 'I', '\u03b9': 'i',  # Ι/ι
@@ -157,6 +172,72 @@ _LETTER_HOMOGLYPHS: dict[str, str] = {
     '\u03a7': 'X', '\u03c7': 'x',  # Χ/χ
     '\u03a5': 'Y', '\u03c5': 'y',  # Υ/υ
     '\u0396': 'Z', '\u03b6': 'z',  # Ζ/ζ
+    '\u03f2': 'c',                  # ϲ (lunate sigma, resembles c)
+    '\u03d2': 'Y',                  # ϒ (hook upsilon, resembles Y)
+    # Armenian → Latin (high-risk confusables from Unicode confusables.txt)
+    '\u0555': 'O',                  # Օ → O
+    '\u0585': 'o',                  # օ → o
+    '\u054d': 'S',                  # Ս → S
+    '\u057d': 's',                  # ս → s
+    '\u054c': 'N',                  # Ռ (loosely)
+    '\u0570': 'h',                  # հ → h
+    '\u0578': 'n',                  # ո → n
+    '\u057c': 'n',                  # ռ (loosely)
+    '\u0561': 'a',                  # ա → a (open)
+    '\u0575': 'y',                  # յ → y
+    '\u0569': 'd',                  # թ (loosely)
+    '\u0563': 'q',                  # գ (loosely)
+    '\u0566': 'g',                  # զ (loosely)
+    # Cherokee → Latin (these are exact visual matches)
+    '\u13a0': 'D',                  # Ꭰ → D
+    '\u13a1': 'R',                  # Ꭱ → R
+    '\u13a2': 'T',                  # Ꭲ → T
+    '\u13aa': 'G',                  # Ꭺ → G
+    '\u13ab': 'h',                  # Ꭻ → h (lowercase)
+    '\u13ac': 'A',                  # Ꭼ → A
+    '\u13b3': 'W',                  # Ꮃ → W
+    '\u13b7': 'M',                  # Ꮇ → M
+    '\u13bb': 'H',                  # Ꮋ → H
+    '\u13c0': 'G',                  # Ꮐ → G
+    '\u13c2': 'h',                  # Ꮒ → h
+    '\u13c3': 'Z',                  # Ꮓ → Z
+    '\u13cf': 'b',                  # Ꮟ → b
+    '\u13d2': 'R',                  # Ꮢ → R
+    '\u13d4': 'S',                  # Ꮤ → S
+    '\u13d9': 'V',                  # Ꮩ → V
+    '\u13da': 'S',                  # Ꮪ → S
+    '\u13de': 'L',                  # Ꮮ → L
+    '\u13df': 'C',                  # Ꮯ → C
+    '\u13e2': 'P',                  # Ꮲ → P
+    '\u13e6': 'K',                  # Ꮶ → K
+    '\u13ee': 'B',                  # Ꮾ → B
+    '\u13f4': 'y',                  # Ᏼ → y
+    # Latin lookalikes from other scripts
+    '\u0131': 'i',                  # ı (Turkish dotless i)
+    '\u0237': 'j',                  # ȷ (dotless j)
+    '\u1d00': 'A',                  # ᴀ (small capital A)
+    '\u0299': 'B',                  # ʙ (small capital B)
+    '\u1d04': 'C',                  # ᴄ (small capital C)
+    '\u1d05': 'D',                  # ᴅ (small capital D)
+    '\u1d07': 'E',                  # ᴇ (small capital E)
+    '\u0262': 'G',                  # ɢ (small capital G)
+    '\u029c': 'H',                  # ʜ (small capital H)
+    '\u026a': 'I',                  # ɪ (small capital I)
+    '\u1d0a': 'J',                  # ᴊ (small capital J)
+    '\u1d0b': 'K',                  # ᴋ (small capital K)
+    '\u029f': 'L',                  # ʟ (small capital L)
+    '\u1d0d': 'M',                  # ᴍ (small capital M)
+    '\u0274': 'N',                  # ɴ (small capital N)
+    '\u1d0f': 'O',                  # ᴏ (small capital O)
+    '\u1d18': 'P',                  # ᴘ (small capital P)
+    '\u0280': 'R',                  # ʀ (small capital R)
+    '\u0252': 'a',                  # ɒ (turned a, loosely)
+    '\u1d1b': 'T',                  # ᴛ (small capital T)
+    '\u1d1c': 'U',                  # ᴜ (small capital U)
+    '\u1d20': 'V',                  # ᴠ (small capital V)
+    '\u1d21': 'W',                  # ᴡ (small capital W)
+    '\u028f': 'Y',                  # ʏ (small capital Y)
+    '\u1d22': 'Z',                  # ᴢ (small capital Z)
     # Fullwidth Latin letters
     **{chr(c): chr(c - 0xFF21 + ord('A')) for c in range(0xFF21, 0xFF3B)},  # Ａ-Ｚ
     **{chr(c): chr(c - 0xFF41 + ord('a')) for c in range(0xFF41, 0xFF5B)},  # ａ-ｚ
@@ -175,6 +256,28 @@ _LETTER_HOMOGLYPHS: dict[str, str] = {
     '\u2024': '.',  # One Dot Leader
     '\uff20': '@',  # Fullwidth Commercial At
     '\uff0f': '/',  # Fullwidth Solidus
+    '\uff3c': '\\', # Fullwidth Reverse Solidus
+    '\uff1a': ':',  # Fullwidth Colon
+    '\uff1b': ';',  # Fullwidth Semicolon
+    '\uff01': '!',  # Fullwidth Exclamation Mark
+    '\uff1f': '?',  # Fullwidth Question Mark
+    '\uff03': '#',  # Fullwidth Number Sign
+    '\uff04': '$',  # Fullwidth Dollar Sign
+    '\uff05': '%',  # Fullwidth Percent Sign
+    '\uff06': '&',  # Fullwidth Ampersand
+    '\uff08': '(',  # Fullwidth Left Parenthesis
+    '\uff09': ')',  # Fullwidth Right Parenthesis
+    '\uff0a': '*',  # Fullwidth Asterisk
+    '\uff0b': '+',  # Fullwidth Plus Sign
+    '\uff0c': ',',  # Fullwidth Comma
+    '\uff1c': '<',  # Fullwidth Less-Than Sign
+    '\uff1d': '=',  # Fullwidth Equals Sign
+    '\uff1e': '>',  # Fullwidth Greater-Than Sign
+    '\uff3b': '[',  # Fullwidth Left Square Bracket
+    '\uff3d': ']',  # Fullwidth Right Square Bracket
+    '\uff5b': '{',  # Fullwidth Left Curly Bracket
+    '\uff5d': '}',  # Fullwidth Right Curly Bracket
+    '\uff5e': '~',  # Fullwidth Tilde
 }
 
 # Combined map for fast lookup.

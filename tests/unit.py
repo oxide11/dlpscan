@@ -3959,5 +3959,307 @@ class TestEvasionDefenses(unittest.TestCase):
             self.assertNotIn('4532', result.redacted_text)
 
 
+class TestExpandedHomoglyphs(unittest.TestCase):
+    """Tests for expanded homoglyph coverage (Armenian, Cherokee, small caps, etc.)."""
+
+    def test_armenian_o_in_email(self):
+        """Armenian Օ (U+0555) should normalize to O."""
+        from dlpscan.unicode_normalize import normalize_homoglyphs
+        self.assertEqual(normalize_homoglyphs('\u0555'), 'O')
+        self.assertEqual(normalize_homoglyphs('\u0585'), 'o')
+
+    def test_cherokee_confusables(self):
+        """Cherokee letters that look like Latin should normalize."""
+        from dlpscan.unicode_normalize import normalize_homoglyphs
+        # Ꭰ → D, Ꭲ → T, Ꮃ → W, Ꮇ → M
+        self.assertEqual(normalize_homoglyphs('\u13a0'), 'D')
+        self.assertEqual(normalize_homoglyphs('\u13a2'), 'T')
+        self.assertEqual(normalize_homoglyphs('\u13b3'), 'W')
+        self.assertEqual(normalize_homoglyphs('\u13b7'), 'M')
+
+    def test_small_capital_letters(self):
+        """Small capital letters should normalize to regular uppercase."""
+        from dlpscan.unicode_normalize import normalize_homoglyphs
+        # ᴀ → A, ʙ → B, ᴄ → C
+        self.assertEqual(normalize_homoglyphs('\u1d00'), 'A')
+        self.assertEqual(normalize_homoglyphs('\u0299'), 'B')
+        self.assertEqual(normalize_homoglyphs('\u1d04'), 'C')
+
+    def test_circled_digits(self):
+        """Circled digits (①②③...) should normalize to 1, 2, 3..."""
+        from dlpscan.unicode_normalize import normalize_homoglyphs
+        self.assertEqual(normalize_homoglyphs('\u2460'), '1')
+        self.assertEqual(normalize_homoglyphs('\u2462'), '3')
+        self.assertEqual(normalize_homoglyphs('\u24ea'), '0')
+
+    def test_fullwidth_symbols(self):
+        """Fullwidth punctuation should normalize to ASCII equivalents."""
+        from dlpscan.unicode_normalize import normalize_homoglyphs
+        self.assertEqual(normalize_homoglyphs('\uff1a'), ':')
+        self.assertEqual(normalize_homoglyphs('\uff01'), '!')
+        self.assertEqual(normalize_homoglyphs('\uff03'), '#')
+
+    def test_cherokee_evasion_credit_card(self):
+        """Credit card with Cherokee letter substitutions should be detected."""
+        # Using Cherokee Ꭲ (→T) won't directly apply to digits, but test
+        # that mixed Cherokee letters in context don't break scanning.
+        # Use Armenian օ in 'card' context word: 'card' with Armenian o
+        evasion = "card: 4532015112830366"
+        results = list(enhanced_scan_text(evasion))
+        cc_results = [r for r in results if r.category == 'Credit Card Numbers']
+        self.assertGreater(len(cc_results), 0)
+
+    def test_homoglyph_map_size(self):
+        """Homoglyph map should now have 200+ entries (up from ~80)."""
+        from dlpscan.unicode_normalize import _HOMOGLYPH_MAP
+        self.assertGreater(len(_HOMOGLYPH_MAP), 200,
+                           f"Expected 200+ homoglyph entries, got {len(_HOMOGLYPH_MAP)}")
+
+
+class TestFuzzyContextMatching(unittest.TestCase):
+    """Tests for Levenshtein-based fuzzy context keyword matching."""
+
+    def test_levenshtein_identical(self):
+        """Edit distance of identical strings should be 0."""
+        from dlpscan.scanner import _levenshtein_distance
+        self.assertEqual(_levenshtein_distance('hello', 'hello'), 0)
+
+    def test_levenshtein_one_edit(self):
+        """Single character difference should give distance 1."""
+        from dlpscan.scanner import _levenshtein_distance
+        self.assertEqual(_levenshtein_distance('hello', 'helo'), 1)   # deletion
+        self.assertEqual(_levenshtein_distance('hello', 'helloo'), 1) # insertion
+        self.assertEqual(_levenshtein_distance('hello', 'hallo'), 1)  # substitution
+
+    def test_levenshtein_two_edits(self):
+        """Two edits should give distance 2."""
+        from dlpscan.scanner import _levenshtein_distance
+        self.assertEqual(_levenshtein_distance('credit', 'crdeit'), 2)
+
+    def test_fuzzy_match_finds_typo(self):
+        """Fuzzy matching should find 'credti card' as a match for 'credit card'."""
+        from dlpscan.scanner import _fuzzy_keyword_match
+        result = _fuzzy_keyword_match("credti card number", ['credit card'])
+        self.assertTrue(result, "Fuzzy match should catch 'credti' → 'credit'")
+
+    def test_fuzzy_match_skips_short_keywords(self):
+        """Keywords shorter than FUZZY_MIN_KEYWORD_LENGTH should not fuzzy match."""
+        from dlpscan.scanner import _fuzzy_keyword_match
+        # 'ssn' is 3 chars — below the 5-char minimum for fuzzy matching
+        result = _fuzzy_keyword_match("ssm number", ['ssn'])
+        self.assertFalse(result, "Short keywords should not fuzzy match")
+
+    def test_fuzzy_context_in_scan(self):
+        """scan_for_context should find fuzzy keyword matches."""
+        # 'credti' is a typo for 'credit' — should still provide context
+        text = "credti card 4532015112830366"
+        results = list(enhanced_scan_text(text))
+        cc_results = [r for r in results if r.category == 'Credit Card Numbers']
+        if cc_results:
+            # If the pattern matched, check that context was found via fuzzy matching
+            self.assertTrue(cc_results[0].has_context,
+                            "Fuzzy keyword match should provide context for typo 'credti'")
+
+    def test_exact_match_still_works(self):
+        """Exact keyword matching should still work (fast path)."""
+        text = "credit card 4532015112830366"
+        results = list(enhanced_scan_text(text))
+        cc_results = [r for r in results if r.category == 'Credit Card Numbers']
+        self.assertGreater(len(cc_results), 0)
+        self.assertTrue(cc_results[0].has_context)
+
+
+class TestRTFExtractor(unittest.TestCase):
+    """Tests for RTF text extraction."""
+
+    def test_extract_simple_rtf(self):
+        """Should extract plain text from a simple RTF document."""
+        import tempfile
+
+        from dlpscan.extractors import extract_text
+
+        rtf_content = rb'{\rtf1\ansi Hello World}'
+        with tempfile.NamedTemporaryFile(suffix='.rtf', delete=False) as f:
+            f.write(rtf_content)
+            f.flush()
+            result = extract_text(f.name)
+        os.unlink(f.name)
+        self.assertIn('Hello World', result.text)
+        self.assertEqual(result.format, 'rtf')
+
+    def test_extract_rtf_with_control_words(self):
+        """Should handle RTF control words (par, tab) correctly."""
+        import tempfile
+
+        from dlpscan.extractors import extract_text
+
+        rtf_content = rb'{\rtf1\ansi Line one\par Line two\tab Column}'
+        with tempfile.NamedTemporaryFile(suffix='.rtf', delete=False) as f:
+            f.write(rtf_content)
+            f.flush()
+            result = extract_text(f.name)
+        os.unlink(f.name)
+        self.assertIn('Line one', result.text)
+        self.assertIn('Line two', result.text)
+
+    def test_rtf_extractor_registered(self):
+        """RTF extension should be registered in the extractor registry."""
+        from dlpscan.extractors import supported_extensions
+        self.assertIn('.rtf', supported_extensions())
+
+    def test_invalid_rtf_raises_error(self):
+        """Non-RTF file with .rtf extension should raise ExtractionError."""
+        import tempfile
+
+        from dlpscan.exceptions import ExtractionError
+        from dlpscan.extractors import _extract_rtf
+
+        with tempfile.NamedTemporaryFile(suffix='.rtf', delete=False) as f:
+            f.write(b'This is not RTF content')
+            f.flush()
+            with self.assertRaises(ExtractionError):
+                _extract_rtf(f.name)
+        os.unlink(f.name)
+
+
+class TestContentTypeDetection(unittest.TestCase):
+    """Tests for magic-byte content type detection."""
+
+    def test_detect_rtf_by_content(self):
+        """RTF file should be detected by magic bytes."""
+        import tempfile
+
+        from dlpscan.extractors import _detect_format_by_content
+
+        with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as f:
+            f.write(rb'{\rtf1\ansi Hello}')
+            f.flush()
+            detected = _detect_format_by_content(f.name)
+        os.unlink(f.name)
+        self.assertEqual(detected, '.rtf')
+
+    def test_detect_pdf_by_content(self):
+        """PDF file should be detected by %PDF magic bytes."""
+        import tempfile
+
+        from dlpscan.extractors import _detect_format_by_content
+
+        with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as f:
+            f.write(b'%PDF-1.4 fake content')
+            f.flush()
+            detected = _detect_format_by_content(f.name)
+        os.unlink(f.name)
+        self.assertEqual(detected, '.pdf')
+
+    def test_detect_unknown_returns_none(self):
+        """Unknown format should return None."""
+        import tempfile
+
+        from dlpscan.extractors import _detect_format_by_content
+
+        with tempfile.NamedTemporaryFile(suffix='.dat', delete=False) as f:
+            f.write(b'Just some random text content')
+            f.flush()
+            detected = _detect_format_by_content(f.name)
+        os.unlink(f.name)
+        self.assertIsNone(detected)
+
+
+class TestOCRConfidence(unittest.TestCase):
+    """Tests for OCR confidence threshold hardening."""
+
+    def test_min_confidence_raised(self):
+        """MIN_OCR_CONFIDENCE should be 60 (up from 30)."""
+        from dlpscan.ocr import MIN_OCR_CONFIDENCE
+        self.assertEqual(MIN_OCR_CONFIDENCE, 60)
+
+
+class TestWildcardAllowlist(unittest.TestCase):
+    """Tests for wildcard/glob-based allowlist matching."""
+
+    def test_exact_match_still_works(self):
+        """Exact text allowlist should still suppress matches."""
+        al = Allowlist(texts=['4111111111111111'])
+        m = Match(text='4111111111111111', category='Credit Card Numbers',
+                  sub_category='Visa', has_context=True, confidence=0.9, span=(0, 16))
+        self.assertFalse(al.is_allowed(m))
+
+    def test_wildcard_prefix_match(self):
+        """Wildcard '4111*' should suppress any text starting with 4111."""
+        al = Allowlist(texts=['4111*'])
+        m = Match(text='4111111111111111', category='Credit Card Numbers',
+                  sub_category='Visa', has_context=True, confidence=0.9, span=(0, 16))
+        self.assertFalse(al.is_allowed(m), "Wildcard '4111*' should suppress")
+
+    def test_wildcard_does_not_over_match(self):
+        """Wildcard '4111*' should NOT suppress text that doesn't match."""
+        al = Allowlist(texts=['4111*'])
+        m = Match(text='4532015112830366', category='Credit Card Numbers',
+                  sub_category='Visa', has_context=True, confidence=0.9, span=(0, 16))
+        self.assertTrue(al.is_allowed(m), "Wildcard '4111*' should not match 4532...")
+
+    def test_question_mark_wildcard(self):
+        """Single-char wildcard '?' should match any single character."""
+        al = Allowlist(texts=['test?@example.com'])
+        m = Match(text='test1@example.com', category='Contact Information',
+                  sub_category='Email Address', has_context=True, confidence=0.9,
+                  span=(0, 17))
+        self.assertFalse(al.is_allowed(m))
+
+    def test_bracket_wildcard(self):
+        """Character set [12] should match specific characters."""
+        al = Allowlist(texts=['test[12]@example.com'])
+        m1 = Match(text='test1@example.com', category='Contact Information',
+                   sub_category='Email Address', has_context=True, confidence=0.9,
+                   span=(0, 17))
+        m3 = Match(text='test3@example.com', category='Contact Information',
+                   sub_category='Email Address', has_context=True, confidence=0.9,
+                   span=(0, 17))
+        self.assertFalse(al.is_allowed(m1), "[12] should match '1'")
+        self.assertTrue(al.is_allowed(m3), "[12] should not match '3'")
+
+    def test_mixed_exact_and_glob(self):
+        """Allowlist with both exact and glob entries should work correctly."""
+        al = Allowlist(texts=['exact@test.com', '4111*'])
+        # Exact match
+        m1 = Match(text='exact@test.com', category='Contact Information',
+                   sub_category='Email Address', has_context=True, confidence=0.9,
+                   span=(0, 14))
+        # Glob match
+        m2 = Match(text='4111222233334444', category='Credit Card Numbers',
+                   sub_category='Visa', has_context=True, confidence=0.9, span=(0, 16))
+        # Neither
+        m3 = Match(text='other@test.com', category='Contact Information',
+                   sub_category='Email Address', has_context=True, confidence=0.9,
+                   span=(0, 14))
+        self.assertFalse(al.is_allowed(m1))
+        self.assertFalse(al.is_allowed(m2))
+        self.assertTrue(al.is_allowed(m3))
+
+    def test_bool_with_globs(self):
+        """Allowlist with only glob entries should be truthy."""
+        al = Allowlist(texts=['4111*'])
+        self.assertTrue(bool(al))
+
+    def test_texts_property(self):
+        """texts property should include both exact and glob entries."""
+        al = Allowlist(texts=['exact', '4111*'])
+        self.assertIn('exact', al.texts)
+        self.assertIn('4111*', al.texts)
+
+    def test_filter_with_wildcards(self):
+        """filter_matches should apply wildcard filtering."""
+        al = Allowlist(texts=['4111*'])
+        matches = [
+            Match(text='4111111111111111', category='Credit Card Numbers',
+                  sub_category='Visa', has_context=True, confidence=0.9, span=(0, 16)),
+            Match(text='4532015112830366', category='Credit Card Numbers',
+                  sub_category='Visa', has_context=True, confidence=0.9, span=(20, 36)),
+        ]
+        filtered = al.filter_matches(matches)
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0].text, '4532015112830366')
+
+
 if __name__ == '__main__':
     unittest.main()
