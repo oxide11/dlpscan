@@ -95,6 +95,7 @@ def load_env_config() -> dict:
         DLPSCAN_CATEGORIES: comma-separated category names
         DLPSCAN_REDACTION_CHAR: single character
         DLPSCAN_MAX_MATCHES: integer
+        DLPSCAN_CONTEXT_BACKEND: context matching backend (regex/ahocorasick)
         DLPSCAN_LOG_LEVEL: DEBUG/INFO/WARNING/ERROR
         DLPSCAN_LOG_FORMAT: json/text
         DLPSCAN_AUDIT_FILE: path to audit log file
@@ -149,6 +150,10 @@ def load_env_config() -> dict:
     max_matches = _env_int("DLPSCAN_MAX_MATCHES")
     if max_matches is not None:
         config["max_matches"] = max_matches
+
+    context_backend = _env("DLPSCAN_CONTEXT_BACKEND")
+    if context_backend is not None:
+        config["context_backend"] = context_backend.strip().lower()
 
     # -- Logging --
     log_level = _env("DLPSCAN_LOG_LEVEL")
@@ -252,6 +257,9 @@ def apply_env_to_guard_kwargs() -> dict:
 
     if "redaction_char" in env:
         kwargs["redaction_char"] = env["redaction_char"]
+
+    if "context_backend" in env:
+        kwargs["context_backend"] = env["context_backend"]
 
     return kwargs
 

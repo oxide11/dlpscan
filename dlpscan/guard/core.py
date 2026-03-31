@@ -36,6 +36,7 @@ from ..scanner import (
     enhanced_scan_text,
     redact_sensitive_info,
     register_patterns,
+    set_context_backend,
     unregister_patterns,
 )
 from ..unicode_normalize import strip_zero_width
@@ -131,6 +132,10 @@ class InputGuard:
         allowlist: Optional Allowlist for suppressing known false positives.
         on_detect: Optional callback invoked when sensitive data is found.
                    Receives the ScanResult as argument.
+        context_backend: Context keyword matching backend. ``"regex"`` (default)
+                         uses compiled alternation patterns. ``"ahocorasick"``
+                         uses a single-pass trie-based matcher for faster
+                         context matching on large texts.
 
     Thread Safety:
         InputGuard instances are safe to share across threads — all config
@@ -165,7 +170,12 @@ class InputGuard:
         custom_patterns: Optional[Dict[str, Dict[str, str]]] = None,
         confidence_overrides: Optional[Dict[str, float]] = None,
         token_vault: Optional[TokenVault] = None,
+        context_backend: Optional[str] = None,
     ):
+        # Set context backend if specified.
+        if context_backend is not None:
+            set_context_backend(context_backend)
+
         # Normalize enum values from strings.
         self.mode = Mode(mode) if isinstance(mode, str) else mode
         self.action = Action(action) if isinstance(action, str) else action

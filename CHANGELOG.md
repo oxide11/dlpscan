@@ -2,6 +2,30 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [1.7.0] - 2026-03-31
+
+### New Features
+
+- **Aho-Corasick Context Matching** (`dlpscan.ahocorasick`): Optional trie-based
+  multi-keyword matching engine that scans text in a single O(n) pass instead of
+  running 560+ separate regex alternation patterns. Wraps the `pyahocorasick` C
+  extension for native-speed trie traversal with a pure-Python fallback.
+  Configurable via `DLPSCAN_CONTEXT_BACKEND=ahocorasick` env var,
+  `context_backend` config key, or `InputGuard(context_backend="ahocorasick")`.
+  Default remains `"regex"` for backward compatibility.
+
+- **Exact Data Match** (`dlpscan.edm`): Zero false-positive detection of known
+  sensitive values using salted HMAC-SHA256 hashes. Register known SSNs, credit
+  cards, emails, etc. as hashes (never stored in plaintext). Configurable
+  tokenizers (numeric, email, word n-grams) extract candidates from text.
+  Supports save/load for hash set persistence.
+
+- **Locality-Sensitive Hashing** (`dlpscan.lsh`): Fuzzy document similarity
+  detection using MinHash signatures with LSH banding. Detects documents similar
+  to known sensitive documents even after editing, reformatting, or cropping.
+  Configurable threshold (default 80%), 128-hash signatures, sub-linear query
+  time via band indexing. Thread-safe with save/load persistence.
+
 ## [1.6.0] - 2026-03-26
 
 ### New Features

@@ -645,6 +645,65 @@ Context keyword matching includes **fuzzy Levenshtein matching** (edit distance 
 
 This defeats zero-width insertion, RTL/bidi manipulation, homoglyph substitution, delimiter variation, context keyword evasion, and chained/polymorphic evasion techniques. See [docs/evasion_defenses.md](docs/evasion_defenses.md) for the full technical reference.
 
+### Aho-Corasick Context Matching
+
+Context keyword matching can optionally use an **Aho-Corasick automaton** instead of the default regex alternation patterns. This scans all 2,500+ keywords in a single O(n) pass using a trie-based state machine, instead of 560 separate regex patterns.
+
+```python
+# Enable via InputGuard
+guard = InputGuard(presets=[Preset.PCI_DSS], context_backend="ahocorasick")
+
+# Or via environment variable
+# DLPSCAN_CONTEXT_BACKEND=ahocorasick
+
+# Or programmatically
+from dlpscan import set_context_backend
+set_context_backend("ahocorasick")
+```
+
+Uses the `pyahocorasick` C extension for native speed (install with `pip install dlpscan[ahocorasick]`). Falls back to a pure-Python implementation if not available. Default backend remains `"regex"` for backward compatibility.
+
+### Exact Data Match (EDM)
+
+Detect specific known sensitive values with **zero false positives** using salted HMAC-SHA256 hashes. No plaintext values are stored — only irreversible hashes.
+
+```python
+from dlpscan import ExactDataMatcher
+
+matcher = ExactDataMatcher()
+matcher.register_values("employee_ssn", ["123-45-6789", "987-65-4321"])
+
+hits = matcher.scan("Employee SSN is 123-45-6789 on file.")
+# -> [EDMMatch(category='employee_ssn', confidence=1.0, ...)]
+
+# Persistence: save/load hash sets
+matcher.save("edm_hashes.json")
+matcher = ExactDataMatcher.load("edm_hashes.json")
+```
+
+Configurable tokenizers (`numeric`, `email`, `word_1gram`/`word_2gram`/`word_3gram`) extract candidates from text. Value normalization (strip separators, lowercase) ensures `411-1111-1111-1111` matches `4111111111111111`.
+
+### Document Similarity (LSH)
+
+Detect documents **similar** to known sensitive documents using Locality-Sensitive Hashing with MinHash signatures, even after editing, reformatting, or cropping.
+
+```python
+from dlpscan import DocumentVault
+
+vault = DocumentVault(threshold=0.8)
+vault.register("contract_v1", contract_text, sensitivity="confidential")
+
+matches = vault.query(suspicious_text)
+for m in matches:
+    print(f"Similar to {m.doc_id} ({m.similarity:.0%})")
+
+# Persistence
+vault.save("vault.json")
+vault = DocumentVault.load("vault.json")
+```
+
+128-hash MinHash signatures with 16-band LSH indexing provide sub-linear query time. Tunable similarity threshold (default 80%).
+
 ### ReDoS Protection
 
 Regex matching uses a dual-layer timeout: `SIGALRM` on Unix main thread (hard interrupt, 5s per pattern) and a `threading.Timer` fallback on all other platforms and threads (checked between pattern iterations). A global scan timeout of 120 seconds prevents unbounded total scan time. Both layers are always active — no platform or threading context is unguarded.
@@ -871,6 +930,9 @@ dlpscan/
 ├── pipeline.py                    # Queue-based file processing pipeline
 ├── streaming.py                   # Real-time stream & webhook scanners
 ├── unicode_normalize.py           # Unicode evasion defense (zero-width, homoglyphs, bidi)
+├── ahocorasick.py                 # Aho-Corasick trie-based multi-keyword matching
+├── edm.py                         # Exact Data Match (salted HMAC-SHA256 hashes)
+├── lsh.py                         # Locality-Sensitive Hashing (MinHash document similarity)
 ├── audit.py                       # Enterprise audit logging framework
 ├── rate_limit.py                  # Token bucket rate limiter
 ├── env_config.py                  # DLPSCAN_* environment variable configuration
@@ -901,7 +963,7 @@ dlpscan/
 ## Testing
 
 ```bash
-python -m unittest tests.unit -v          # Unit tests (446 tests)
+python -m unittest tests.unit -v          # Unit tests (477 tests)
 python -m unittest tests.test_integration  # Integration tests
 python tests/benchmarks.py                 # Performance benchmarks
 

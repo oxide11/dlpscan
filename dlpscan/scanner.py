@@ -7,6 +7,14 @@ import signal
 import threading
 from typing import Generator, List, Optional, Set, Tuple
 
+from .ahocorasick import (
+    CONTEXT_BACKEND_AHOCORASICK,
+    DEFAULT_CONTEXT_BACKEND,
+    VALID_BACKENDS,
+    ContextHitIndex,
+    get_matcher,
+    rebuild_matcher,
+)
 from .context import CONTEXT_KEYWORDS
 from .exceptions import (
     EmptyInputError,
@@ -38,6 +46,34 @@ MAX_MATCHES = 50_000
 
 # Maximum total scan time in seconds across all patterns (0 = no limit).
 MAX_SCAN_SECONDS = 120
+
+# -- Context backend setting --
+_context_backend: str = DEFAULT_CONTEXT_BACKEND
+
+
+def set_context_backend(backend: str) -> None:
+    """Set the context keyword matching backend.
+
+    Args:
+        backend: ``"regex"`` (default, compiled alternation patterns) or
+                 ``"ahocorasick"`` (single-pass trie-based matching).
+    """
+    global _context_backend
+    backend = backend.strip().lower()
+    if backend not in VALID_BACKENDS:
+        raise ValueError(f"Invalid context backend {backend!r}. "
+                         f"Valid options: {sorted(VALID_BACKENDS)}")
+    _context_backend = backend
+    if backend == CONTEXT_BACKEND_AHOCORASICK:
+        # Eagerly build the automaton so first scan isn't slow.
+        rebuild_matcher(custom_context=_custom_context if _custom_context else None)
+    logger.info("Context backend set to %r", backend)
+
+
+def get_context_backend() -> str:
+    """Return the current context keyword matching backend."""
+    return _context_backend
+
 
 # -- Custom pattern registry (protected by _registry_lock) --
 _registry_lock = threading.Lock()
@@ -116,6 +152,8 @@ def register_patterns(category: str, patterns: dict, context: Optional[dict] = N
         if context:
             _custom_context[category] = context
             _rebuild_context_patterns()
+            if _context_backend == CONTEXT_BACKEND_AHOCORASICK:
+                rebuild_matcher(custom_context=_custom_context)
 
         if specificity:
             PATTERN_SPECIFICITY.update(specificity)
@@ -135,6 +173,8 @@ def unregister_patterns(category: str):
         if category in _custom_context:
             _custom_context.pop(category)
             _rebuild_context_patterns()
+            if _context_backend == CONTEXT_BACKEND_AHOCORASICK:
+                rebuild_matcher(custom_context=_custom_context if _custom_context else None)
 
         # Clean up specificity entries added by this category.
         removed_keys = _custom_specificity_keys.pop(category, set())
@@ -525,6 +565,36 @@ def _get_raw_keywords(category: str, sub_category: str) -> list[str]:
     return []
 
 
+def _check_context(text: str, start: int, end: int,
+                    category: str, sub_category: str,
+                    ac_hit_index: Optional[ContextHitIndex] = None) -> bool:
+    """Dispatch context check to the appropriate backend.
+
+    When Aho-Corasick hit index is provided, uses fast positional lookup.
+    Otherwise falls back to the regex-based scan_for_context.
+    """
+    if ac_hit_index is not None:
+        # Look up context distance config.
+        distance_config = CONTEXT_KEYWORDS.get(category, _custom_context.get(category, {}))
+        distance = distance_config.get('distance', 50)
+        result = ac_hit_index.has_hit_in_range(
+            category, sub_category,
+            max(0, start - distance), end + distance,
+        )
+        if result:
+            return True
+        # Fall through to fuzzy matching (Aho-Corasick is exact only).
+        raw_keywords = _get_raw_keywords(category, sub_category)
+        if raw_keywords:
+            pre_start = max(0, start - distance)
+            post_end = min(len(text), end + distance)
+            context_window = text[pre_start:start] + ' ' + text[end:post_end]
+            if _fuzzy_keyword_match(context_window, raw_keywords):
+                return True
+        return False
+    return scan_for_context(text, start, end, category, sub_category)
+
+
 def enhanced_scan_text(
     text: str,
     categories: Optional[Set[str]] = None,
@@ -582,6 +652,16 @@ def enhanced_scan_text(
             _thread_timeout = _ThreadTimeout(MAX_SCAN_SECONDS)
             _thread_timeout.start()
 
+        # Pre-compute Aho-Corasick hit index if using that backend.
+        _ac_hit_index: Optional[ContextHitIndex] = None
+        if _context_backend == CONTEXT_BACKEND_AHOCORASICK:
+            try:
+                matcher = get_matcher()
+                _ac_hit_index = matcher.search(text)
+            except Exception:
+                logger.warning("Aho-Corasick search failed; falling back to regex")
+                _ac_hit_index = None
+
         try:
             for category, sub_categories in patterns_to_scan.items():
                 if scan_timed_out or len(raw_matches) >= max_matches:
@@ -621,8 +701,9 @@ def enhanced_scan_text(
                                 except InvalidCardNumberError:
                                     continue
 
-                            has_context = scan_for_context(
-                                text, match.start(), match.end(), category, sub_category
+                            has_context = _check_context(
+                                text, match.start(), match.end(),
+                                category, sub_category, _ac_hit_index
                             )
 
                             # Context-required patterns are silently skipped without context.

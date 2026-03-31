@@ -30,6 +30,7 @@ _DEFAULTS: Dict[str, Any] = {
     'allowlist': [],
     'ignore_patterns': [],
     'ignore_paths': [],
+    'context_backend': 'regex',  # 'regex' or 'ahocorasick'
 }
 
 
