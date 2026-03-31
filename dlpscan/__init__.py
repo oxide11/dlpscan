@@ -116,6 +116,12 @@ from .siem import (
     create_siem_from_env,
 )
 from .streaming import StreamScanner, WebhookScanner
+from .unicode_normalize import (
+    ZERO_WIDTH_CHARS,
+    normalize_homoglyphs,
+    normalize_text,
+    strip_zero_width,
+)
 from .webhooks import WebhookNotifier, notify_findings
 
 __version__ = '1.6.0'
