@@ -282,8 +282,8 @@ def _extract_docx(file_path: str) -> ExtractionResult:
             'paragraph_count': len(doc.paragraphs),
             'table_count': len(doc.tables),
         }
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Could not read DOCX core properties from %r: %s", file_path, exc)
 
     return ExtractionResult(
         text='\n'.join(parts),
