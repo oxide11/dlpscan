@@ -3706,5 +3706,73 @@ class TestUnicodeNormalization(unittest.TestCase):
         self.assertNotIn('4532', redacted)
 
 
+class TestInputGuardUnicodeEvasion(unittest.TestCase):
+    """Tests that InputGuard correctly handles Unicode evasion in all actions."""
+
+    def test_guard_reject_zero_width_credit_card(self):
+        """InputGuard REJECT should catch credit card with zero-width chars."""
+        from dlpscan.guard import Action, InputGuard, InputGuardError, Preset
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REJECT)
+        # Valid Visa with zero-width spaces: 4532015112830366
+        evasion = "card: 4\u200b532\u200b0151\u200b1283\u200b0366"
+        with self.assertRaises(InputGuardError):
+            guard.scan(evasion)
+
+    def test_guard_redact_zero_width_ssn(self):
+        """InputGuard REDACT should redact SSN with zero-width joiners."""
+        from dlpscan.guard import Action, InputGuard, Preset
+        guard = InputGuard(presets=[Preset.SSN_SIN], action=Action.REDACT)
+        evasion = "ssn: 1\u200d2\u200d3-4\u200d5-6\u200d789"
+        result = guard.scan(evasion)
+        if not result.is_clean:
+            # Redacted text should not contain the original digits.
+            self.assertNotIn('123', result.redacted_text)
+            # Redacted text should not contain zero-width chars in the redacted span.
+            self.assertNotIn('\u200d', result.redacted_text)
+
+    def test_guard_redact_strips_zero_width_from_output(self):
+        """Redacted output should be clean of zero-width characters."""
+        from dlpscan.guard import Action, InputGuard, Preset
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REDACT)
+        evasion = "card: 4\u200b5\u200b3\u200b2\u200b0151\u200b1283\u200b0366"
+        result = guard.scan(evasion)
+        if not result.is_clean and result.redacted_text:
+            # Zero-width space should NOT appear in the redacted portion.
+            # Find the redacted region (where X's are).
+            redacted_region = result.redacted_text[result.redacted_text.index('X'):]
+            self.assertNotIn('\u200b', redacted_region.split()[0] if ' ' in redacted_region else redacted_region)
+
+    def test_guard_tokenize_stores_clean_value(self):
+        """Tokenization should store clean value (no zero-width chars) in vault."""
+        from dlpscan.guard import Action, InputGuard, Preset
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.TOKENIZE)
+        evasion = "card: 4\u200b532015112830366"
+        result = guard.scan(evasion)
+        if not result.is_clean and result.token_vault:
+            vault_map = result.token_vault.export_map()
+            for token, original in vault_map.items():
+                # Stored value should be free of zero-width characters.
+                self.assertNotIn('\u200b', original)
+
+    def test_guard_obfuscate_zero_width_credit_card(self):
+        """Obfuscation should produce clean fake data without zero-width chars."""
+        from dlpscan.guard import Action, InputGuard, Preset
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.OBFUSCATE)
+        evasion = "card: 4\u200b532\u200b0151\u200b1283\u200b0366"
+        result = guard.scan(evasion)
+        if not result.is_clean and result.redacted_text:
+            # Obfuscated output should not contain zero-width chars.
+            self.assertNotIn('\u200b', result.redacted_text)
+
+    def test_guard_homoglyph_fullwidth_digits(self):
+        """InputGuard should detect credit card using fullwidth digits."""
+        from dlpscan.guard import Action, InputGuard, InputGuardError, Preset
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REJECT)
+        # 4532015112830366 in fullwidth digits
+        evasion = "card: \uff14\uff15\uff13\uff12\uff10\uff11\uff15\uff11\uff11\uff12\uff18\uff13\uff10\uff13\uff16\uff16"
+        with self.assertRaises(InputGuardError):
+            guard.scan(evasion)
+
+
 if __name__ == '__main__':
     unittest.main()

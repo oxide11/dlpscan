@@ -37,6 +37,7 @@ from ..scanner import (
     register_patterns,
     unregister_patterns,
 )
+from ..unicode_normalize import strip_zero_width
 from .enums import Action, Mode
 from .presets import PRESET_CATEGORIES, Preset
 from .transforms import TokenVault, obfuscate_matches, tokenize_matches
@@ -414,6 +415,9 @@ class InputGuard:
         """Replace matched spans in text with redaction characters.
 
         Processes spans in reverse order to avoid offset drift.
+        Zero-width / invisible characters in the matched span are stripped
+        before computing the redacted replacement so that evasion characters
+        do not leak into the output.
         """
         # Sort by span start descending for safe in-place replacement.
         sorted_matches = sorted(matches, key=lambda m: m.span[0], reverse=True)
@@ -422,11 +426,13 @@ class InputGuard:
         for m in sorted_matches:
             start, end = m.span
             matched_text = result[start:end]
+            # Strip zero-width chars so redaction output is clean.
+            clean_text, _ = strip_zero_width(matched_text)
             try:
-                redacted = redact_sensitive_info(matched_text, self.redaction_char)
+                redacted = redact_sensitive_info(clean_text, self.redaction_char)
             except (EmptyInputError, ShortInputError):
                 # Very short matches — replace entirely.
-                redacted = self.redaction_char * len(matched_text)
+                redacted = self.redaction_char * len(clean_text)
             result = result[:start] + redacted + result[end:]
 
         return result
