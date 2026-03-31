@@ -4610,5 +4610,590 @@ class TestLSH(unittest.TestCase):
         self.assertEqual(len(shingles), 3)
 
 
+###############################################################################
+# Count-Min Sketch tests
+###############################################################################
+
+class TestCountMinSketch(unittest.TestCase):
+    def test_basic_increment_and_estimate(self):
+        from dlpscan.countmin import CountMinSketch
+        cms = CountMinSketch(width=1000, depth=5)
+        cms.increment("foo")
+        cms.increment("foo")
+        cms.increment("foo")
+        self.assertEqual(cms.estimate("foo"), 3)
+
+    def test_never_undercounts(self):
+        from dlpscan.countmin import CountMinSketch
+        cms = CountMinSketch(width=500, depth=5)
+        for _ in range(100):
+            cms.increment("key")
+        self.assertGreaterEqual(cms.estimate("key"), 100)
+
+    def test_zero_for_unseen(self):
+        from dlpscan.countmin import CountMinSketch
+        cms = CountMinSketch()
+        self.assertEqual(cms.estimate("never_seen"), 0)
+
+    def test_total_property(self):
+        from dlpscan.countmin import CountMinSketch
+        cms = CountMinSketch()
+        cms.increment("a", 5)
+        cms.increment("b", 3)
+        self.assertEqual(cms.total, 8)
+
+    def test_clear(self):
+        from dlpscan.countmin import CountMinSketch
+        cms = CountMinSketch()
+        cms.increment("x", 10)
+        cms.clear()
+        self.assertEqual(cms.estimate("x"), 0)
+        self.assertEqual(cms.total, 0)
+
+    def test_merge(self):
+        from dlpscan.countmin import CountMinSketch
+        a = CountMinSketch(width=1000, depth=5)
+        b = CountMinSketch(width=1000, depth=5)
+        a.increment("k", 3)
+        b.increment("k", 7)
+        a.merge(b)
+        self.assertEqual(a.estimate("k"), 10)
+        self.assertEqual(a.total, 10)
+
+    def test_merge_different_dims_raises(self):
+        from dlpscan.countmin import CountMinSketch
+        a = CountMinSketch(width=100, depth=3)
+        b = CountMinSketch(width=200, depth=3)
+        with self.assertRaises(ValueError):
+            a.merge(b)
+
+    def test_invalid_params(self):
+        from dlpscan.countmin import CountMinSketch
+        with self.assertRaises(ValueError):
+            CountMinSketch(width=0, depth=5)
+        with self.assertRaises(ValueError):
+            CountMinSketch(width=100, depth=-1)
+
+    def test_properties(self):
+        from dlpscan.countmin import CountMinSketch
+        cms = CountMinSketch(width=500, depth=3)
+        self.assertEqual(cms.width, 500)
+        self.assertEqual(cms.depth, 3)
+
+
+###############################################################################
+# HyperLogLog tests
+###############################################################################
+
+class TestHyperLogLog(unittest.TestCase):
+    def test_empty_count(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        hll = HyperLogLog(precision=10)
+        self.assertEqual(hll.count(), 0)
+
+    def test_single_item(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        hll = HyperLogLog(precision=14)
+        hll.add("hello")
+        self.assertGreaterEqual(hll.count(), 1)
+        self.assertLessEqual(hll.count(), 3)  # within error
+
+    def test_cardinality_estimate(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        hll = HyperLogLog(precision=14)
+        n = 1000
+        for i in range(n):
+            hll.add(f"item_{i}")
+        estimate = hll.count()
+        # Should be within ~5% for precision=14
+        self.assertGreater(estimate, n * 0.9)
+        self.assertLess(estimate, n * 1.1)
+
+    def test_duplicates_dont_increase_count(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        hll = HyperLogLog(precision=14)
+        for _ in range(1000):
+            hll.add("same_value")
+        self.assertLessEqual(hll.count(), 3)
+
+    def test_merge(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        a = HyperLogLog(precision=12)
+        b = HyperLogLog(precision=12)
+        for i in range(500):
+            a.add(f"a_{i}")
+        for i in range(500):
+            b.add(f"b_{i}")
+        a.merge(b)
+        estimate = a.count()
+        self.assertGreater(estimate, 800)
+        self.assertLess(estimate, 1200)
+
+    def test_merge_different_precision_raises(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        a = HyperLogLog(precision=10)
+        b = HyperLogLog(precision=12)
+        with self.assertRaises(ValueError):
+            a.merge(b)
+
+    def test_invalid_precision(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        with self.assertRaises(ValueError):
+            HyperLogLog(precision=2)
+        with self.assertRaises(ValueError):
+            HyperLogLog(precision=20)
+
+    def test_clear(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        hll = HyperLogLog(precision=10)
+        for i in range(100):
+            hll.add(f"val_{i}")
+        hll.clear()
+        self.assertEqual(hll.count(), 0)
+
+    def test_properties(self):
+        from dlpscan.hyperloglog import HyperLogLog
+        hll = HyperLogLog(precision=12)
+        self.assertEqual(hll.precision, 12)
+        self.assertEqual(hll.memory_bytes, 4096)
+        self.assertAlmostEqual(hll.standard_error, 1.04 / (4096 ** 0.5), places=3)
+
+
+###############################################################################
+# Cuckoo Filter tests
+###############################################################################
+
+class TestCuckooFilter(unittest.TestCase):
+    def test_insert_and_contains(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=1000)
+        self.assertTrue(cf.insert("hello"))
+        self.assertTrue(cf.contains("hello"))
+        self.assertFalse(cf.contains("world"))
+
+    def test_delete(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=1000)
+        cf.insert("item")
+        self.assertTrue(cf.contains("item"))
+        self.assertTrue(cf.delete("item"))
+        self.assertFalse(cf.contains("item"))
+
+    def test_delete_nonexistent(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=1000)
+        self.assertFalse(cf.delete("nope"))
+
+    def test_count(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=1000)
+        cf.insert("a")
+        cf.insert("b")
+        cf.insert("c")
+        self.assertEqual(cf.count, 3)
+        cf.delete("b")
+        self.assertEqual(cf.count, 2)
+
+    def test_clear(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=1000)
+        for i in range(50):
+            cf.insert(f"item_{i}")
+        cf.clear()
+        self.assertEqual(cf.count, 0)
+        self.assertFalse(cf.contains("item_0"))
+
+    def test_load_factor(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=100)
+        self.assertEqual(cf.load_factor, 0.0)
+        cf.insert("x")
+        self.assertGreater(cf.load_factor, 0.0)
+
+    def test_capacity_and_memory(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=1000, fingerprint_bits=16)
+        self.assertGreater(cf.capacity, 0)
+        self.assertGreater(cf.memory_bytes, 0)
+
+    def test_invalid_capacity(self):
+        from dlpscan.cuckoo import CuckooFilter
+        with self.assertRaises(ValueError):
+            CuckooFilter(capacity=0)
+
+    def test_invalid_fingerprint_bits(self):
+        from dlpscan.cuckoo import CuckooFilter
+        with self.assertRaises(ValueError):
+            CuckooFilter(fingerprint_bits=7)
+
+    def test_many_inserts_no_false_negatives(self):
+        from dlpscan.cuckoo import CuckooFilter
+        cf = CuckooFilter(capacity=10000, fingerprint_bits=16)
+        items = [f"item_{i}" for i in range(500)]
+        for item in items:
+            cf.insert(item)
+        for item in items:
+            self.assertTrue(cf.contains(item), f"False negative for {item}")
+
+
+###############################################################################
+# Rabin-Karp tests
+###############################################################################
+
+class TestRabinKarp(unittest.TestCase):
+    def test_register_and_scan(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=10)
+        doc = "This is a confidential document with sensitive information inside."
+        m.register("doc1", doc)
+        hits = m.scan(doc)
+        self.assertGreater(len(hits), 0)
+        self.assertEqual(hits[0].doc_id, "doc1")
+
+    def test_no_match_on_unrelated_text(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=10)
+        m.register("doc1", "the quick brown fox jumps over the lazy dog repeatedly")
+        hits = m.scan("completely different unrelated text with no overlap whatsoever")
+        self.assertEqual(len(hits), 0)
+
+    def test_partial_fragment_match(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=15)
+        doc = "This contract grants exclusive rights to the licensee for perpetual use of all materials."
+        m.register("contract", doc)
+        # Scan text containing a verbatim fragment of the document
+        fragment = "Someone wrote: this contract grants exclusive rights to the licensee for perpetual use of all materials."
+        hits = m.scan(fragment)
+        self.assertGreater(len(hits), 0)
+
+    def test_unregister(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=10)
+        m.register("doc1", "a long enough document for window size ten characters")
+        self.assertTrue(m.unregister("doc1"))
+        self.assertFalse(m.unregister("doc1"))
+        self.assertEqual(m.document_count, 0)
+
+    def test_contains_fragment(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=10)
+        doc = "sensitive financial report containing quarterly earnings data"
+        m.register("report", doc)
+        self.assertTrue(m.contains_fragment(doc))
+
+    def test_short_document_skipped(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=50)
+        count = m.register("short", "too short")
+        self.assertEqual(count, 0)
+
+    def test_window_size_minimum(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        with self.assertRaises(ValueError):
+            PartialDocumentMatcher(window_size=5)
+
+    def test_properties(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=20)
+        m.register("d1", "a document that is certainly long enough for twenty characters")
+        self.assertEqual(m.document_count, 1)
+        self.assertGreater(m.fingerprint_count, 0)
+        self.assertEqual(m.window_size, 20)
+
+    def test_clear(self):
+        from dlpscan.rabin_karp import PartialDocumentMatcher
+        m = PartialDocumentMatcher(window_size=10)
+        m.register("d1", "a reasonably long document string for testing purposes")
+        m.clear()
+        self.assertEqual(m.document_count, 0)
+        self.assertEqual(m.fingerprint_count, 0)
+
+    def test_fragment_match_to_dict(self):
+        from dlpscan.rabin_karp import FragmentMatch
+        fm = FragmentMatch(doc_id="d1", doc_position=10, scan_position=5,
+                           fragment_length=50)
+        d = fm.to_dict()
+        self.assertEqual(d['doc_id'], 'd1')
+        self.assertEqual(d['fragment_length'], 50)
+
+
+###############################################################################
+# Entropy Analysis tests
+###############################################################################
+
+class TestEntropyAnalysis(unittest.TestCase):
+    def test_zero_entropy(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        result = analyzer.analyze_bytes(b'\x00' * 1000)
+        self.assertAlmostEqual(result.entropy, 0.0, places=1)
+
+    def test_max_entropy(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        # All 256 byte values equally represented
+        data = bytes(range(256)) * 100
+        analyzer = EntropyAnalyzer()
+        result = analyzer.analyze_bytes(data)
+        self.assertGreater(result.entropy, 7.9)
+
+    def test_text_entropy(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        text = b"Hello world this is normal English text with typical entropy levels."
+        result = analyzer.analyze_bytes(text, format_hint=".txt")
+        self.assertGreater(result.entropy, 2.0)
+        self.assertLess(result.entropy, 6.0)
+
+    def test_suspicious_for_format(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        # Random-looking data claimed to be a .txt file
+        import os as _os
+        data = _os.urandom(1000)
+        result = analyzer.analyze_bytes(data, format_hint=".txt")
+        self.assertTrue(result.is_suspicious)
+
+    def test_classification_normal(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        result = analyzer.analyze_bytes(b"aaabbbccc" * 100)
+        self.assertEqual(result.classification, "normal")
+
+    def test_classification_encrypted(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        data = bytes(range(256)) * 100
+        result = analyzer.analyze_bytes(data)
+        self.assertIn(result.classification, ("likely_encrypted", "compressed_or_encrypted"))
+
+    def test_analyze_file(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        with tempfile.NamedTemporaryFile(suffix='.txt', delete=False) as f:
+            f.write(b"Normal text content for testing entropy analysis module.")
+            f.flush()
+            try:
+                result = analyzer.analyze_file(f.name)
+                self.assertIsNotNone(result.file_path)
+                self.assertGreater(result.file_size, 0)
+            finally:
+                os.unlink(f.name)
+
+    def test_empty_data(self):
+        from dlpscan.entropy import EntropyAnalyzer
+        analyzer = EntropyAnalyzer()
+        result = analyzer.analyze_bytes(b"")
+        self.assertEqual(result.entropy, 0.0)
+
+    def test_entropy_result_to_dict(self):
+        from dlpscan.entropy import EntropyResult
+        r = EntropyResult(entropy=7.5, is_suspicious=True,
+                          classification="compressed_or_encrypted",
+                          file_size=1024, format_hint=".bin")
+        d = r.to_dict()
+        self.assertEqual(d['entropy'], 7.5)
+        self.assertTrue(d['is_suspicious'])
+
+
+###############################################################################
+# Recursive Extractor tests
+###############################################################################
+
+class TestRecursiveExtractor(unittest.TestCase):
+    def test_extract_non_archive(self):
+        from dlpscan.entropy import RecursiveExtractor
+        with tempfile.NamedTemporaryFile(suffix='.txt', delete=False) as f:
+            f.write(b"Just a plain text file, not an archive.")
+            f.flush()
+            try:
+                with RecursiveExtractor() as ext:
+                    items = ext.extract(f.name)
+                    self.assertEqual(len(items), 1)
+                    self.assertEqual(items[0].depth, 0)
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_zip(self):
+        import zipfile as _zf
+        from dlpscan.entropy import RecursiveExtractor
+        with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as zf:
+            with _zf.ZipFile(zf, 'w') as z:
+                z.writestr("inner.txt", "Secret data inside the zip archive.")
+            try:
+                with RecursiveExtractor() as ext:
+                    items = ext.extract(zf.name)
+                    # Should have the zip itself + the inner file
+                    self.assertGreaterEqual(len(items), 2)
+                    names = [i.original_name for i in items]
+                    self.assertIn("inner.txt", names)
+            finally:
+                os.unlink(zf.name)
+
+    def test_extract_gzip(self):
+        import gzip as _gz
+        from dlpscan.entropy import RecursiveExtractor
+        with tempfile.NamedTemporaryFile(suffix='.gz', delete=False) as f:
+            with _gz.open(f.name, 'wb') as gz:
+                gz.write(b"Compressed content for testing gzip extraction.")
+            try:
+                with RecursiveExtractor() as ext:
+                    items = ext.extract(f.name)
+                    self.assertGreaterEqual(len(items), 2)
+            finally:
+                os.unlink(f.name)
+
+    def test_max_depth_limit(self):
+        from dlpscan.entropy import RecursiveExtractor
+        ext = RecursiveExtractor(max_depth=0)
+        with tempfile.NamedTemporaryFile(suffix='.txt', delete=False) as f:
+            f.write(b"test")
+            f.flush()
+            try:
+                items = ext.extract(f.name)
+                # depth=0 item is allowed, but no recursion into archives
+                self.assertEqual(len(items), 1)
+            finally:
+                os.unlink(f.name)
+
+    def test_extracted_item_to_dict(self):
+        from dlpscan.entropy import ExtractedItem
+        item = ExtractedItem(path="/tmp/test", original_name="test.txt",
+                             depth=1, entropy=4.5, classification="normal",
+                             is_suspicious=False, size=100)
+        d = item.to_dict()
+        self.assertEqual(d['original_name'], 'test.txt')
+        self.assertEqual(d['depth'], 1)
+
+    def test_context_manager_cleanup(self):
+        from dlpscan.entropy import RecursiveExtractor
+        import zipfile as _zf
+        with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as zf:
+            with _zf.ZipFile(zf, 'w') as z:
+                z.writestr("inner.txt", "test content")
+            try:
+                ext = RecursiveExtractor()
+                with ext:
+                    ext.extract(zf.name)
+                    temp_dirs = list(ext._temp_dirs)
+                # After context manager, dirs should be cleaned up
+                for d in temp_dirs:
+                    self.assertFalse(os.path.exists(d))
+            finally:
+                os.unlink(zf.name)
+
+
+###############################################################################
+# Session Correlator tests
+###############################################################################
+
+class TestSessionCorrelator(unittest.TestCase):
+    def _make_match(self, category, text):
+        """Create a simple Match-like object."""
+        class FakeMatch:
+            def __init__(self, cat, txt):
+                self.category = cat
+                self.text = txt
+        return FakeMatch(category, text)
+
+    def test_basic_record_no_alert(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator(window_seconds=3600)
+        sc.set_policy("SSN", max_total=10)
+
+        class FakeResult:
+            findings = []
+        alerts = sc.record_scan(FakeResult(), user_id="user1")
+        self.assertEqual(len(alerts), 0)
+
+    def test_total_threshold_alert(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator(window_seconds=3600)
+        sc.set_policy("SSN", max_total=3)
+
+        matches = [self._make_match("SSN", f"123-45-678{i}") for i in range(5)]
+        alerts = sc.record_matches(matches, user_id="user1")
+        # Should alert once total >= 3
+        ssn_alerts = [a for a in alerts if a.category == "SSN"]
+        self.assertGreater(len(ssn_alerts), 0)
+
+    def test_unique_threshold_alert(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator(window_seconds=3600)
+        sc.set_policy("CC", max_unique=2)
+
+        matches = [
+            self._make_match("CC", "4111111111111111"),
+            self._make_match("CC", "5500000000000004"),
+            self._make_match("CC", "340000000000009"),
+        ]
+        alerts = sc.record_matches(matches, user_id="user1")
+        unique_alerts = [a for a in alerts if a.alert_type == "unique_threshold"]
+        self.assertGreater(len(unique_alerts), 0)
+
+    def test_user_stats(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator()
+        matches = [self._make_match("SSN", "123-45-6789")]
+        sc.record_matches(matches, user_id="bob")
+        stats = sc.get_user_stats("bob")
+        self.assertIsNotNone(stats)
+        self.assertEqual(stats.total_matches, 1)
+
+    def test_estimate_total(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator()
+        matches = [self._make_match("SSN", f"val{i}") for i in range(10)]
+        sc.record_matches(matches, user_id="alice")
+        est = sc.estimate_total("alice", "SSN")
+        self.assertGreaterEqual(est, 10)
+
+    def test_reset(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator()
+        matches = [self._make_match("SSN", "123")]
+        sc.record_matches(matches, user_id="user1")
+        sc.reset()
+        self.assertEqual(sc.active_users, 0)
+        self.assertEqual(sc.total_alerts, 0)
+
+    def test_properties(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator(window_seconds=1800)
+        self.assertEqual(sc.window_seconds, 1800)
+        self.assertGreater(sc.window_remaining, 0)
+        self.assertEqual(sc.active_users, 0)
+
+    def test_policy_management(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator()
+        sc.set_policy("SSN", max_total=10)
+        sc.set_policy("CC", max_total=20)
+        self.assertEqual(len(sc.policies), 2)
+        # Replace existing policy
+        sc.set_policy("SSN", max_total=5)
+        self.assertEqual(len(sc.policies), 2)
+
+    def test_correlation_alert_to_dict(self):
+        from dlpscan.session import CorrelationAlert
+        alert = CorrelationAlert(
+            alert_type="total_threshold", user_id="bob",
+            category="SSN", count=50, limit=10, window_seconds=3600)
+        d = alert.to_dict()
+        self.assertEqual(d['alert_type'], 'total_threshold')
+        self.assertEqual(d['user_id'], 'bob')
+        self.assertEqual(d['count'], 50)
+
+    def test_user_pattern_filtering(self):
+        from dlpscan.session import SessionCorrelator
+        sc = SessionCorrelator()
+        sc.set_policy("SSN", max_total=1, user_pattern="admin@*")
+        matches = [self._make_match("SSN", "123-45-6789")]
+        # Non-matching user should not trigger alert
+        alerts = sc.record_matches(matches, user_id="regular@company.com")
+        policy_alerts = [a for a in alerts if a.category == "SSN"]
+        self.assertEqual(len(policy_alerts), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

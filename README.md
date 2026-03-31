@@ -748,6 +748,57 @@ vault = DocumentVault.load("vault.json")
 
 **Tuning:** threshold (0.5=aggressive, 0.8=default, 0.9+=near-exact), shingle_size (smaller=more sensitive), num_hashes (more=more accurate). Memory: ~1 KB per document. See [docs/advanced_techniques.md](docs/advanced_techniques.md) for tuning guide.
 
+### Probabilistic Data Structures
+
+Three building-block data structures for memory-efficient DLP:
+
+- **Count-Min Sketch** (`dlpscan.countmin`): Frequency estimation in constant memory. "How many SSNs has this user sent?" using ~280 KB regardless of volume. Never undercounts.
+- **HyperLogLog** (`dlpscan.hyperloglog`): Cardinality estimation using ~1.5 KB. "How many *unique* files passed through?" with ±0.81% error.
+- **Cuckoo Filter** (`dlpscan.cuckoo`): Probabilistic set with deletion. 100K items in ~150 KB vs ~6.4 MB for a Python set.
+
+### Session Correlator
+
+Stateful drip-exfiltration detection combining CMS + HLL with per-user tracking across sliding time windows. Policy-based alerting when total or unique value thresholds are exceeded.
+
+```python
+from dlpscan import SessionCorrelator
+
+correlator = SessionCorrelator(window_seconds=3600)
+correlator.set_policy("Credit Card Numbers", max_total=50, max_unique=20)
+alerts = correlator.record_scan(scan_result, user_id="user@company.com")
+```
+
+### Rabin-Karp Partial Document Matching
+
+Detects copied fragments from sensitive documents using rolling hash fingerprints. Catches paragraph-level copying that LSH (whole-document) and pattern matching (structured data) miss.
+
+```python
+from dlpscan import PartialDocumentMatcher
+
+matcher = PartialDocumentMatcher(window_size=50)
+matcher.register("contract_v1", contract_text)
+hits = matcher.scan(outgoing_email)
+```
+
+### Entropy Analysis & Recursive Unpacking
+
+Shannon entropy analyzer detects encrypted/compressed payloads with format-specific thresholds. Recursive extractor unpacks nested ZIP/tar/gzip archives with zip bomb protection.
+
+```python
+from dlpscan import EntropyAnalyzer, RecursiveExtractor
+
+analyzer = EntropyAnalyzer()
+result = analyzer.analyze_file("suspicious.docx")
+if result.is_suspicious:
+    print(f"High entropy ({result.entropy:.2f}): {result.classification}")
+
+with RecursiveExtractor() as ext:
+    for item in ext.extract("nested_archive.zip"):
+        print(f"{item.original_name}: entropy={item.entropy:.2f}")
+```
+
+See [docs/advanced_techniques.md](docs/advanced_techniques.md) for full API reference and tuning guide.
+
 ### ReDoS Protection
 
 Regex matching uses a dual-layer timeout: `SIGALRM` on Unix main thread (hard interrupt, 5s per pattern) and a `threading.Timer` fallback on all other platforms and threads (checked between pattern iterations). A global scan timeout of 120 seconds prevents unbounded total scan time. Both layers are always active — no platform or threading context is unguarded.
@@ -983,6 +1034,12 @@ dlpscan/
 ├── env_config.py                  # DLPSCAN_* environment variable configuration
 ├── siem.py                        # SIEM integration (Splunk, ES, Syslog, Datadog)
 ├── compliance.py                  # Compliance reporting (PCI-DSS, HIPAA, SOC2, GDPR)
+├── countmin.py                    # Count-Min Sketch (probabilistic frequency estimation)
+├── hyperloglog.py                 # HyperLogLog (probabilistic cardinality estimation)
+├── cuckoo.py                      # Cuckoo Filter (probabilistic set with deletion)
+├── session.py                     # Session Correlator (drip exfiltration detection)
+├── rabin_karp.py                  # Rabin-Karp rolling hash (partial document matching)
+├── entropy.py                     # Entropy analysis & recursive archive unpacking
 ├── guard/                         # Developer input guard subpackage
 │   ├── __init__.py                # Subpackage exports
 │   ├── core.py                    # InputGuard class, ScanResult, InputGuardError
@@ -1008,7 +1065,7 @@ dlpscan/
 ## Testing
 
 ```bash
-python -m unittest tests.unit -v          # Unit tests (477 tests)
+python -m unittest tests.unit -v          # Unit tests (540 tests)
 python -m unittest tests.test_integration  # Integration tests
 python tests/benchmarks.py                 # Performance benchmarks
 

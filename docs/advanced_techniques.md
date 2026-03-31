@@ -1,7 +1,6 @@
 # Advanced DLP Techniques
 
-Technical reference for dlpscan's advanced detection modules: Aho-Corasick
-context matching, Exact Data Match (EDM), and Locality-Sensitive Hashing (LSH).
+Technical reference for dlpscan's advanced detection modules.
 
 **Version:** 1.7.0
 
@@ -12,8 +11,14 @@ context matching, Exact Data Match (EDM), and Locality-Sensitive Hashing (LSH).
 1. [Aho-Corasick Context Matching](#aho-corasick-context-matching)
 2. [Exact Data Match (EDM)](#exact-data-match-edm)
 3. [Locality-Sensitive Hashing (LSH)](#locality-sensitive-hashing-lsh)
-4. [Benchmark Results](#benchmark-results)
-5. [Architecture Overview](#architecture-overview)
+4. [Count-Min Sketch](#count-min-sketch)
+5. [HyperLogLog](#hyperloglog)
+6. [Cuckoo Filter](#cuckoo-filter)
+7. [Session Correlator](#session-correlator)
+8. [Rabin-Karp Rolling Hash](#rabin-karp-rolling-hash)
+9. [Entropy Analysis & Recursive Unpacking](#entropy-analysis--recursive-unpacking)
+10. [Benchmark Results](#benchmark-results)
+11. [Architecture Overview](#architecture-overview)
 
 ---
 
@@ -461,6 +466,393 @@ class SimilarityMatch:
 
 ---
 
+## Count-Min Sketch
+
+### What It Does
+
+Probabilistic frequency estimation using constant memory. Answers "how many
+times has X been seen?" without storing individual items.
+
+### DLP Use Case
+
+Threshold-based alerting: "flag any channel where >50 SSNs have passed in
+the last hour." Uses ~280 KB regardless of traffic volume.
+
+### How It Works
+
+A `width × depth` grid of counters with `depth` independent hash functions.
+Each `increment(key)` increments one counter per row. `estimate(key)` returns
+the minimum across all rows — guaranteed ≥ true count (never undercounts) but
+may overcount due to hash collisions.
+
+### Usage
+
+```python
+from dlpscan import CountMinSketch
+
+cms = CountMinSketch(width=10000, depth=7)
+cms.increment("user:123:ssn")
+cms.increment("user:123:ssn")
+print(cms.estimate("user:123:ssn"))  # 2
+
+# Merge distributed sketches
+other = CountMinSketch(width=10000, depth=7)
+other.increment("user:123:ssn", 5)
+cms.merge(other)
+print(cms.estimate("user:123:ssn"))  # 7
+```
+
+### Parameters
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `width` | 10,000 | More = less overcount |
+| `depth` | 7 | More = higher confidence |
+
+**Memory:** `width × depth × 4` bytes (32-bit counters). Default: ~280 KB.
+
+### API Reference
+
+```python
+class CountMinSketch:
+    def __init__(width=10000, depth=7)
+    def increment(key: str, count=1) -> None
+    def estimate(key: str) -> int
+    def merge(other: CountMinSketch) -> None
+    def clear() -> None
+    @property total -> int
+    @property width -> int
+    @property depth -> int
+```
+
+---
+
+## HyperLogLog
+
+### What It Does
+
+Estimates the number of *unique* items in a stream using ~1.5 KB of memory,
+regardless of volume (even billions of items).
+
+### DLP Use Case
+
+Detect mass exfiltration: "if 10,000 unique confidential file hashes pass
+through the firewall in an hour, trigger lockdown." All using <2 KB.
+
+### How It Works
+
+Hashes each item to a 64-bit value. Uses the first `p` bits as a register
+index, counts leading zeros in the remaining bits, and stores the maximum
+per register. The harmonic mean across all registers estimates cardinality.
+
+### Usage
+
+```python
+from dlpscan import HyperLogLog
+
+hll = HyperLogLog(precision=14)
+for record in stream:
+    hll.add(record)
+print(f"~{hll.count()} unique records")
+
+# Merge distributed estimators
+other = HyperLogLog(precision=14)
+hll.merge(other)
+```
+
+### Parameters
+
+| Precision | Registers | Memory | Standard Error |
+|-----------|-----------|--------|----------------|
+| 10 | 1,024 | 1 KB | ±3.25% |
+| 12 | 4,096 | 4 KB | ±1.63% |
+| 14 | 16,384 | 16 KB | ±0.81% |
+| 16 | 65,536 | 64 KB | ±0.41% |
+
+### API Reference
+
+```python
+class HyperLogLog:
+    def __init__(precision=14)
+    def add(value: str) -> None
+    def count() -> int
+    def merge(other: HyperLogLog) -> None
+    def clear() -> None
+    @property precision -> int
+    @property memory_bytes -> int
+    @property standard_error -> float
+```
+
+---
+
+## Cuckoo Filter
+
+### What It Does
+
+Space-efficient probabilistic set with deletion support. Like a Bloom filter,
+but you can remove items.
+
+### DLP Use Case
+
+Memory-efficient alternative to Python `set()` for EDM hash lookups. 100K
+items in ~150 KB vs ~6.4 MB for a Python set of 64-char hex strings. Supports
+dynamic add/remove without rebuilding.
+
+### How It Works
+
+Stores tiny fingerprints in buckets using cuckoo hashing. Each item maps to
+two candidate buckets. If both are full, an existing fingerprint is evicted
+to its alternate bucket (cuckoo displacement), up to `max_kicks` attempts.
+
+### Usage
+
+```python
+from dlpscan import CuckooFilter
+
+cf = CuckooFilter(capacity=100000, fingerprint_bits=16)
+cf.insert("secret-value-hash")
+cf.contains("secret-value-hash")  # True
+cf.delete("secret-value-hash")    # True
+cf.contains("secret-value-hash")  # False
+```
+
+### False Positive Rates
+
+| fingerprint_bits | bucket_size=4 FP Rate |
+|------------------|----------------------|
+| 8 | ~3.1% |
+| 12 | ~0.19% |
+| 16 | ~0.012% |
+| 32 | ~0.00000006% |
+
+### API Reference
+
+```python
+class CuckooFilter:
+    def __init__(capacity=100000, bucket_size=4, fingerprint_bits=16, max_kicks=500)
+    def insert(item: str) -> bool
+    def contains(item: str) -> bool
+    def delete(item: str) -> bool
+    def clear() -> None
+    @property count -> int
+    @property capacity -> int
+    @property load_factor -> float
+    @property memory_bytes -> int
+```
+
+---
+
+## Session Correlator
+
+### What It Does
+
+Tracks cumulative data exposure across scans, users, and time windows.
+Catches insiders who leak small amounts of data over long periods.
+
+### DLP Use Case
+
+"An employee can email up to 5 customer IDs per day, but flag anyone sending
+more than 50 in aggregate." Pattern matching catches each individual ID;
+session correlation catches the pattern of abuse.
+
+### How It Works
+
+Combines Count-Min Sketch (frequency estimation) and HyperLogLog (cardinality
+estimation) to track per-user, per-category exposure over sliding time windows.
+Policies define thresholds; alerts fire when exceeded.
+
+### Usage
+
+```python
+from dlpscan import SessionCorrelator
+
+correlator = SessionCorrelator(window_seconds=3600)
+correlator.set_policy("Credit Card Numbers", max_total=50, max_unique=20)
+
+# After each scan:
+alerts = correlator.record_scan(scan_result, user_id="user@company.com")
+for alert in alerts:
+    print(f"ALERT: {alert.alert_type} — {alert.user_id} "
+          f"({alert.count}/{alert.limit} {alert.category})")
+
+# User-specific stats
+stats = correlator.get_user_stats("user@company.com")
+print(f"Total matches: {stats.total_matches}")
+```
+
+### Parameters
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `window_seconds` | 3600 | Monitoring window duration |
+| `cms_width` | 50,000 | CMS accuracy |
+| `cms_depth` | 7 | CMS confidence |
+| `hll_precision` | 12 | HLL accuracy |
+
+### API Reference
+
+```python
+class SessionCorrelator:
+    def __init__(window_seconds=3600, cms_width=50000, cms_depth=7, hll_precision=12)
+    def set_policy(category, max_total=0, max_unique=0, user_pattern="*", action="alert")
+    def record_scan(scan_result, user_id, source=None) -> List[CorrelationAlert]
+    def record_matches(matches, user_id) -> List[CorrelationAlert]
+    def get_user_stats(user_id) -> Optional[SessionStats]
+    def estimate_total(user_id, category) -> int
+    def estimate_unique(user_id) -> int
+    def reset() -> None
+    @property window_seconds -> int
+    @property window_remaining -> float
+    @property total_alerts -> int
+    @property active_users -> int
+    @property policies -> List[Policy]
+```
+
+---
+
+## Rabin-Karp Rolling Hash
+
+### What It Does
+
+Detects when fragments of sensitive documents appear in outgoing text. Unlike
+LSH (whole-document similarity), Rabin-Karp catches someone copying specific
+paragraphs from a classified document.
+
+### DLP Use Case
+
+An employee copies 3 crucial paragraphs from a 100-page confidential contract
+into an email. Pattern matching won't catch it (no SSNs). LSH might miss it
+(only 3% of the document). Rolling hash catches the exact fragment match.
+
+### How It Works
+
+1. **Registration**: For each sensitive document, compute a Rabin-Karp rolling
+   hash for every sliding window position. Store `hash → (doc_id, position, text)`
+   in an index.
+
+2. **Scanning**: Compute the same rolling hash over incoming text. For each
+   hash match, verify the text slice to eliminate hash collisions.
+
+### Usage
+
+```python
+from dlpscan import PartialDocumentMatcher
+
+matcher = PartialDocumentMatcher(window_size=50)
+matcher.register("contract_v1", contract_text)
+matcher.register("source_auth", auth_module_code)
+
+hits = matcher.scan("Email with copied contract text...")
+for hit in hits:
+    print(f"Fragment from {hit.doc_id} at position {hit.doc_position}")
+
+# Quick check
+if matcher.contains_fragment(outgoing_email):
+    block_and_alert()
+```
+
+### Parameters
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `window_size` | 50 | Chars per window. Smaller = catches shorter fragments but more FPs |
+| `normalize` | True | Lowercase + collapse whitespace before hashing |
+
+**Memory:** ~40 bytes per window position per registered document. A 10,000-char
+document with window_size=50 produces ~10,000 hashes ≈ 400 KB.
+
+### API Reference
+
+```python
+class PartialDocumentMatcher:
+    def __init__(window_size=50, normalize=True)
+    def register(doc_id: str, text: str) -> int
+    def unregister(doc_id: str) -> bool
+    def scan(text: str, min_consecutive=1) -> List[FragmentMatch]
+    def contains_fragment(text: str) -> bool
+    def clear() -> None
+    @property document_count -> int
+    @property fingerprint_count -> int
+    @property window_size -> int
+```
+
+---
+
+## Entropy Analysis & Recursive Unpacking
+
+### What It Does
+
+Detects encrypted, compressed, or obfuscated payloads by computing Shannon
+entropy. Recursively extracts nested archives (ZIP, tar, gzip) before scanning.
+
+### DLP Use Case
+
+An attacker compresses sensitive data into a nested ZIP, renames it .docx,
+and emails it. Entropy analysis detects that the file has suspiciously high
+randomness for a document file. Recursive unpacking cracks open the archive
+layers and scans the contents.
+
+### How It Works
+
+**Entropy Analysis:**
+- Computes Shannon entropy (0.0-8.0 bits/byte) of file content
+- Format-specific thresholds: a .txt file at 7.5 entropy is suspicious;
+  a .zip file at 7.5 is normal
+- Classifications: normal, moderately_random, compressed_or_encrypted,
+  likely_encrypted, suspicious_for_format
+
+**Recursive Unpacking:**
+- Detects ZIP, tar, gzip formats
+- Extracts each layer, analyzes entropy at each depth
+- Zip bomb protection: checks claimed size before extracting
+- Configurable max depth (default 5) and max total size (default 500 MB)
+
+### Usage
+
+```python
+from dlpscan import EntropyAnalyzer, RecursiveExtractor
+
+# Analyze a file's entropy
+analyzer = EntropyAnalyzer()
+result = analyzer.analyze_file("suspicious.docx")
+if result.is_suspicious:
+    print(f"High entropy ({result.entropy:.2f}): {result.classification}")
+
+# Recursively extract and scan nested archives
+with RecursiveExtractor() as extractor:
+    for item in extractor.extract("nested_archive.zip"):
+        print(f"{item.original_name} (depth {item.depth}): "
+              f"entropy={item.entropy:.2f} {item.classification}")
+```
+
+### Expected Entropy by Format
+
+| Format | Normal Range | Suspicious Above |
+|--------|-------------|------------------|
+| .txt, .csv, .log | 3.0 – 5.5 | 6.0 |
+| .json, .xml, .html | 3.5 – 5.5 | 6.0 |
+| .pdf | 5.0 – 7.8 | 8.0+ |
+| .docx, .xlsx, .zip | 7.0 – 8.0 | N/A (naturally high) |
+| .gz | 7.5 – 8.0 | N/A |
+
+### API Reference
+
+```python
+class EntropyAnalyzer:
+    def __init__(threshold=7.5, sample_size=8192)
+    @staticmethod shannon_entropy(data: bytes) -> float
+    def analyze_bytes(data, format_hint=None) -> EntropyResult
+    def analyze_file(path: str) -> EntropyResult
+
+class RecursiveExtractor:
+    def __init__(max_depth=5, max_total_size=500*1024*1024, entropy_threshold=7.5)
+    def extract(path: str) -> List[ExtractedItem]
+    def cleanup() -> None
+    # Context manager support (__enter__/__exit__)
+```
+
+---
+
 ## Benchmark Results
 
 Benchmarks comparing the Regex and Aho-Corasick context matching backends.
@@ -584,20 +976,37 @@ python tests/benchmarks.py
 │                                                                      │
 │  ┌─────────────────────┐  ┌─────────────────────┐                   │
 │  │ EDM (edm.py)         │  │ LSH (lsh.py)         │                  │
-│  │                      │  │                      │                  │
 │  │ Salted HMAC-SHA256   │  │ MinHash signatures   │                  │
 │  │ Known-value matching │  │ Document similarity   │                  │
 │  │ Zero false positives │  │ LSH band indexing     │                  │
-│  │ Tokenizer pipeline   │  │ Jaccard estimation    │                  │
+│  └──────────────────────┘  └──────────────────────┘                  │
+│                                                                      │
+│  ┌─────────────────────┐  ┌─────────────────────┐                   │
+│  │ Rabin-Karp           │  │ Entropy Analyzer     │                  │
+│  │ (rabin_karp.py)      │  │ (entropy.py)         │                  │
+│  │ Rolling hash partial │  │ Shannon entropy +    │                  │
+│  │ document matching    │  │ recursive unpacking  │                  │
+│  └──────────────────────┘  └──────────────────────┘                  │
+│                                                                      │
+│  ┌─────────────────────┐  ┌─────────────────────┐                   │
+│  │ Session Correlator   │  │ Probabilistic DS     │                  │
+│  │ (session.py)         │  │                      │                  │
+│  │ Drip exfiltration    │  │ CountMinSketch       │                  │
+│  │ CMS + HLL + policy   │  │ HyperLogLog          │                  │
+│  │ Per-user tracking    │  │ CuckooFilter          │                  │
 │  └──────────────────────┘  └──────────────────────┘                  │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-**EDM and LSH are independent modules** — they don't replace or modify the
-core pattern matching pipeline. They provide complementary detection capabilities:
+**Independent modules** — these don't replace or modify the core pattern
+matching pipeline. They provide complementary detection capabilities:
 
 - **Pattern matching**: "Find anything that looks like a credit card"
 - **EDM**: "Find these exact 50,000 known credit card numbers"
 - **LSH**: "Find documents similar to this confidential contract"
+- **Rabin-Karp**: "Detect copied paragraphs from sensitive documents"
+- **Entropy**: "Flag files with suspicious randomness levels"
+- **Session Correlator**: "Catch slow drip exfiltration over time"
+- **CMS / HLL / Cuckoo**: Building blocks for the above + custom use
 
 Use them together for defense in depth.

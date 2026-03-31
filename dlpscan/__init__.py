@@ -24,7 +24,10 @@ from .cache import ScanCache, get_default_cache, set_default_cache
 from .compliance import ComplianceReport, ComplianceReporter
 from .config import load_config
 from .context import CONTEXT_KEYWORDS
+from .countmin import CountMinSketch
+from .cuckoo import CuckooFilter
 from .edm import EDMMatch, ExactDataMatcher
+from .entropy import EntropyAnalyzer, EntropyResult, ExtractedItem, RecursiveExtractor
 from .env_config import apply_env_to_guard_kwargs, configure_from_env
 from .exceptions import (
     EmptyInputError,
@@ -60,6 +63,7 @@ from .guard import (
     set_obfuscation_seed,
     tokenize_matches,
 )
+from .hyperloglog import HyperLogLog
 from .logging_config import configure_logging
 from .lsh import DocumentVault, SimilarityMatch
 from .metrics import MetricsCollector, ScanMetrics, set_metrics_callback
@@ -90,6 +94,7 @@ from .plugins import (
     unregister_post_processors,
     unregister_validators,
 )
+from .rabin_karp import FragmentMatch, PartialDocumentMatcher
 from .rate_limit import RateLimiter, RateLimitExceeded, rate_limited
 from .rulesets import (
     CategoryOverride,
@@ -119,6 +124,7 @@ from .scanner import (
     set_context_backend,
     unregister_patterns,
 )
+from .session import CorrelationAlert, Policy, SessionCorrelator, SessionStats
 from .siem import (
     DatadogAdapter,
     ElasticsearchAdapter,
