@@ -32,7 +32,14 @@ from .models import Match
 
 
 class Allowlist:
-    """Filter for suppressing known matches and paths."""
+    """Filter for suppressing known matches and paths.
+
+    Supports three text matching modes:
+    - **Exact match**: ``'4111111111111111'`` — suppresses only that exact string.
+    - **Wildcard/glob**: ``'4111*'`` — suppresses any text starting with ``4111``.
+      Uses ``fnmatch`` glob syntax (``*``, ``?``, ``[seq]``, ``[!seq]``).
+    - **Sub-category name**: Skips all matches of a given sub_category entirely.
+    """
 
     def __init__(
         self,
@@ -43,13 +50,27 @@ class Allowlist:
         """Initialize the allowlist.
 
         Args:
-            texts: Exact matched text values to ignore.
+            texts: Text values to ignore. Supports exact match and glob/wildcard
+                patterns (e.g., ``'4111*'``, ``'test?@*.com'``).
             patterns: Sub-category names to skip entirely.
             paths: File path glob patterns to skip in directory scanning.
         """
-        self.texts: Set[str] = set(texts) if texts else set()
+        # Separate exact-match texts from glob patterns for fast lookup.
+        self._exact_texts: Set[str] = set()
+        self._glob_texts: List[str] = []
+        for t in (texts or []):
+            if any(c in t for c in '*?['):
+                self._glob_texts.append(t)
+            else:
+                self._exact_texts.add(t)
+
         self.patterns: Set[str] = set(patterns) if patterns else set()
         self.paths: List[str] = list(paths) if paths else []
+
+    @property
+    def texts(self) -> Set[str]:
+        """All allowlisted text entries (exact + glob combined)."""
+        return self._exact_texts | set(self._glob_texts)
 
     @classmethod
     def from_config(cls, config: dict) -> 'Allowlist':
@@ -65,8 +86,13 @@ class Allowlist:
 
         Returns True if the match should be KEPT (not suppressed).
         """
-        if match.text in self.texts:
+        # Exact match (fast set lookup).
+        if match.text in self._exact_texts:
             return False
+        # Glob/wildcard match.
+        for glob_pattern in self._glob_texts:
+            if fnmatch.fnmatch(match.text, glob_pattern):
+                return False
         if match.sub_category in self.patterns:
             return False
         return True
@@ -91,7 +117,7 @@ class Allowlist:
 
     def __bool__(self) -> bool:
         """True if any rules are configured."""
-        return bool(self.texts or self.patterns or self.paths)
+        return bool(self._exact_texts or self._glob_texts or self.patterns or self.paths)
 
 
 def has_inline_ignore(line: str) -> bool:

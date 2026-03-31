@@ -121,7 +121,16 @@ def extract_text(file_path: str, max_size: int = MAX_EXTRACT_SIZE) -> Extraction
     if extractor is not None:
         return extractor(file_path)
 
-    # Fallback: treat as plain text.
+    # Fallback: detect format by file content (magic bytes).
+    detected_ext = _detect_format_by_content(file_path)
+    if detected_ext:
+        content_extractor = _EXTRACTORS.get(detected_ext)
+        if content_extractor is not None:
+            logger.info("Extension mismatch — detected %s format by content for %s",
+                        detected_ext, file_path)
+            return content_extractor(file_path)
+
+    # Final fallback: treat as plain text.
     return _extract_plain_text(file_path)
 
 
@@ -495,6 +504,167 @@ def _extract_image_ocr(file_path: str) -> ExtractionResult:
     )
 
 
+def _extract_rtf(file_path: str) -> ExtractionResult:
+    """Extract text from an RTF file by stripping RTF control sequences.
+
+    Uses a lightweight parser that handles standard RTF control words,
+    groups, and Unicode escapes. No external dependencies required.
+    """
+    try:
+        with open(file_path, 'rb') as f:
+            raw = f.read()
+    except OSError as exc:
+        raise ExtractionError(f"Failed to read RTF file: {exc}")
+
+    # Decode RTF — try ASCII first (RTF standard), then latin-1 as fallback.
+    try:
+        rtf_text = raw.decode('ascii', errors='replace')
+    except Exception:
+        rtf_text = raw.decode('latin-1', errors='replace')
+
+    if not rtf_text.startswith('{\\rtf'):
+        raise ExtractionError("File does not appear to be a valid RTF document.")
+
+    # Simple RTF text extraction — strip control words and groups.
+    import re as _re
+    # Remove RTF header/font/color tables (groups starting with {\fonttbl, {\colortbl, etc.)
+    # These are nested groups that don't contain document text.
+    result_chars: list[str] = []
+    i = 0
+    depth = 0
+    skip_depth = 0  # Track depth of groups to skip
+
+    while i < len(rtf_text):
+        ch = rtf_text[i]
+
+        if ch == '{':
+            depth += 1
+            # Check if this group is a header table we should skip.
+            rest = rtf_text[i + 1:i + 30]
+            if _re.match(r'\\(fonttbl|colortbl|stylesheet|info|pict|header|footer)\b', rest):
+                skip_depth = depth
+            i += 1
+            continue
+
+        if ch == '}':
+            if depth == skip_depth:
+                skip_depth = 0
+            depth -= 1
+            i += 1
+            continue
+
+        if skip_depth > 0 and depth >= skip_depth:
+            i += 1
+            continue
+
+        if ch == '\\':
+            # Control word or symbol.
+            if i + 1 < len(rtf_text):
+                next_ch = rtf_text[i + 1]
+                # Unicode escape: \uN followed by replacement char
+                if next_ch == 'u' and i + 2 < len(rtf_text) and (rtf_text[i + 2].isdigit() or rtf_text[i + 2] == '-'):
+                    m = _re.match(r'\\u(-?\d+)', rtf_text[i:])
+                    if m:
+                        code = int(m.group(1))
+                        if code < 0:
+                            code += 65536
+                        try:
+                            result_chars.append(chr(code))
+                        except (ValueError, OverflowError):
+                            pass
+                        i += len(m.group(0))
+                        # Skip replacement character (usually a single char or \'XX)
+                        if i < len(rtf_text) and rtf_text[i] == ' ':
+                            i += 1
+                        continue
+                # Named control words
+                if next_ch.isalpha():
+                    m = _re.match(r'\\([a-z]+)-?\d*\s?', rtf_text[i:])
+                    if m:
+                        word = m.group(1)
+                        if word == 'par' or word == 'line':
+                            result_chars.append('\n')
+                        elif word == 'tab':
+                            result_chars.append('\t')
+                        i += len(m.group(0))
+                        continue
+                # Escaped special chars: \\ \{ \}
+                if next_ch in '\\{}':
+                    result_chars.append(next_ch)
+                    i += 2
+                    continue
+                # Hex escape: \'XX
+                if next_ch == "'":
+                    hex_str = rtf_text[i + 2:i + 4]
+                    if len(hex_str) == 2:
+                        try:
+                            result_chars.append(chr(int(hex_str, 16)))
+                        except (ValueError, OverflowError):
+                            pass
+                    i += 4
+                    continue
+            i += 1
+            continue
+
+        # Plain text character.
+        if ch not in ('\r', '\n'):
+            result_chars.append(ch)
+        i += 1
+
+    text = ''.join(result_chars).strip()
+    # Collapse multiple blank lines.
+    text = _re.sub(r'\n{3,}', '\n\n', text)
+
+    return ExtractionResult(
+        text=text,
+        format='rtf',
+        metadata={'size': len(raw)},
+    )
+
+
+def _detect_format_by_content(file_path: str) -> Optional[str]:
+    """Detect file format by reading magic bytes (content-type detection).
+
+    Returns a file extension (e.g., '.pdf', '.rtf') if a known format is
+    detected, or None if the format is unrecognized. This is used as a
+    fallback when file extension is missing or misleading.
+    """
+    _MAGIC_SIGNATURES = {
+        b'%PDF': '.pdf',
+        b'{\\rtf': '.rtf',
+        b'PK\x03\x04': None,  # ZIP-based — could be docx/xlsx/pptx
+        b'\xd0\xcf\x11\xe0': None,  # OLE2 — could be doc/xls/ppt/msg
+    }
+    # ZIP sub-detection for Office formats.
+    _ZIP_CONTENT_TYPES = {
+        b'word/': '.docx',
+        b'xl/': '.xlsx',
+        b'ppt/': '.pptx',
+    }
+
+    try:
+        with open(file_path, 'rb') as f:
+            header = f.read(512)
+    except OSError:
+        return None
+
+    if not header:
+        return None
+
+    for sig, ext in _MAGIC_SIGNATURES.items():
+        if header.startswith(sig):
+            if ext is not None:
+                return ext
+            # ZIP-based: peek inside for Office format markers.
+            if sig == b'PK\x03\x04':
+                for marker, office_ext in _ZIP_CONTENT_TYPES.items():
+                    if marker in header:
+                        return office_ext
+            return None
+
+    return None
+
+
 def _extract_legacy_office(file_path: str) -> ExtractionResult:
     """Placeholder for legacy Office formats (.doc, .xls, .ppt).
 
@@ -518,6 +688,7 @@ _EXTRACTORS['.xlsx'] = _extract_xlsx
 _EXTRACTORS['.pptx'] = _extract_pptx
 _EXTRACTORS['.eml'] = _extract_eml
 _EXTRACTORS['.msg'] = _extract_msg
+_EXTRACTORS['.rtf'] = _extract_rtf
 _EXTRACTORS['.doc'] = _extract_legacy_office
 _EXTRACTORS['.xls'] = _extract_legacy_office
 _EXTRACTORS['.ppt'] = _extract_legacy_office

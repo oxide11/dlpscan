@@ -25,9 +25,9 @@ pattern detection, with current defense status and mitigations.
 | **How it works** | Replace ASCII digits/letters with visually identical characters from Cyrillic, Greek, fullwidth, subscript/superscript, or mathematical Unicode blocks. |
 | **Example** | `\uff14\uff15\uff13\uff12...` (fullwidth Visa), `us\u0435r@t\u0435st.com` (Cyrillic е in email). |
 | **Patterns bypassed** | All patterns — regex character classes like `\d` and `[A-Z]` only match ASCII. |
-| **Defense status** | **Defended.** `unicode_normalize.normalize_homoglyphs()` applies NFKC normalization + explicit mapping for 80+ Cyrillic, Greek, fullwidth, and symbol confusables. |
-| **Residual risk** | Armenian, Georgian, Cherokee, and mathematical alphanumeric symbols not fully mapped. Unicode Consortium confusables.txt has 6,000+ entries vs our ~80. |
-| **Mitigation** | Integrate full Unicode confusables database. Apply iterative normalization until text is stable. |
+| **Defense status** | **Defended.** `unicode_normalize.normalize_homoglyphs()` applies NFKC normalization + explicit mapping for 200+ Cyrillic, Greek, Armenian, Cherokee, fullwidth, small capitals, and symbol confusables. |
+| **Residual risk** | Georgian and mathematical alphanumeric symbols not fully mapped. Unicode Consortium confusables.txt has 6,000+ entries vs our 200+. |
+| **Mitigation** | Integrate full Unicode confusables database for comprehensive coverage. |
 
 ### 1.3 Bidirectional / RTL Text Manipulation
 
@@ -117,8 +117,8 @@ pattern detection, with current defense status and mitigations.
 | **How it works** | Provide intentionally degraded images (blur, noise, low contrast) so OCR produces text at just above the `MIN_OCR_CONFIDENCE = 30` threshold, introducing errors that break pattern matching. |
 | **Example** | Scanned credit card image with strategic blur — OCR reads `4111111111111l11` (lowercase L instead of 1). |
 | **Patterns bypassed** | All patterns in image-based scanning. |
-| **Defense status** | **Weak.** Threshold is global and low (30%). No per-pattern confidence requirements. |
-| **Mitigation** | Raise `MIN_OCR_CONFIDENCE` to 60+. Add per-pattern OCR confidence requirements. Apply fuzzy digit matching post-OCR. |
+| **Defense status** | **Partial.** Threshold raised to 60% (from 30%). No per-pattern confidence requirements yet. |
+| **Mitigation** | Add per-pattern OCR confidence requirements. Apply fuzzy digit matching post-OCR. |
 
 ---
 
@@ -141,8 +141,9 @@ pattern detection, with current defense status and mitigations.
 | **How it works** | Use synonyms, misspellings, abbreviations, or non-English translations not in the hardcoded keyword lists. |
 | **Example** | `CC#: 4111111111111111` (not in keywords), `número de tarjeta: ...` (Spanish), `Kreditkartennummer: ...` (German). |
 | **Patterns bypassed** | All context-dependent patterns. |
-| **Defense status** | **Weak.** Keyword lists are static and primarily English. No fuzzy matching or synonym expansion. |
-| **Mitigation** | Expand keyword lists with abbreviations, typos, and translations. Add fuzzy matching (edit distance ≤ 2). Consider embedding-based semantic matching. |
+| **Defense status** | **Defended.** `scan_for_context()` uses two-pass matching: exact regex (fast path) + Levenshtein fuzzy matching (edit distance ≤ 2) for keywords ≥ 5 characters. Multi-word keywords are matched using n-grams. |
+| **Residual risk** | Non-English synonyms and translations not covered. Keywords under 5 characters are exact-match only to avoid false positives. |
+| **Mitigation** | Add multilingual keyword translations. Consider embedding-based semantic matching. |
 
 ### 4.3 Context Dilution via Homoglyphs
 
@@ -166,8 +167,8 @@ pattern detection, with current defense status and mitigations.
 | **How it works** | Embed sensitive data in file formats without registered extractors. The file is silently skipped or treated as binary. |
 | **Example** | Hide SSN in `.pages` (Apple), `.odt` (OpenDocument), `.rtf` (Rich Text), or custom archive format. |
 | **Patterns bypassed** | All patterns — file content is never extracted for scanning. |
-| **Defense status** | **Weak.** Only common formats have extractors (.txt, .pdf, .docx, .xlsx, .csv, .json, .xml, .html). Fallback to plaintext exists but fails on binary formats. |
-| **Mitigation** | Add more extractors (RTF, ODS, Pages). Use `python-magic` for content-type detection vs extension-only. Log warnings for unextractable files. |
+| **Defense status** | **Partial.** Common formats have extractors (.txt, .pdf, .docx, .xlsx, .pptx, .csv, .json, .xml, .html, .rtf, .eml, .msg, images via OCR). Magic-byte content-type detection provides fallback when file extension is missing or misleading. |
+| **Mitigation** | Add ODS and Pages extractors. Log warnings for unextractable files. |
 
 ### 5.2 Format-Specific Encoding Escape
 
@@ -209,8 +210,8 @@ pattern detection, with current defense status and mitigations.
 | **How it works** | Modify allowlisted test values by 1 character to bypass exact-match allowlist filtering while preserving the sensitive data format. |
 | **Example** | If `4111111111111111` is allowlisted, use `4111111111111112` (still valid Visa). |
 | **Patterns bypassed** | Any pattern whose specific values are allowlisted. |
-| **Defense status** | **Weak.** Allowlist uses exact string matching only. |
-| **Mitigation** | Add pattern-based allowlisting (`4111*`). Support category-level allowlisting. Consider fuzzy matching for near-misses. |
+| **Defense status** | **Defended.** Allowlist supports exact matching, glob/wildcard patterns (`4111*`, `test?@*.com`, `[seq]`), and sub-category filtering. |
+| **Mitigation** | Consider category-level allowlisting for broader suppression. |
 
 ### 6.2 Directory/Path Exclusion Abuse
 
@@ -273,19 +274,19 @@ pattern detection, with current defense status and mitigations.
 | Technique | Status | Severity |
 |-----------|--------|----------|
 | Zero-width char insertion | **Defended** (incl. variation selectors, Unicode Tags) | High |
-| Homoglyph substitution | **Defended** (partial map) | High |
+| Homoglyph substitution | **Defended** (200+ mappings) | High |
 | RTL/Bidi manipulation | **Defended** | High |
 | Delimiter variation | **Defended** | Medium |
 | Word boundary bypass | **Defended** | High |
 | ReDoS | **Defended** (SIGALRM + threading.Timer fallback) | Medium |
 | Chunk boundary splitting | Partial | Medium |
-| OCR confidence manipulation | Weak | Medium |
-| Unsupported file format | Weak | Medium |
+| OCR confidence manipulation | Partial (threshold raised to 60) | Medium |
+| Unsupported file format | Partial (RTF added, content-type detection) | Medium |
 | Context distance overflow | Partial | Medium |
-| Context keyword evasion | Weak | High |
+| Context keyword evasion | **Defended** (fuzzy Levenshtein ≤ 2) | High |
 | Max matches truncation | Partial (completeness indicator exposed) | High |
 | Timeout bypass (non-Unix) | **Defended** (threading.Timer fallback) | Medium |
-| Allowlist value mutation | Weak | Medium |
+| Allowlist value mutation | **Defended** (wildcard/glob matching) | Medium |
 | Path exclusion abuse | Weak | High |
 | Polymorphic encoding | **Defended** | High |
 | Steganographic hiding | Partial (Unicode Tags stripped) | Medium |
@@ -303,10 +304,16 @@ pattern detection, with current defense status and mitigations.
 - ~~**Variation selector stripping**~~ — ✅ `U+FE00`–`U+FE0F` added to strip set
 - ~~**Unicode Tags stripping**~~ — ✅ `U+E0001`–`U+E007F` added to strip set
 
+- ~~**Expand homoglyph coverage**~~ — ✅ 200+ mappings: added Armenian, Cherokee, small capitals, circled/dingbat digits, fullwidth symbols
+- ~~**Enhance context keywords**~~ — ✅ Fuzzy Levenshtein matching (edit distance ≤ 2) with n-gram support for multi-word keywords
+- ~~**File format coverage**~~ — ✅ RTF extractor added, magic-byte content-type detection fallback for misnamed files
+- ~~**OCR confidence hardening**~~ — ✅ `MIN_OCR_CONFIDENCE` raised from 30 to 60
+- ~~**Allowlist pattern matching**~~ — ✅ Wildcard/glob support (`*`, `?`, `[seq]`) in allowlist text entries
+
 ### Remaining
 
-1. **Expand homoglyph coverage** — integrate Unicode confusables.txt (6,000+ mappings)
-2. **Enhance context keywords** — add multilingual synonyms, fuzzy matching (Levenshtein ≤ 2)
-3. **File format coverage** — add RTF, ODS, Pages extractors; use `python-magic` for detection
-4. **OCR confidence hardening** — raise `MIN_OCR_CONFIDENCE`, add per-pattern OCR thresholds
-5. **Allowlist pattern matching** — support wildcard/prefix allowlist entries alongside exact match
+1. **Full Unicode confusables.txt** — integrate the complete 6,000+ entry database from Unicode Consortium
+2. **Multilingual context keywords** — add translations and synonyms in non-English languages
+3. **Per-pattern OCR confidence** — different patterns may need different OCR thresholds
+4. **ODS/Pages extractors** — add extractors for OpenDocument Spreadsheet and Apple Pages formats
+5. **Path exclusion guardrails** — warn when skip patterns match sensitive locations (`.env`, `secrets/`)

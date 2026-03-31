@@ -350,6 +350,129 @@ three stages complete.
 
 ---
 
+## 11. Fuzzy Context Keyword Matching
+
+**Module:** `dlpscan/scanner.py` — `_fuzzy_keyword_match()`, `_levenshtein_distance()`
+
+**Attack:** Use typos, misspellings, or abbreviations of context keywords
+(e.g., `credti card` instead of `credit card`) to prevent keyword proximity
+matching, causing context-dependent patterns to lose confidence.
+
+**Defense:** Two-pass context matching in `scan_for_context()`:
+
+1. **Fast path** — Exact regex match against compiled keyword patterns (existing).
+2. **Slow path** — Levenshtein edit distance (≤ 2) fuzzy matching for keywords
+   ≥ 5 characters. Multi-word keywords use n-gram matching to compare word
+   sequences.
+
+**Configuration:**
+
+| Constant | Default | Description |
+|----------|---------|-------------|
+| `FUZZY_MAX_DISTANCE` | 2 | Maximum Levenshtein edit distance |
+| `FUZZY_MIN_KEYWORD_LENGTH` | 5 | Minimum keyword length for fuzzy matching |
+
+### Usage
+
+```python
+# Typo "credti" matches "credit" with edit distance 2
+text = "credti card 4532015112830366"
+results = list(enhanced_scan_text(text))
+# Credit card match has has_context=True despite the typo
+```
+
+---
+
+## 12. Expanded Homoglyph Coverage
+
+**Module:** `dlpscan/unicode_normalize.py` — `_HOMOGLYPH_MAP`
+
+**Attack:** Use less common confusable scripts (Armenian, Cherokee, small
+capitals) that weren't in the original 80-entry homoglyph map.
+
+**Defense:** Homoglyph map expanded to **200+ entries** covering:
+
+| Script | Characters Added | Examples |
+|--------|-----------------|----------|
+| Armenian | 13 letters | Օ→O, ո→n, ս→s, հ→h |
+| Cherokee | 23 letters | Ꭰ→D, Ꭲ→T, Ꮃ→W, Ꮇ→M, Ꮲ→P |
+| Small capitals | 26 letters | ᴀ→A, ʙ→B, ᴄ→C through ᴢ→Z |
+| Circled digits | 10 + 9 dingbat | ①→1, ❶→1, ⓪→0 |
+| Parenthesized digits | 9 | ⑴→1, ⑵→2 through ⑼→9 |
+| Fullwidth symbols | 20 | ：→:, ！→!, ＃→#, ＄→$, etc. |
+| Additional Cyrillic | 5 | Ј→J, Ґ→G, З→Z, Є→E, Щ→W |
+| Additional Greek | 2 | ϲ→c, ϒ→Y |
+| Latin variants | 2 | ı→i (Turkish), ȷ→j (dotless) |
+
+---
+
+## 13. RTF Extraction & Content-Type Detection
+
+**Module:** `dlpscan/extractors.py` — `_extract_rtf()`, `_detect_format_by_content()`
+
+**Attack:** Embed sensitive data in RTF files or rename files to hide their
+format from extension-based extractor selection.
+
+**Defense:**
+
+- **RTF extractor**: Built-in parser strips RTF control words, handles Unicode
+  escapes (`\uN`), hex escapes (`\'XX`), and nested groups. No external
+  dependencies.
+- **Content-type detection**: `_detect_format_by_content()` reads file magic
+  bytes to detect PDF, RTF, and ZIP-based Office formats (DOCX, XLSX, PPTX)
+  regardless of file extension. Used as fallback when no extractor matches the
+  extension.
+
+---
+
+## 14. OCR Confidence Hardening
+
+**Module:** `dlpscan/ocr.py` — `MIN_OCR_CONFIDENCE`
+
+**Attack:** Provide degraded images that produce OCR text just above the
+confidence threshold, introducing character errors that break pattern matching.
+
+**Defense:** `MIN_OCR_CONFIDENCE` raised from 30 to **60**. Text extracted with
+confidence below 60% is discarded, reducing false matches from adversarial or
+low-quality images.
+
+---
+
+## 15. Wildcard Allowlist Matching
+
+**Module:** `dlpscan/allowlist.py` — `Allowlist`
+
+**Attack:** Modify allowlisted test values by one character (e.g.,
+`4111111111111112` when `4111111111111111` is allowlisted) to bypass exact-match
+filtering.
+
+**Defense:** Allowlist text entries now support `fnmatch` glob syntax:
+
+| Pattern | Matches | Example |
+|---------|---------|---------|
+| `4111*` | Any text starting with `4111` | `4111111111111112` |
+| `test?@*.com` | Single char wildcard + domain glob | `test1@example.com` |
+| `[12]34*` | Character sets | `134...`, `234...` |
+
+Exact-match entries use fast set lookup. Glob patterns are applied via
+`fnmatch.fnmatch()` only when the fast path misses.
+
+### Usage
+
+```python
+from dlpscan import Allowlist
+
+al = Allowlist(
+    texts=['4111*', 'test@example.com'],  # Mix of glob and exact
+    patterns=['Gender Marker'],
+)
+
+# '4111*' suppresses any Visa starting with 4111
+al.is_allowed(match)  # False for text='4111222233334444'
+```
+
+---
+
 ## Defense Coverage Summary
 
 | Evasion Technique | Defense | Status |
@@ -359,17 +482,17 @@ three stages complete.
 | Variation selectors | VS1–VS16 in strip set | **Defended** |
 | Unicode Tags steganography | Tags block in strip set | **Defended** |
 | Delimiter variation | `normalize_whitespace()` | **Defended** |
-| Homoglyph substitution | `normalize_homoglyphs()` | **Defended** (80+ mappings) |
+| Homoglyph substitution | `normalize_homoglyphs()` | **Defended** (200+ mappings) |
 | Word boundary bypass | Post-normalization `\b` | **Defended** |
 | ReDoS / timeout bypass | SIGALRM + `_ThreadTimeout` | **Defended** |
 | Max matches truncation | `ScanResult.scan_truncated` | **Exposed** |
 | Polymorphic encoding chains | Sequential pipeline | **Defended** |
 | Transform output pollution | `_clean_match_text()` | **Defended** |
 | Context keyword homoglyphs | Normalized before context search | **Defended** |
-| OCR confidence manipulation | — | Weak |
-| Context keyword evasion | — | Weak |
-| Unsupported file formats | — | Weak |
-| Allowlist value mutation | — | Weak |
+| Context keyword evasion | Fuzzy Levenshtein matching | **Defended** |
+| OCR confidence manipulation | Threshold raised to 60% | **Partial** |
+| Unsupported file formats | RTF extractor + content-type detection | **Partial** |
+| Allowlist value mutation | Wildcard/glob matching | **Defended** |
 
 ---
 
@@ -377,21 +500,21 @@ three stages complete.
 
 These evasion vectors are identified but not yet fully defended:
 
-1. **Expand homoglyph coverage** — Current map has ~80 entries vs Unicode
-   Consortium's confusables.txt (6,000+). Armenian, Georgian, Cherokee, and
-   mathematical alphanumeric symbols are not mapped.
+1. **Full Unicode confusables.txt** — Current map has 200+ entries vs Unicode
+   Consortium's confusables.txt (6,000+). Georgian and mathematical alphanumeric
+   symbols are not mapped.
 
-2. **Context keyword evasion** — Keyword lists are static and primarily English.
-   No fuzzy matching or multilingual synonym expansion.
+2. **Multilingual context keywords** — Keyword lists are primarily English. No
+   translations or non-English synonyms.
 
-3. **File format coverage** — RTF, ODS, Pages, and other formats lack
-   extractors. Sensitive data in unsupported formats is silently skipped.
+3. **Per-pattern OCR confidence** — Global threshold may be too aggressive for
+   some patterns and too lenient for others.
 
-4. **OCR confidence hardening** — `MIN_OCR_CONFIDENCE = 30` is low. No
-   per-pattern OCR confidence thresholds.
+4. **ODS/Pages extractors** — OpenDocument Spreadsheet and Apple Pages formats
+   still lack extractors.
 
-5. **Allowlist pattern matching** — Allowlist uses exact string matching only.
-   No wildcard or prefix-based allowlisting.
+5. **Path exclusion guardrails** — Skip patterns are fully user-configurable
+   with no warnings for common sensitive locations.
 
 See the [Priority Remediation Roadmap](evasion_techniques.md#priority-remediation-roadmap)
 in evasion_techniques.md for the full backlog.

@@ -32,7 +32,7 @@ pip install dlpscan[email]        # Outlook MSG (extract-msg). EML uses stdlib.
 pip install dlpscan[all-formats]  # Everything
 ```
 
-Supported formats: `.pdf`, `.docx`, `.xlsx`, `.pptx`, `.eml`, `.msg`, plus all plain text formats (`.txt`, `.csv`, `.json`, `.xml`, `.py`, `.js`, etc.). Files up to 100 MB by default.
+Supported formats: `.pdf`, `.docx`, `.xlsx`, `.pptx`, `.rtf`, `.eml`, `.msg`, plus all plain text formats (`.txt`, `.csv`, `.json`, `.xml`, `.py`, `.js`, etc.). Files with mismatched extensions are detected by magic bytes (content-type detection). Files up to 100 MB by default.
 
 ## Input Guard (Application Integration)
 
@@ -345,7 +345,7 @@ for m in enhanced_scan_text(text):
 from dlpscan import enhanced_scan_text, Allowlist
 
 al = Allowlist(
-    texts=['test@example.com'],           # Exact text to ignore
+    texts=['test@example.com', '4111*'],  # Exact text or glob/wildcard patterns
     patterns=['Gender Marker', 'Hashtag'], # Pattern types to ignore
 )
 
@@ -639,9 +639,11 @@ All text is preprocessed through a three-stage normalization pipeline before reg
 
 1. **Zero-width stripping** — Removes 160+ invisible characters (ZWSP, ZWJ, bidi overrides, variation selectors, Unicode Tags) that attackers insert to break regex continuity. Builds an offset map for accurate span mapping back to the original text.
 2. **Whitespace normalization** — Converts 14 exotic Unicode spaces (ideographic, thin, hair, em, en, etc.) to ASCII space, defeating delimiter variation attacks.
-3. **Homoglyph normalization** — NFKC decomposition + explicit mapping of 80+ Cyrillic/Greek/fullwidth confusables to ASCII equivalents.
+3. **Homoglyph normalization** — NFKC decomposition + explicit mapping of 200+ Cyrillic/Greek/Armenian/Cherokee/fullwidth confusables to ASCII equivalents.
 
-This defeats zero-width insertion, RTL/bidi manipulation, homoglyph substitution, delimiter variation, and chained/polymorphic evasion techniques. See [docs/evasion_defenses.md](docs/evasion_defenses.md) for the full technical reference.
+Context keyword matching includes **fuzzy Levenshtein matching** (edit distance ≤ 2) to catch typos and misspellings like "credti card" → "credit card".
+
+This defeats zero-width insertion, RTL/bidi manipulation, homoglyph substitution, delimiter variation, context keyword evasion, and chained/polymorphic evasion techniques. See [docs/evasion_defenses.md](docs/evasion_defenses.md) for the full technical reference.
 
 ### ReDoS Protection
 
@@ -736,7 +738,7 @@ Load dlpscan configuration from `pyproject.toml [tool.dlpscan]` or `.dlpscanrc` 
 
 ### `Allowlist(texts=None, patterns=None, paths=None)`
 
-Filter for suppressing known false positives by exact text, pattern name, or file path glob.
+Filter for suppressing known false positives by exact text or glob/wildcard pattern (`*`, `?`, `[seq]`), pattern name, or file path glob.
 
 ## Configuration
 
@@ -899,7 +901,7 @@ dlpscan/
 ## Testing
 
 ```bash
-python -m unittest tests.unit -v          # Unit tests (415 tests)
+python -m unittest tests.unit -v          # Unit tests (446 tests)
 python -m unittest tests.test_integration  # Integration tests
 python tests/benchmarks.py                 # Performance benchmarks
 
@@ -909,7 +911,7 @@ coverage run -m unittest tests.unit -v
 coverage report
 ```
 
-415 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering, config loading, SARIF output, custom pattern registration, output redaction, metrics/observability, plugin system, structured logging, async scanning, text extraction, the file processing pipeline, InputGuard module, custom patterns via InputGuard, per-category confidence tuning, pipeline structured output, streaming scanner, webhook scanner, tokenization, obfuscation, Unicode zero-width evasion, homoglyph normalization, RTL/bidi stripping, delimiter variation defense, cross-platform timeout, and scan completeness indicators.
+446 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering (including wildcard/glob), config loading, SARIF output, custom pattern registration, output redaction, metrics/observability, plugin system, structured logging, async scanning, text extraction (including RTF and content-type detection), the file processing pipeline, InputGuard module, custom patterns via InputGuard, per-category confidence tuning, pipeline structured output, streaming scanner, webhook scanner, tokenization, obfuscation, Unicode zero-width evasion, homoglyph normalization (200+ confusables), RTL/bidi stripping, delimiter variation defense, cross-platform timeout, scan completeness indicators, fuzzy context keyword matching, and expanded homoglyph coverage (Armenian, Cherokee, small capitals).
 
 ## Docker
 
