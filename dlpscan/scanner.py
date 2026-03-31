@@ -23,6 +23,7 @@ from .models import (
 )
 from .patterns import PATTERNS
 from .plugins import run_post_processors, run_validators
+from .unicode_normalize import normalize_text
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,16 @@ def _validate_text_input(text: object) -> str:
     return text
 
 
+def _normalize_text(text: str) -> tuple:
+    """Normalize text to defeat Unicode evasion (zero-width chars, homoglyphs).
+
+    Returns (normalized_text, offset_map) where offset_map maps each position
+    in normalized_text back to its original position.
+    """
+    normalized, offset_map = normalize_text(text)
+    return normalized, offset_map
+
+
 # -- Confidence scoring --
 
 def _compute_confidence(sub_category: str, has_context: bool, context_required: bool) -> float:
@@ -280,8 +291,13 @@ def redact_sensitive_info_with_patterns(text: str, category: str, sub_category: 
     Uses regex substitution (not string replace) to only redact actual
     pattern matches, avoiding false replacements of identical substrings
     that appear in non-sensitive positions.
+
+    Text is normalized (zero-width chars stripped, homoglyphs mapped) before
+    pattern matching so that Unicode evasion techniques are ineffective.
+    Redaction is applied to the original text at the mapped-back positions.
     """
-    text = _validate_text_input(text)
+    original_text = _validate_text_input(text)
+    normalized, offset_map = _normalize_text(original_text)
 
     all_patterns = _get_all_patterns()
 
@@ -292,14 +308,28 @@ def redact_sensitive_info_with_patterns(text: str, category: str, sub_category: 
 
     pattern = all_patterns[category][sub_category]
 
-    def _redact_match(m):
-        matched = m.group()
-        try:
-            return redact_sensitive_info(matched)
-        except (EmptyInputError, ShortInputError):
-            return matched  # Leave short/empty matches untouched
+    # Collect spans in original text that need redacting.
+    redact_spans: list[tuple[int, int]] = []
+    for m in pattern.finditer(normalized):
+        ns, ne = m.start(), m.end()
+        if offset_map:
+            os_ = offset_map[ns] if ns < len(offset_map) else len(original_text)
+            oe = (offset_map[ne - 1] + 1) if ne <= len(offset_map) and ne > 0 else len(original_text)
+        else:
+            os_, oe = ns, ne
+        redact_spans.append((os_, oe))
 
-    return pattern.sub(_redact_match, text)
+    if not redact_spans:
+        return original_text
+
+    # Build redacted string from original text.
+    result = list(original_text)
+    _PRESERVED_DELIMITERS = frozenset('-. /\\_\u2013\u2014\u00a0')
+    for start, end in redact_spans:
+        for i in range(start, end):
+            if result[i] not in _PRESERVED_DELIMITERS and result[i].isprintable():
+                result[i] = 'X'
+    return ''.join(result)
 
 
 def is_luhn_valid(card_number: str) -> bool:
@@ -387,7 +417,10 @@ def enhanced_scan_text(
         The SIGALRM-based timeout only works on Unix in the main thread.
         When called from other threads or on Windows, regex timeouts are disabled.
     """
-    text = _validate_text_input(text)
+    original_text = _validate_text_input(text)
+
+    # Normalize to defeat zero-width character and homoglyph evasion.
+    text, offset_map = _normalize_text(original_text)
 
     all_patterns = _get_all_patterns()
 
@@ -400,7 +433,7 @@ def enhanced_scan_text(
     patterns_timed_out = 0
 
     with MetricsCollector() as metrics:
-        metrics.bytes_scanned = len(text)
+        metrics.bytes_scanned = len(original_text)
         metrics.categories_scanned = len(patterns_to_scan)
 
         # Set up global scan timeout if available.
@@ -444,13 +477,26 @@ def enhanced_scan_text(
 
                             confidence = _compute_confidence(sub_category, has_context, is_ctx_required)
 
+                            # Map span back to original text positions.
+                            norm_start, norm_end = match.start(), match.end()
+                            if offset_map:
+                                orig_start = offset_map[norm_start] if norm_start < len(offset_map) else len(original_text)
+                                orig_end = (offset_map[norm_end - 1] + 1) if norm_end <= len(offset_map) and norm_end > 0 else len(original_text)
+                            else:
+                                orig_start, orig_end = norm_start, norm_end
+
+                            # Use the original text slice for the match text so
+                            # callers see the actual content (including any
+                            # zero-width chars that were present).
+                            original_match_text = original_text[orig_start:orig_end]
+
                             m = Match(
-                                text=match.group(),
+                                text=original_match_text,
                                 category=category,
                                 sub_category=sub_category,
                                 has_context=has_context,
                                 confidence=confidence,
-                                span=(match.start(), match.end()),
+                                span=(orig_start, orig_end),
                                 context_required=is_ctx_required,
                             )
 

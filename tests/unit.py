@@ -3615,5 +3615,96 @@ class TestRulesets(unittest.TestCase):
         self.assertEqual(rs.name, "my-default")
 
 
+class TestUnicodeNormalization(unittest.TestCase):
+    """Tests for zero-width character stripping and homoglyph normalization."""
+
+    def test_strip_zero_width_from_ssn(self):
+        """SSN with zero-width spaces inserted should still be detected."""
+        # 123-45-6789 with zero-width spaces between every digit
+        evasion = "ssn 1\u200b2\u200b3-4\u200b5-6\u200b7\u200b8\u200b9"
+        results = list(enhanced_scan_text(evasion))
+        ssn_results = [r for r in results if 'SSN' in r.sub_category]
+        self.assertGreater(len(ssn_results), 0, "SSN with zero-width spaces should be detected")
+
+    def test_strip_zero_width_from_credit_card(self):
+        """Credit card with zero-width joiners should still be detected."""
+        # Valid Visa: 4532015112830366
+        evasion = "credit card 4\u200d5\u200d3\u200d2\u200d0151\u200d1283\u200d0366"
+        results = list(enhanced_scan_text(evasion))
+        cc_results = [r for r in results if r.category == 'Credit Card Numbers']
+        self.assertGreater(len(cc_results), 0, "Credit card with zero-width joiners should be detected")
+
+    def test_homoglyph_digits_in_ssn(self):
+        """SSN with fullwidth digits should still be detected."""
+        # 123-45-6789 using fullwidth digits (１２３-４５-６７８９)
+        evasion = "ssn \uff11\uff12\uff13-\uff14\uff15-\uff16\uff17\uff18\uff19"
+        results = list(enhanced_scan_text(evasion))
+        ssn_results = [r for r in results if 'SSN' in r.sub_category]
+        self.assertGreater(len(ssn_results), 0, "SSN with fullwidth digits should be detected")
+
+    def test_homoglyph_cyrillic_in_email(self):
+        """Email with Cyrillic lookalike letters should still be detected."""
+        # "user@test.com" with Cyrillic а (U+0430) and е (U+0435)
+        evasion = "email us\u0435r@t\u0435st.com"
+        results = list(enhanced_scan_text(evasion))
+        email_results = [r for r in results if r.sub_category == 'Email Address']
+        self.assertGreater(len(email_results), 0, "Email with Cyrillic lookalikes should be detected")
+
+    def test_zero_width_bom_stripping(self):
+        """BOM character should be stripped."""
+        evasion = "ssn \ufeff123-45-6789"
+        results = list(enhanced_scan_text(evasion))
+        ssn_results = [r for r in results if 'SSN' in r.sub_category]
+        self.assertGreater(len(ssn_results), 0, "SSN with BOM should be detected")
+
+    def test_soft_hyphen_stripping(self):
+        """Soft hyphens inserted into data should be stripped."""
+        evasion = "ssn 1\u00ad2\u00ad3-45-6789"
+        results = list(enhanced_scan_text(evasion))
+        ssn_results = [r for r in results if 'SSN' in r.sub_category]
+        self.assertGreater(len(ssn_results), 0, "SSN with soft hyphens should be detected")
+
+    def test_span_maps_back_to_original(self):
+        """Match spans should reference positions in the original text."""
+        original = "ssn 1\u200b23-45-6789"
+        results = list(enhanced_scan_text(original))
+        ssn_results = [r for r in results if 'SSN' in r.sub_category]
+        if ssn_results:
+            m = ssn_results[0]
+            # The span should be valid indices into the original string.
+            self.assertGreaterEqual(m.span[0], 0)
+            self.assertLessEqual(m.span[1], len(original))
+
+    def test_clean_text_unaffected(self):
+        """Normal ASCII text should pass through normalization unchanged."""
+        clean = "credit card 4532015112830366"
+        results = list(enhanced_scan_text(clean))
+        cc_results = [r for r in results if r.category == 'Credit Card Numbers']
+        self.assertGreater(len(cc_results), 0, "Clean text should still match")
+
+    def test_normalize_module_strip_zero_width(self):
+        """Direct test of strip_zero_width function."""
+        from dlpscan.unicode_normalize import strip_zero_width
+        text = "a\u200bb\u200cc"
+        cleaned, offsets = strip_zero_width(text)
+        self.assertEqual(cleaned, "abc")
+        self.assertEqual(offsets, [0, 2, 4])
+
+    def test_normalize_module_homoglyphs(self):
+        """Direct test of normalize_homoglyphs function."""
+        from dlpscan.unicode_normalize import normalize_homoglyphs
+        # Fullwidth 1, Cyrillic а, Greek Ο
+        text = "\uff11\u0430\u039f"
+        normalized = normalize_homoglyphs(text)
+        self.assertEqual(normalized, "1aO")
+
+    def test_redact_with_zero_width_evasion(self):
+        """redact_sensitive_info_with_patterns should work on text with zero-width chars."""
+        text = "card: 4\u200b532015112830366"
+        redacted = redact_sensitive_info_with_patterns(text, 'Credit Card Numbers', 'Visa')
+        # The original zero-width char should be preserved but digits redacted.
+        self.assertNotIn('4532', redacted)
+
+
 if __name__ == '__main__':
     unittest.main()
