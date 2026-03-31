@@ -33,6 +33,7 @@ import threading
 from typing import Dict, List, Optional
 
 from ..models import Match
+from ..unicode_normalize import strip_zero_width
 
 # ---------------------------------------------------------------------------
 # Obfuscation RNG (supports custom seeds for reproducible fake data)
@@ -265,9 +266,16 @@ def _generate_luhn_number(length: int, prefix: str = '') -> str:
     return ''.join(digits)
 
 
+def _clean_match_text(text: str) -> str:
+    """Strip zero-width / invisible chars from match text before transform."""
+    cleaned, _ = strip_zero_width(text)
+    return cleaned
+
+
 def _obfuscate_credit_card(match: Match) -> str:
     """Generate a fake credit card number with valid Luhn checksum."""
-    original = re.sub(r'[^0-9]', '', match.text)
+    clean_text = _clean_match_text(match.text)
+    original = re.sub(r'[^0-9]', '', clean_text)
     length = len(original)
 
     # Preserve the general card type prefix but change it.
@@ -283,10 +291,10 @@ def _obfuscate_credit_card(match: Match) -> str:
     prefix = prefix_map.get(match.sub_category, str(_rng.randint(3, 6)))
     fake = _generate_luhn_number(length, prefix)
 
-    # Reapply original formatting (dashes, spaces).
+    # Reapply original formatting (dashes, spaces) from cleaned text.
     result = []
     fake_idx = 0
-    for c in match.text:
+    for c in clean_text:
         if c.isdigit() and fake_idx < len(fake):
             result.append(fake[fake_idx])
             fake_idx += 1
@@ -304,24 +312,25 @@ def _obfuscate_email(match: Match) -> str:
 
 def _obfuscate_phone(match: Match) -> str:
     """Generate a fake phone number preserving format."""
-    # Replace digits with random ones, keeping format characters.
+    clean_text = _clean_match_text(match.text)
     return ''.join(
         str(_rng.randint(0, 9)) if c.isdigit() else c
-        for c in match.text
+        for c in clean_text
     )
 
 
 def _obfuscate_ssn(match: Match) -> str:
     """Generate a fake SSN/SIN preserving format."""
+    clean_text = _clean_match_text(match.text)
     return ''.join(
         str(_rng.randint(0, 9)) if c.isdigit() else c
-        for c in match.text
+        for c in clean_text
     )
 
 
 def _obfuscate_iban(match: Match) -> str:
     """Generate a fake IBAN preserving country code and format."""
-    text = match.text
+    text = _clean_match_text(match.text)
     if len(text) >= 2 and text[:2].isalpha():
         country = text[:2]
         rest = ''.join(
@@ -340,14 +349,15 @@ def _obfuscate_ip4(match: Match) -> str:
 
 def _obfuscate_mac(match: Match) -> str:
     """Generate a fake MAC address preserving delimiter."""
-    delim = ':' if ':' in match.text else '-'
+    clean_text = _clean_match_text(match.text)
+    delim = ':' if ':' in clean_text else '-'
     octets = [f"{_rng.randint(0, 255):02x}" for _ in range(6)]
     return delim.join(octets)
 
 
 def _obfuscate_secret(match: Match) -> str:
     """Generate a fake secret/token of the same length."""
-    text = match.text
+    text = _clean_match_text(match.text)
     charset = string.ascii_letters + string.digits
     return ''.join(
         _rng.choice(charset) if c.isalnum() else c
@@ -357,11 +367,12 @@ def _obfuscate_secret(match: Match) -> str:
 
 def _obfuscate_generic(match: Match) -> str:
     """Fallback: replace alphanumeric chars with random ones, keep format."""
+    clean_text = _clean_match_text(match.text)
     return ''.join(
         _rng.choice(string.digits) if c.isdigit() else
         _rng.choice(string.ascii_uppercase) if c.isupper() else
         _rng.choice(string.ascii_lowercase) if c.islower() else c
-        for c in match.text
+        for c in clean_text
     )
 
 
@@ -433,6 +444,8 @@ def tokenize_matches(text: str, matches: List[Match], vault: TokenVault) -> str:
     """Replace matched spans with tokens using a TokenVault.
 
     Processes matches in reverse span order to avoid offset drift.
+    Stores the cleaned (zero-width stripped) value in the vault so
+    detokenization does not reintroduce evasion characters.
 
     Args:
         text: Original text containing sensitive data.
@@ -446,7 +459,9 @@ def tokenize_matches(text: str, matches: List[Match], vault: TokenVault) -> str:
     result = text
     for m in sorted_matches:
         start, end = m.span
-        token = vault.tokenize(result[start:end], m.category)
+        # Store the cleaned value (no zero-width chars) so detokenize is clean.
+        clean_value = _clean_match_text(result[start:end])
+        token = vault.tokenize(clean_value, m.category)
         result = result[:start] + token + result[end:]
     return result
 
