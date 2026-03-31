@@ -32,6 +32,7 @@ from ..allowlist import Allowlist
 from ..exceptions import EmptyInputError, ShortInputError
 from ..models import Match
 from ..scanner import (
+    MAX_MATCHES,
     enhanced_scan_text,
     redact_sensitive_info,
     register_patterns,
@@ -60,6 +61,7 @@ class ScanResult:
         redacted_text: Transformed text (redacted, tokenized, or obfuscated).
         categories_found: Set of unique category names detected.
         token_vault: TokenVault with mappings (set only when action=TOKENIZE).
+        scan_truncated: True if the scan was cut short by match limits or timeout.
     """
     text: str
     is_clean: bool
@@ -67,6 +69,12 @@ class ScanResult:
     redacted_text: Optional[str] = None
     categories_found: Set[str] = field(default_factory=set)
     token_vault: Optional[TokenVault] = None
+    scan_truncated: bool = False
+
+    @property
+    def scan_complete(self) -> bool:
+        """True if the scan ran to completion without truncation."""
+        return not self.scan_truncated
 
     @property
     def finding_count(self) -> int:
@@ -81,6 +89,7 @@ class ScanResult:
             'categories_found': sorted(self.categories_found),
             'findings': [f.to_dict(redact=redact) for f in self.findings],
             'redacted_text': self.redacted_text,
+            'scan_truncated': self.scan_truncated,
         }
 
 
@@ -219,6 +228,9 @@ class InputGuard:
         except EmptyInputError:
             return ScanResult(text=text, is_clean=True)
 
+        # Detect truncation: if scanner returned exactly MAX_MATCHES, it was likely truncated.
+        scan_truncated = len(raw_matches) >= MAX_MATCHES
+
         # Apply allowlist filtering.
         if self.allowlist:
             raw_matches = self.allowlist.filter_matches(raw_matches)
@@ -261,6 +273,7 @@ class InputGuard:
             redacted_text=redacted_text,
             categories_found=categories_found,
             token_vault=vault,
+            scan_truncated=scan_truncated,
         )
 
     def scan(self, text: str) -> ScanResult:

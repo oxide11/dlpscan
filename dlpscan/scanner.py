@@ -173,6 +173,40 @@ def _can_use_sigalrm() -> bool:
     )
 
 
+class _ThreadTimeout:
+    """Cross-platform timeout using threading.Timer for non-Unix/non-main-thread.
+
+    Sets a flag that the scan loop checks periodically. Unlike SIGALRM this
+    cannot interrupt a blocking regex mid-execution, but it prevents runaway
+    scans from consuming unbounded time across pattern iterations.
+    """
+
+    def __init__(self, seconds: int):
+        self._seconds = seconds
+        self._expired = False
+        self._timer: Optional[threading.Timer] = None
+
+    def start(self) -> None:
+        if self._seconds <= 0:
+            return
+        self._expired = False
+        self._timer = threading.Timer(self._seconds, self._expire)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def _expire(self) -> None:
+        self._expired = True
+
+    @property
+    def expired(self) -> bool:
+        return self._expired
+
+    def cancel(self) -> None:
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+
+
 def _validate_text_input(text: object) -> str:
     """Validate and sanitize scanner input text."""
     if text is None:
@@ -414,8 +448,8 @@ def enhanced_scan_text(
         ``text, sub_category, has_context, category = match``
 
     Note:
-        The SIGALRM-based timeout only works on Unix in the main thread.
-        When called from other threads or on Windows, regex timeouts are disabled.
+        Uses SIGALRM on Unix main thread for hard timeout, with a
+        threading.Timer fallback on all other platforms/threads.
     """
     original_text = _validate_text_input(text)
 
@@ -436,19 +470,44 @@ def enhanced_scan_text(
         metrics.bytes_scanned = len(original_text)
         metrics.categories_scanned = len(patterns_to_scan)
 
-        # Set up global scan timeout if available.
+        # Set up global scan timeout: prefer SIGALRM, fall back to threading.Timer.
         _global_old_handler = None
-        if MAX_SCAN_SECONDS > 0 and _can_use_sigalrm():
+        _thread_timeout: Optional[_ThreadTimeout] = None
+        use_sigalrm = MAX_SCAN_SECONDS > 0 and _can_use_sigalrm()
+
+        if use_sigalrm:
             _global_old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
             signal.alarm(MAX_SCAN_SECONDS)
+        elif MAX_SCAN_SECONDS > 0:
+            # Cross-platform fallback: threading.Timer sets a flag checked in the loop.
+            _thread_timeout = _ThreadTimeout(MAX_SCAN_SECONDS)
+            _thread_timeout.start()
 
         try:
             for category, sub_categories in patterns_to_scan.items():
                 if scan_timed_out or len(raw_matches) >= max_matches:
                     break
+                # Check thread-based timeout between categories.
+                if _thread_timeout and _thread_timeout.expired:
+                    scan_timed_out = True
+                    metrics.scan_truncated = True
+                    logger.warning(
+                        "Thread-based scan timeout (%ds) reached. Scan truncated.",
+                        MAX_SCAN_SECONDS,
+                    )
+                    break
 
                 for sub_category, pattern in sub_categories.items():
                     if scan_timed_out or len(raw_matches) >= max_matches:
+                        break
+                    # Check thread-based timeout between sub-categories.
+                    if _thread_timeout and _thread_timeout.expired:
+                        scan_timed_out = True
+                        metrics.scan_truncated = True
+                        logger.warning(
+                            "Thread-based scan timeout (%ds) reached. Scan truncated.",
+                            MAX_SCAN_SECONDS,
+                        )
                         break
 
                     is_ctx_required = sub_category in CONTEXT_REQUIRED_PATTERNS
@@ -529,6 +588,8 @@ def enhanced_scan_text(
             if _global_old_handler is not None:
                 signal.signal(signal.SIGALRM, _global_old_handler)
                 signal.alarm(0)
+            if _thread_timeout is not None:
+                _thread_timeout.cancel()
 
         if deduplicate:
             raw_matches = _deduplicate_overlapping(raw_matches)
