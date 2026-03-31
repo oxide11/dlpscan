@@ -68,6 +68,20 @@ from .logging_config import configure_logging
 from .lsh import DocumentVault, SimilarityMatch
 from .metrics import MetricsCollector, ScanMetrics, set_metrics_callback
 from .models import Match
+from .observability import (
+    Counter,
+    Gauge,
+    Histogram,
+    MetricsRegistry,
+    PrometheusExporter,
+    enable_auto_instrumentation,
+    get_health,
+    get_uptime,
+    record_scan,
+    record_scan_metrics,
+    registry,
+    setup_opentelemetry,
+)
 from .ocr import (
     IMAGE_EXTENSIONS,
     OCRResult,
@@ -138,6 +152,7 @@ from .unicode_normalize import (
     UNICODE_SPACES,
     ZERO_WIDTH_CHARS,
     normalize_homoglyphs,
+    normalize_leet,
     normalize_text,
     normalize_whitespace,
     strip_zero_width,

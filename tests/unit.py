@@ -5016,6 +5016,7 @@ class TestRecursiveExtractor(unittest.TestCase):
 
     def test_extract_zip(self):
         import zipfile as _zf
+
         from dlpscan.entropy import RecursiveExtractor
         with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as zf:
             with _zf.ZipFile(zf, 'w') as z:
@@ -5032,6 +5033,7 @@ class TestRecursiveExtractor(unittest.TestCase):
 
     def test_extract_gzip(self):
         import gzip as _gz
+
         from dlpscan.entropy import RecursiveExtractor
         with tempfile.NamedTemporaryFile(suffix='.gz', delete=False) as f:
             with _gz.open(f.name, 'wb') as gz:
@@ -5066,8 +5068,9 @@ class TestRecursiveExtractor(unittest.TestCase):
         self.assertEqual(d['depth'], 1)
 
     def test_context_manager_cleanup(self):
-        from dlpscan.entropy import RecursiveExtractor
         import zipfile as _zf
+
+        from dlpscan.entropy import RecursiveExtractor
         with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as zf:
             with _zf.ZipFile(zf, 'w') as z:
                 z.writestr("inner.txt", "test content")
