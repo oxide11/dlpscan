@@ -15,8 +15,8 @@ pattern detection, with current defense status and mitigations.
 | **Example** | `4\u200b5\u200b3\u200b2\u200b0151\u200b1283\u200b0366` — Visa number with zero-width spaces. |
 | **Patterns bypassed** | All regex-based patterns. |
 | **Defense status** | **Defended.** `unicode_normalize.strip_zero_width()` removes 18 known invisible characters before scanning. Integrated into `enhanced_scan_text()` and InputGuard transforms. |
-| **Residual risk** | New invisible characters added in future Unicode versions (15.0+) may not be covered. Variation selectors (`U+FE00`–`U+FE0F`) are not currently stripped. |
-| **Mitigation** | Periodically update `ZERO_WIDTH_CHARS` set. Consider stripping all characters in Unicode category `Cf` (Format). |
+| **Residual risk** | New invisible characters added in future Unicode versions (15.0+) may not be covered. |
+| **Mitigation** | Variation selectors (`U+FE00`–`U+FE0F`) and Unicode Tags block (`U+E0001`–`U+E007F`) now stripped. Periodically update `ZERO_WIDTH_CHARS` set. Consider stripping all characters in Unicode category `Cf` (Format). |
 
 ### 1.2 Homoglyph / Confusable Character Substitution
 
@@ -36,8 +36,8 @@ pattern detection, with current defense status and mitigations.
 | **How it works** | Insert RTL override characters (`U+202E` RLO, `U+2066` LRI, `U+2067` RLI) to visually reorder digits while maintaining logical order in memory. |
 | **Example** | `\u202E9876-54-321` displays as `123-45-6789` but regex scans the reversed logical order. |
 | **Patterns bypassed** | All digit-sequence patterns (SSN, credit cards, phone numbers). |
-| **Defense status** | **Partial.** `U+200E` (LRM) and `U+200F` (RLM) are stripped. Directional overrides (`U+202A`–`U+202E`, `U+2066`–`U+2069`) are NOT in the strip set. |
-| **Mitigation** | Add all 11 directional formatting characters to `ZERO_WIDTH_CHARS`. |
+| **Defense status** | **Defended.** All directional formatting characters (`U+202A`–`U+202E`, `U+2066`–`U+2069`) are stripped by `strip_zero_width()` alongside `U+200E`/`U+200F`. |
+| **Mitigation** | Completed. All 11 directional formatting characters added to `ZERO_WIDTH_CHARS`. |
 
 ### 1.4 Unicode Normalization Form Inconsistency
 
@@ -61,8 +61,8 @@ pattern detection, with current defense status and mitigations.
 | **How it works** | Use delimiters not in the `_S` pattern (`[-.\s/\\_\u2013\u2014\u00a0]?`). Unicode spaces like ideographic space (`U+3000`), narrow no-break space (`U+202F`), or tabs/form-feeds in unexpected positions. |
 | **Example** | `4111\u30001111\u30001111\u30001111` (Visa with ideographic spaces). |
 | **Patterns bypassed** | Credit cards, SSN, IBAN, postal codes — any pattern using `_S` delimiter. |
-| **Defense status** | **Partial.** `_S` covers common delimiters. NFKC normalizes some Unicode spaces but not all. |
-| **Mitigation** | Expand `_S` to include `\u2000`–`\u200A`, `\u202F`, `\u3000`. Or strip all Unicode whitespace to ASCII space before scanning. |
+| **Defense status** | **Defended.** `normalize_whitespace()` converts 14 exotic Unicode spaces (`U+2000`–`U+200A`, `U+202F`, `U+205F`, `U+3000`) to ASCII space before scanning. Combined with `_S` delimiter pattern coverage. |
+| **Mitigation** | Completed. Unicode whitespace normalization added to the normalization pipeline in `normalize_text()`. |
 
 ### 2.2 Word Boundary (`\b`) Bypass
 
@@ -82,8 +82,8 @@ pattern detection, with current defense status and mitigations.
 | **How it works** | Craft input that triggers catastrophic backtracking in patterns with nested quantifiers or alternations. IPv6, IBAN, and complex banking patterns are most vulnerable. |
 | **Example** | Long string of hex+colon segments targeting IPv6: `AAAA:AAAA:AAAA:...` (50+ segments). |
 | **Patterns bypassed** | Not a bypass — a resource exhaustion attack that prevents scanning. |
-| **Defense status** | **Partial.** `REGEX_TIMEOUT_SECONDS = 5` via SIGALRM, but only works on Unix main thread. No protection in worker threads, async contexts, or Windows. |
-| **Mitigation** | Use `threading.Timer`-based timeouts. Audit all patterns with ReDoS analyzer tools. Use atomic groups or possessive quantifiers where possible. |
+| **Defense status** | **Defended.** SIGALRM on Unix main thread + `_ThreadTimeout` fallback (threading.Timer) for worker threads, async contexts, and Windows. Checks timeout flag between pattern iterations. |
+| **Mitigation** | Completed. Cross-platform timeout added. Audit all patterns with ReDoS analyzer tools. Use atomic groups or possessive quantifiers where possible. |
 
 ---
 
@@ -186,8 +186,8 @@ pattern detection, with current defense status and mitigations.
 | **How it works** | Flood a document with 50,000+ pattern matches so the scanner hits `MAX_MATCHES` and silently stops. Sensitive data after the limit is unscanned. |
 | **Example** | File with 50,001 fake SSNs — the first 50,000 are scanned, the real SSN at position 50,001 is ignored. |
 | **Patterns bypassed** | All patterns after the truncation point. |
-| **Defense status** | **Weak.** Limit is enforced; a warning is logged. But truncation is silent to API consumers. |
-| **Mitigation** | Return scan-completeness indicator in `ScanResult`. Use per-category limits. Implement sampling for high-match documents. |
+| **Defense status** | **Partial.** Limit is enforced; a warning is logged. `ScanResult.scan_truncated` and `ScanResult.scan_complete` expose truncation status to API consumers. |
+| **Mitigation** | Completeness indicator added to `ScanResult`. Consider per-category limits. Implement sampling for high-match documents. |
 
 ### 5.4 Global Scan Timeout Bypass
 
@@ -195,8 +195,8 @@ pattern detection, with current defense status and mitigations.
 |---|---|
 | **How it works** | Exploit that SIGALRM-based timeout only works on Unix main thread. In async/threaded/Windows environments, there's no timeout — a ReDoS pattern runs indefinitely. |
 | **Patterns bypassed** | All patterns (resource exhaustion). |
-| **Defense status** | **Weak.** `MAX_SCAN_SECONDS = 120` only enforced via SIGALRM on Unix main thread. |
-| **Mitigation** | Use `threading.Timer` or the `regex` library (with built-in timeout support) for cross-platform timeouts. |
+| **Defense status** | **Defended.** `MAX_SCAN_SECONDS = 120` enforced via SIGALRM on Unix main thread, with `_ThreadTimeout` (threading.Timer) fallback on all other platforms/threads. |
+| **Mitigation** | Completed. Cross-platform timeout implemented. |
 
 ---
 
@@ -263,8 +263,8 @@ pattern detection, with current defense status and mitigations.
 | | |
 |---|---|
 | **How it works** | Embed sensitive data in image least-significant bits, document metadata (EXIF/XMP), whitespace patterns, or Unicode tag characters (`U+E0001`–`U+E007F`). |
-| **Defense status** | **Not defended.** No steganalysis capability. Metadata extraction is limited. |
-| **Mitigation** | Extract and scan EXIF/XMP metadata. Add Unicode Tags block (`U+E0000`–`U+E007F`) to zero-width strip list. Consider steganalysis library for image scanning. |
+| **Defense status** | **Partial.** Unicode Tags block (`U+E0001`–`U+E007F`) now stripped. No steganalysis capability. Metadata extraction is limited. |
+| **Mitigation** | Unicode Tags stripping completed. Extract and scan EXIF/XMP metadata. Consider steganalysis library for image scanning. |
 
 ---
 
@@ -272,31 +272,41 @@ pattern detection, with current defense status and mitigations.
 
 | Technique | Status | Severity |
 |-----------|--------|----------|
-| Zero-width char insertion | **Defended** | High |
+| Zero-width char insertion | **Defended** (incl. variation selectors, Unicode Tags) | High |
 | Homoglyph substitution | **Defended** (partial map) | High |
-| RTL/Bidi manipulation | Partial | High |
-| Delimiter variation | Partial | Medium |
+| RTL/Bidi manipulation | **Defended** | High |
+| Delimiter variation | **Defended** | Medium |
 | Word boundary bypass | **Defended** | High |
-| ReDoS | Partial (Unix main thread only) | Medium |
+| ReDoS | **Defended** (SIGALRM + threading.Timer fallback) | Medium |
 | Chunk boundary splitting | Partial | Medium |
 | OCR confidence manipulation | Weak | Medium |
 | Unsupported file format | Weak | Medium |
 | Context distance overflow | Partial | Medium |
 | Context keyword evasion | Weak | High |
-| Max matches truncation | Weak | High |
-| Timeout bypass (non-Unix) | Weak | Medium |
+| Max matches truncation | Partial (completeness indicator exposed) | High |
+| Timeout bypass (non-Unix) | **Defended** (threading.Timer fallback) | Medium |
 | Allowlist value mutation | Weak | Medium |
 | Path exclusion abuse | Weak | High |
 | Polymorphic encoding | **Defended** | High |
-| Steganographic hiding | Not defended | Medium |
+| Steganographic hiding | Partial (Unicode Tags stripped) | Medium |
 
 ---
 
 ## Priority Remediation Roadmap
 
+### Completed
+
+- ~~**Add RTL/Bidi stripping**~~ — ✅ Added `U+202A`–`U+202E`, `U+2066`–`U+2069` to strip set
+- ~~**Cross-platform regex timeout**~~ — ✅ `_ThreadTimeout` (threading.Timer) fallback for non-Unix/non-main-thread
+- ~~**Scan completeness indicator**~~ — ✅ `ScanResult.scan_truncated` / `scan_complete` exposed to API consumers
+- ~~**Delimiter variation defense**~~ — ✅ `normalize_whitespace()` converts 14 exotic Unicode spaces to ASCII
+- ~~**Variation selector stripping**~~ — ✅ `U+FE00`–`U+FE0F` added to strip set
+- ~~**Unicode Tags stripping**~~ — ✅ `U+E0001`–`U+E007F` added to strip set
+
+### Remaining
+
 1. **Expand homoglyph coverage** — integrate Unicode confusables.txt (6,000+ mappings)
-2. **Add RTL/Bidi stripping** — add `U+202A`–`U+202E`, `U+2066`–`U+2069` to strip set
-3. **Enhance context keywords** — add multilingual synonyms, fuzzy matching (Levenshtein ≤ 2)
-4. **Cross-platform regex timeout** — `threading.Timer` fallback for non-Unix/non-main-thread
-5. **Scan completeness indicator** — expose truncation status in `ScanResult` API
-6. **File format coverage** — add RTF, ODS, Pages extractors; use `python-magic` for detection
+2. **Enhance context keywords** — add multilingual synonyms, fuzzy matching (Levenshtein ≤ 2)
+3. **File format coverage** — add RTF, ODS, Pages extractors; use `python-magic` for detection
+4. **OCR confidence hardening** — raise `MIN_OCR_CONFIDENCE`, add per-pattern OCR thresholds
+5. **Allowlist pattern matching** — support wildcard/prefix allowlist entries alongside exact match

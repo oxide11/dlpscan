@@ -117,9 +117,11 @@ from .siem import (
 )
 from .streaming import StreamScanner, WebhookScanner
 from .unicode_normalize import (
+    UNICODE_SPACES,
     ZERO_WIDTH_CHARS,
     normalize_homoglyphs,
     normalize_text,
+    normalize_whitespace,
     strip_zero_width,
 )
 from .webhooks import WebhookNotifier, notify_findings

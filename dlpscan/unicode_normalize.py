@@ -21,6 +21,7 @@ import unicodedata
 # Characters that occupy no visible space and can be inserted to break patterns.
 
 ZERO_WIDTH_CHARS = frozenset((
+    # ── Original invisible characters ──
     '\u200b',   # Zero Width Space
     '\u200c',   # Zero Width Non-Joiner
     '\u200d',   # Zero Width Joiner
@@ -39,9 +40,52 @@ ZERO_WIDTH_CHARS = frozenset((
     '\ufff9',   # Interlinear Annotation Anchor
     '\ufffa',   # Interlinear Annotation Separator
     '\ufffb',   # Interlinear Annotation Terminator
+    # ── RTL / Bidi directional overrides (evasion §1.3) ──
+    '\u202a',   # Left-to-Right Embedding
+    '\u202b',   # Right-to-Left Embedding
+    '\u202c',   # Pop Directional Formatting
+    '\u202d',   # Left-to-Right Override
+    '\u202e',   # Right-to-Left Override
+    '\u2066',   # Left-to-Right Isolate
+    '\u2067',   # Right-to-Left Isolate
+    '\u2068',   # First Strong Isolate
+    '\u2069',   # Pop Directional Isolate
+    # ── Variation selectors (evasion §1.1 residual risk) ──
+    *[chr(c) for c in range(0xFE00, 0xFE10)],   # VS1–VS16
+    # ── Unicode Tags block — steganographic hiding (evasion §8.2) ──
+    *[chr(c) for c in range(0xE0001, 0xE0080)],  # U+E0001–U+E007F
 ))
 
 _ZERO_WIDTH_RE = re.compile('[' + ''.join(ZERO_WIDTH_CHARS) + ']')
+
+# ── Unicode whitespace normalization (evasion §2.1 — delimiter variation) ────
+# Maps exotic Unicode whitespace characters to ASCII space so that patterns
+# using `_S` (which matches common delimiters) can catch them.
+UNICODE_SPACES = frozenset((
+    '\u2000',   # En Quad
+    '\u2001',   # Em Quad
+    '\u2002',   # En Space
+    '\u2003',   # Em Space
+    '\u2004',   # Three-Per-Em Space
+    '\u2005',   # Four-Per-Em Space
+    '\u2006',   # Six-Per-Em Space
+    '\u2007',   # Figure Space
+    '\u2008',   # Punctuation Space
+    '\u2009',   # Thin Space
+    '\u200a',   # Hair Space
+    '\u202f',   # Narrow No-Break Space
+    '\u205f',   # Medium Mathematical Space
+    '\u3000',   # Ideographic Space
+))
+
+
+def normalize_whitespace(text: str) -> str:
+    """Replace exotic Unicode whitespace characters with ASCII space.
+
+    This defeats delimiter variation evasion where attackers use ideographic
+    spaces, thin spaces, etc. that are not matched by standard regex ``\\s``.
+    """
+    return ''.join(' ' if ch in UNICODE_SPACES else ch for ch in text)
 
 
 def strip_zero_width(text: str) -> tuple[str, list[int]]:
@@ -158,12 +202,18 @@ def normalize_homoglyphs(text: str) -> str:
 
 
 def normalize_text(text: str) -> tuple[str, list[int]]:
-    """Full normalization pipeline: strip zero-width chars, then normalize homoglyphs.
+    """Full normalization pipeline: strip zero-width chars, normalize whitespace, then homoglyphs.
+
+    Pipeline order:
+    1. Strip zero-width / invisible characters (preserves offset map)
+    2. Normalize exotic Unicode whitespace → ASCII space (1:1, no offset change)
+    3. Normalize homoglyphs via NFKC + explicit mapping
 
     Returns:
         (normalized_text, offset_map) where offset_map maps positions in
         normalized_text back to the original text.
     """
     cleaned, offset_map = strip_zero_width(text)
+    cleaned = normalize_whitespace(cleaned)
     normalized = normalize_homoglyphs(cleaned)
     return normalized, offset_map

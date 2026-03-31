@@ -3774,5 +3774,190 @@ class TestInputGuardUnicodeEvasion(unittest.TestCase):
             guard.scan(evasion)
 
 
+class TestEvasionDefenses(unittest.TestCase):
+    """Tests for defenses against evasion techniques from evasion_techniques.md."""
+
+    # ── RTL/Bidi stripping (evasion §1.3) ──
+
+    def test_rtl_override_stripped_from_credit_card(self):
+        """RTL override characters should be stripped, allowing CC detection."""
+        # Valid Visa 4532015112830366 with RTL override inserted
+        evasion = "card: \u202e4532015112830366"
+        results = list(enhanced_scan_text(evasion))
+        cc_results = [r for r in results if r.category == 'Credit Card Numbers']
+        self.assertGreater(len(cc_results), 0,
+                           "Credit card with RTL override should be detected")
+
+    def test_bidi_isolate_stripped_from_ssn(self):
+        """Bidi isolate characters (U+2066-U+2069) should be stripped."""
+        # SSN with Left-to-Right Isolate and Pop Directional Isolate
+        evasion = "ssn \u2066123-45-6789\u2069"
+        results = list(enhanced_scan_text(evasion))
+        ssn_results = [r for r in results if 'SSN' in r.sub_category]
+        self.assertGreater(len(ssn_results), 0,
+                           "SSN with bidi isolate chars should be detected")
+
+    def test_all_bidi_chars_in_strip_set(self):
+        """All 9 directional formatting chars should be in ZERO_WIDTH_CHARS."""
+        from dlpscan.unicode_normalize import ZERO_WIDTH_CHARS
+        bidi_chars = [
+            '\u202a', '\u202b', '\u202c', '\u202d', '\u202e',  # Embeddings/overrides
+            '\u2066', '\u2067', '\u2068', '\u2069',             # Isolates
+        ]
+        for ch in bidi_chars:
+            self.assertIn(ch, ZERO_WIDTH_CHARS,
+                          f"U+{ord(ch):04X} should be in ZERO_WIDTH_CHARS")
+
+    # ── Variation selectors (evasion §1.1 residual risk) ──
+
+    def test_variation_selectors_stripped(self):
+        """Variation selectors (U+FE00-U+FE0F) should be stripped."""
+        from dlpscan.unicode_normalize import ZERO_WIDTH_CHARS
+        for cp in range(0xFE00, 0xFE10):
+            self.assertIn(chr(cp), ZERO_WIDTH_CHARS,
+                          f"Variation selector U+{cp:04X} should be stripped")
+
+    def test_variation_selector_in_credit_card(self):
+        """Credit card with variation selectors between digits should be detected."""
+        # Valid Visa with VS1 inserted
+        evasion = "card: 4\ufe00532015112830366"
+        results = list(enhanced_scan_text(evasion))
+        cc_results = [r for r in results if r.category == 'Credit Card Numbers']
+        self.assertGreater(len(cc_results), 0,
+                           "Credit card with variation selector should be detected")
+
+    # ── Unicode Tags block (evasion §8.2) ──
+
+    def test_unicode_tags_stripped(self):
+        """Unicode Tags block (U+E0001-U+E007F) should be in ZERO_WIDTH_CHARS."""
+        from dlpscan.unicode_normalize import ZERO_WIDTH_CHARS
+        self.assertIn(chr(0xE0001), ZERO_WIDTH_CHARS)
+        self.assertIn(chr(0xE0041), ZERO_WIDTH_CHARS)  # Tag Latin Capital Letter A
+        self.assertIn(chr(0xE007F), ZERO_WIDTH_CHARS)
+
+    # ── Unicode whitespace normalization (evasion §2.1) ──
+
+    def test_ideographic_space_delimiter(self):
+        """Credit card with ideographic space (U+3000) as delimiter should be detected."""
+        # 4532 0151 1283 0366 with ideographic spaces
+        evasion = "card: 4532\u30000151\u30001283\u30000366"
+        results = list(enhanced_scan_text(evasion))
+        cc_results = [r for r in results if r.category == 'Credit Card Numbers']
+        self.assertGreater(len(cc_results), 0,
+                           "Credit card with ideographic space delimiters should be detected")
+
+    def test_thin_space_delimiter(self):
+        """Credit card with thin space (U+2009) as delimiter should be detected."""
+        evasion = "card: 4532\u20090151\u20091283\u20090366"
+        results = list(enhanced_scan_text(evasion))
+        cc_results = [r for r in results if r.category == 'Credit Card Numbers']
+        self.assertGreater(len(cc_results), 0,
+                           "Credit card with thin space delimiters should be detected")
+
+    def test_normalize_whitespace_function(self):
+        """normalize_whitespace should convert exotic spaces to ASCII space."""
+        from dlpscan.unicode_normalize import normalize_whitespace
+        text = "a\u2003b\u3000c\u202fd"
+        self.assertEqual(normalize_whitespace(text), "a b c d")
+
+    def test_unicode_spaces_in_constant(self):
+        """UNICODE_SPACES should contain all documented exotic whitespace chars."""
+        from dlpscan.unicode_normalize import UNICODE_SPACES
+        expected = [
+            '\u2000', '\u2001', '\u2002', '\u2003', '\u2004', '\u2005',
+            '\u2006', '\u2007', '\u2008', '\u2009', '\u200a',
+            '\u202f', '\u205f', '\u3000',
+        ]
+        for ch in expected:
+            self.assertIn(ch, UNICODE_SPACES,
+                          f"U+{ord(ch):04X} should be in UNICODE_SPACES")
+
+    # ── Cross-platform timeout (evasion §2.3 / §5.4) ──
+
+    def test_thread_timeout_class_expires(self):
+        """_ThreadTimeout should set expired flag after timeout."""
+        import time
+
+        from dlpscan.scanner import _ThreadTimeout
+        t = _ThreadTimeout(1)
+        self.assertFalse(t.expired)
+        t.start()
+        time.sleep(1.5)
+        self.assertTrue(t.expired)
+
+    def test_thread_timeout_cancel(self):
+        """_ThreadTimeout.cancel() should prevent expiration."""
+        import time
+
+        from dlpscan.scanner import _ThreadTimeout
+        t = _ThreadTimeout(1)
+        t.start()
+        t.cancel()
+        time.sleep(1.5)
+        self.assertFalse(t.expired)
+
+    # ── Scan completeness indicator (evasion §5.3) ──
+
+    def test_scan_result_has_truncation_fields(self):
+        """ScanResult should expose scan_truncated and scan_complete."""
+        from dlpscan.guard import Action, InputGuard, Preset
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REDACT)
+        result = guard.scan("card: 4532015112830366")
+        self.assertIsInstance(result.scan_truncated, bool)
+        self.assertIsInstance(result.scan_complete, bool)
+        # Normal scan should not be truncated.
+        self.assertFalse(result.scan_truncated)
+        self.assertTrue(result.scan_complete)
+
+    def test_scan_result_truncation_in_to_dict(self):
+        """scan_truncated should appear in to_dict() output."""
+        from dlpscan.guard import Action, InputGuard, Preset
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REDACT)
+        result = guard.scan("card: 4532015112830366")
+        d = result.to_dict()
+        self.assertIn('scan_truncated', d)
+
+    # ── Polymorphic / chained evasion (evasion §8.1) ──
+
+    def test_chained_evasion_fullwidth_plus_zero_width(self):
+        """Chained evasion: fullwidth digits + zero-width spaces should be detected."""
+        # 4532015112830366 in fullwidth with ZWSP between each
+        evasion = "card: " + "\u200b".join(
+            "\uff14\uff15\uff13\uff12\uff10\uff11\uff15\uff11"
+            "\uff11\uff12\uff18\uff13\uff10\uff13\uff16\uff16"
+        )
+        results = list(enhanced_scan_text(evasion))
+        cc_results = [r for r in results if r.category == 'Credit Card Numbers']
+        self.assertGreater(len(cc_results), 0,
+                           "Chained fullwidth+zero-width evasion should be detected")
+
+    def test_chained_evasion_bidi_plus_homoglyph(self):
+        """Chained evasion: RTL override + Cyrillic homoglyphs in email."""
+        evasion = "email: \u202eus\u0435r@t\u0435st.com"
+        results = list(enhanced_scan_text(evasion))
+        email_results = [r for r in results if r.sub_category == 'Email Address']
+        self.assertGreater(len(email_results), 0,
+                           "Chained bidi+homoglyph email evasion should be detected")
+
+    # ── InputGuard integration with new defenses ──
+
+    def test_guard_detects_bidi_evasion(self):
+        """InputGuard REJECT should catch credit card with bidi override."""
+        from dlpscan.guard import Action, InputGuard, InputGuardError, Preset
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REJECT)
+        evasion = "card: \u202d4532015112830366\u202c"
+        with self.assertRaises(InputGuardError):
+            guard.scan(evasion)
+
+    def test_guard_redact_ideographic_space_delimiter(self):
+        """InputGuard REDACT should handle CC with ideographic space delimiters."""
+        from dlpscan.guard import Action, InputGuard, Preset
+        guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.REDACT)
+        evasion = "card: 4532\u30000151\u30001283\u30000366"
+        result = guard.scan(evasion)
+        if not result.is_clean:
+            self.assertNotIn('4532', result.redacted_text)
+
+
 if __name__ == '__main__':
     unittest.main()
