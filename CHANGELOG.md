@@ -6,6 +6,45 @@ All notable changes to dlpscan will be documented in this file.
 
 ### New Features
 
+- **Unicode Evasion Defense** (`dlpscan.unicode_normalize`): Three-stage text
+  normalization pipeline that defeats adversarial evasion techniques before regex
+  scanning:
+  - **Zero-width stripping**: Removes 160+ invisible characters including ZWSP,
+    ZWJ, ZWNJ, BOM, soft hyphen, RTL/Bidi overrides (`U+202A`–`U+202E`,
+    `U+2066`–`U+2069`), variation selectors (`U+FE00`–`U+FE0F`), and Unicode
+    Tags block (`U+E0001`–`U+E007F`). Builds offset map for accurate span
+    mapping back to original text.
+  - **Whitespace normalization**: Converts 14 exotic Unicode whitespace
+    characters (ideographic space, thin space, hair space, etc.) to ASCII space,
+    defeating delimiter variation attacks.
+  - **Homoglyph normalization**: NFKC decomposition plus explicit mapping of 80+
+    confusable characters (Cyrillic, Greek, fullwidth Latin, subscript/superscript
+    digits, dash variants, symbol lookalikes) to ASCII equivalents.
+  - Integrated into `enhanced_scan_text()`, `redact_sensitive_info_with_patterns()`,
+    and all InputGuard transforms (REDACT, TOKENIZE, OBFUSCATE).
+
+- **Cross-Platform Regex Timeout**: `_ThreadTimeout` class provides
+  `threading.Timer`-based timeout fallback for non-Unix platforms and worker
+  threads where SIGALRM is unavailable. Checks timeout flag between pattern
+  iterations to prevent unbounded scan time.
+
+- **Scan Completeness Indicator**: `ScanResult` now exposes `scan_truncated`
+  (bool) and `scan_complete` (property) fields so API consumers can detect when
+  scans were cut short by match limits or timeouts. Included in `to_dict()` JSON
+  output.
+
+- **Evasion Techniques Catalog** (`docs/evasion_techniques.md`): Comprehensive
+  documentation of 17+ DLP evasion techniques across 8 categories with defense
+  status matrix and priority remediation roadmap.
+
+- **Evasion Defenses Guide** (`docs/evasion_defenses.md`): Technical reference
+  for all built-in defenses including architecture diagrams, character tables,
+  usage examples, and coverage summary.
+
+- **PHI/PII Baseline Doc Split**: PHI and PII baseline documentation split into
+  separate pattern and keyword files (`phi-patterns.md`, `phi-keywords.md`,
+  `pii-patterns.md`, `pii-keywords.md`) for easier reference.
+
 - **Async API**: All scan endpoints now use `run_in_executor` to avoid blocking
   the event loop, enabling proper async concurrency under load.
 

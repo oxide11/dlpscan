@@ -633,13 +633,23 @@ redact_sensitive_info("123_45_6789")   # => 'XXX_XX_XXXX'
 
 Credit card matches are automatically validated using the **Luhn algorithm** before being returned. Invalid card numbers are silently filtered out.
 
+### Unicode Evasion Defense
+
+All text is preprocessed through a three-stage normalization pipeline before regex scanning:
+
+1. **Zero-width stripping** — Removes 160+ invisible characters (ZWSP, ZWJ, bidi overrides, variation selectors, Unicode Tags) that attackers insert to break regex continuity. Builds an offset map for accurate span mapping back to the original text.
+2. **Whitespace normalization** — Converts 14 exotic Unicode spaces (ideographic, thin, hair, em, en, etc.) to ASCII space, defeating delimiter variation attacks.
+3. **Homoglyph normalization** — NFKC decomposition + explicit mapping of 80+ Cyrillic/Greek/fullwidth confusables to ASCII equivalents.
+
+This defeats zero-width insertion, RTL/bidi manipulation, homoglyph substitution, delimiter variation, and chained/polymorphic evasion techniques. See [docs/evasion_defenses.md](docs/evasion_defenses.md) for the full technical reference.
+
 ### ReDoS Protection
 
-All regex matching is wrapped in a timeout guard (`SIGALRM` on Unix, main thread only). If a pattern takes longer than 5 seconds on a given input, it is skipped. A global scan timeout of 120 seconds prevents unbounded total scan time. On Windows or in non-main threads, timeouts are unavailable and matching runs unguarded.
+Regex matching uses a dual-layer timeout: `SIGALRM` on Unix main thread (hard interrupt, 5s per pattern) and a `threading.Timer` fallback on all other platforms and threads (checked between pattern iterations). A global scan timeout of 120 seconds prevents unbounded total scan time. Both layers are always active — no platform or threading context is unguarded.
 
 ### Match Limits
 
-`enhanced_scan_text` caps output at 50,000 matches by default (configurable via `max_matches`). This prevents memory exhaustion on dense or pathological inputs.
+`enhanced_scan_text` caps output at 50,000 matches by default (configurable via `max_matches`). `ScanResult.scan_truncated` indicates whether the scan was cut short by match limits or timeout, and `ScanResult.scan_complete` is `True` only when the full scan completed.
 
 ### Input Safety
 
@@ -650,7 +660,7 @@ All regex matching is wrapped in a timeout guard (`SIGALRM` on Unix, main thread
 
 ### Thread Safety
 
-The SIGALRM-based timeout only works in the main thread on Unix. When called from background threads, regex timeouts are automatically disabled. The scanner is safe to call from any thread, but ReDoS protection is only active in the main thread.
+The scanner is safe to call from any thread. On Unix main thread, SIGALRM provides hard timeout interrupts. On all other threads and platforms, a `threading.Timer` fallback ensures timeout protection remains active. ReDoS protection is available in all contexts.
 
 ## API Reference
 
@@ -823,14 +833,19 @@ The `docs/` folder contains all patterns and keywords in plain markdown, indepen
 
 ```
 docs/
-├── patterns/          # Raw regex patterns (copy-paste into any language)
+├── patterns/              # Raw regex patterns (copy-paste into any language)
 │   ├── generic/
 │   ├── custom/
 │   └── regions/
-└── keywords/          # Context keywords for proximity detection
-    ├── generic/
-    ├── custom/
-    └── regions/
+├── keywords/              # Context keywords for proximity detection
+│   ├── generic/
+│   ├── custom/
+│   └── regions/
+├── baselines/             # Compliance baseline references (PCI, PHI, PII)
+│   ├── phi.md / phi-patterns.md / phi-keywords.md
+│   └── pii.md / pii-patterns.md / pii-keywords.md
+├── evasion_techniques.md  # Adversarial evasion technique catalog
+└── evasion_defenses.md    # Built-in defense technical reference
 ```
 
 Use these files to integrate dlpscan's detection rules into any tool or language — the regex syntax is standard PCRE-compatible.
@@ -853,6 +868,7 @@ dlpscan/
 ├── extractors.py                  # Text extraction from binary formats
 ├── pipeline.py                    # Queue-based file processing pipeline
 ├── streaming.py                   # Real-time stream & webhook scanners
+├── unicode_normalize.py           # Unicode evasion defense (zero-width, homoglyphs, bidi)
 ├── audit.py                       # Enterprise audit logging framework
 ├── rate_limit.py                  # Token bucket rate limiter
 ├── env_config.py                  # DLPSCAN_* environment variable configuration
@@ -883,7 +899,7 @@ dlpscan/
 ## Testing
 
 ```bash
-python -m unittest tests.unit -v          # Unit tests (335 tests)
+python -m unittest tests.unit -v          # Unit tests (415 tests)
 python -m unittest tests.test_integration  # Integration tests
 python tests/benchmarks.py                 # Performance benchmarks
 
@@ -893,7 +909,7 @@ coverage run -m unittest tests.unit -v
 coverage report
 ```
 
-288 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering, config loading, SARIF output, custom pattern registration, output redaction, metrics/observability, plugin system, structured logging, async scanning, text extraction, the file processing pipeline, InputGuard module, custom patterns via InputGuard, per-category confidence tuning, pipeline structured output, streaming scanner, webhook scanner, tokenization, and obfuscation.
+415 tests covering redaction, Luhn validation, input validation, category filtering, context detection, classification labels, regional patterns, secrets detection, false positive reduction, delimiter handling, Match dataclass, confidence scoring, overlap deduplication, file/stream/directory scanning, allowlist filtering, config loading, SARIF output, custom pattern registration, output redaction, metrics/observability, plugin system, structured logging, async scanning, text extraction, the file processing pipeline, InputGuard module, custom patterns via InputGuard, per-category confidence tuning, pipeline structured output, streaming scanner, webhook scanner, tokenization, obfuscation, Unicode zero-width evasion, homoglyph normalization, RTL/bidi stripping, delimiter variation defense, cross-platform timeout, and scan completeness indicators.
 
 ## Docker
 
