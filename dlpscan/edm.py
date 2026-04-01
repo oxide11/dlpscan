@@ -86,14 +86,6 @@ def _tokenize_numeric(text: str) -> List[Tuple[str, Tuple[int, int]]]:
     return candidates
 
 
-def _tokenize_email(text: str) -> List[Tuple[str, Tuple[int, int]]]:
-    """Extract email-like tokens."""
-    for m in re.finditer(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', text):
-        candidates = [(m.group(), m.span())]
-        return candidates
-    return []
-
-
 _EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
 
 
