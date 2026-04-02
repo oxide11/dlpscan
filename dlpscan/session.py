@@ -225,7 +225,7 @@ class SessionCorrelator:
                     if not fnmatch.fnmatch(user_id, policy.user_pattern):
                         continue
 
-                    if policy.max_total > 0 and total >= policy.max_total:
+                    if policy.max_total > 0 and total > policy.max_total:
                         alert = CorrelationAlert(
                             alert_type="total_threshold",
                             user_id=user_id,
@@ -241,7 +241,7 @@ class SessionCorrelator:
                             user_id, category, total, policy.max_total, category,
                         )
 
-                    if policy.max_unique > 0 and unique >= policy.max_unique:
+                    if policy.max_unique > 0 and unique > policy.max_unique:
                         alert = CorrelationAlert(
                             alert_type="unique_threshold",
                             user_id=user_id,
@@ -275,7 +275,8 @@ class SessionCorrelator:
 
     def estimate_total(self, user_id: str, category: str) -> int:
         """Estimate total match count for a user+category in current window."""
-        return self._cms.estimate(f"{user_id}:{category}")
+        with self._lock:
+            return self._cms.estimate(f"{user_id}:{category}")
 
     def estimate_unique(self, user_id: str) -> int:
         """Estimate unique value count for a user in current window."""

@@ -5116,7 +5116,7 @@ class TestSessionCorrelator(unittest.TestCase):
 
         matches = [self._make_match("SSN", f"123-45-678{i}") for i in range(5)]
         alerts = sc.record_matches(matches, user_id="user1")
-        # Should alert once total >= 3
+        # Should alert once total > 3
         ssn_alerts = [a for a in alerts if a.category == "SSN"]
         self.assertGreater(len(ssn_alerts), 0)
 
