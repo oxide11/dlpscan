@@ -115,7 +115,7 @@ pub static PATTERNS: &[PatternDef] = &[
     PatternDef {
         category: "Banking and Financial",
         sub_category: "IBAN Generic",
-        regex: r"\b[A-Z]{2}\d{2}[\s]?[\dA-Z]{4}(?:[\s]?[\dA-Z]{4}){2,7}(?:[\s]?[\dA-Z]{1,4})?\b",
+        regex: r"\b[A-Z]{2}\d{2}[-.\s]?[\dA-Z]{4}(?:[-.\s]?[\dA-Z]{4}){2,7}(?:[-.\s]?[\dA-Z]{1,4})?\b",
         case_insensitive: false,
         specificity: 0.90,
         context_required: false,
@@ -443,7 +443,7 @@ pub static PATTERNS: &[PatternDef] = &[
     PatternDef {
         category: "Contact Information",
         sub_category: "E.164 Phone Number",
-        regex: r"\+[1-9]\d{6,14}\b",
+        regex: r"\+[1-9][-.\s]?\d{1,4}(?:[-.\s]?\d{1,4}){1,6}\b",
         case_insensitive: false,
         specificity: 0.70,
         context_required: false,
@@ -2291,7 +2291,7 @@ pub static PATTERNS: &[PatternDef] = &[
     PatternDef {
         category: "Europe - Germany",
         sub_category: "Germany IBAN",
-        regex: r"\bDE\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b",
+        regex: r"\bDE\d{2}[-.\s]?\d{4}[-.\s]?\d{4}[-.\s]?\d{4}[-.\s]?\d{4}[-.\s]?\d{2}\b",
         case_insensitive: true,
         specificity: 0.40,
         context_required: false,
@@ -2331,7 +2331,7 @@ pub static PATTERNS: &[PatternDef] = &[
     PatternDef {
         category: "Europe - France",
         sub_category: "France IBAN",
-        regex: r"\bFR\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{3}\b",
+        regex: r"\bFR\d{2}[-.\s]?\d{4}[-.\s]?\d{4}[-.\s]?\d{4}[-.\s]?\d{4}[-.\s]?\d{3}\b",
         case_insensitive: true,
         specificity: 0.40,
         context_required: false,
@@ -2403,7 +2403,7 @@ pub static PATTERNS: &[PatternDef] = &[
     PatternDef {
         category: "Europe - Netherlands",
         sub_category: "Netherlands IBAN",
-        regex: r"\bNL\d{2}\s?[A-Z]{4}\s?\d{4}\s?\d{4}\s?\d{2}\b",
+        regex: r"\bNL\d{2}[-.\s]?[A-Z]{4}[-.\s]?\d{4}[-.\s]?\d{4}[-.\s]?\d{2}\b",
         case_insensitive: true,
         specificity: 0.40,
         context_required: false,

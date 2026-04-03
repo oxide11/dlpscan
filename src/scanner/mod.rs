@@ -282,7 +282,16 @@ pub fn scan_text_with_config(text: &str, config: &ScanConfig) -> crate::Result<S
                         text.len()
                     };
                     let oe = if norm_end > 0 && norm_end <= offset_map.len() {
-                        offset_map[norm_end - 1] + 1
+                        // Find the end of the original character at the last
+                        // normalized byte. offset_map gives us the start byte
+                        // of the original char — we need the byte AFTER it.
+                        let last_orig = offset_map[norm_end - 1];
+                        // Walk forward to the next char boundary in the original text
+                        let mut end = last_orig + 1;
+                        while end < text.len() && !text.is_char_boundary(end) {
+                            end += 1;
+                        }
+                        end
                     } else {
                         text.len()
                     };
@@ -380,5 +389,149 @@ mod tests {
         let output =
             scan_text_with_config("Email: test@example.com SSN: 123-45-6789", &config).unwrap();
         assert!(output.matches.iter().all(|m| m.category == "Contact Information"));
+    }
+
+    // ---- Evasion detection tests ----
+
+    #[test]
+    fn test_ssn_plain_formats() {
+        for input in &[
+            "SSN: 123-45-6789",
+            "SSN: 123 45 6789",
+            "SSN: 123.45.6789",
+            "SSN: 123456789",
+            "SSN: 123/45/6789",
+        ] {
+            let result = scan_text(input).unwrap();
+            assert!(
+                result.iter().any(|m| m.sub_category == "USA SSN"),
+                "Failed to detect SSN in: {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_ssn_zero_width_evasion() {
+        // Zero-width spaces inserted between digits
+        let input = "SSN: 123\u{200B}-\u{200B}45\u{200B}-\u{200B}6789";
+        let result = scan_text(input).unwrap();
+        assert!(
+            result.iter().any(|m| m.sub_category == "USA SSN"),
+            "Failed to detect SSN with zero-width chars"
+        );
+    }
+
+    #[test]
+    fn test_ssn_fullwidth_digits() {
+        // Fullwidth digits: １２３-４５-６７８９
+        let input = "SSN: \u{FF11}\u{FF12}\u{FF13}-\u{FF14}\u{FF15}-\u{FF16}\u{FF17}\u{FF18}\u{FF19}";
+        let result = scan_text(input).unwrap();
+        assert!(
+            result.iter().any(|m| m.sub_category == "USA SSN"),
+            "Failed to detect SSN with fullwidth digits"
+        );
+    }
+
+    #[test]
+    fn test_iban_with_dashes() {
+        let result = scan_text("IBAN: DE89-3704-0044-0532-0130-00").unwrap();
+        assert!(
+            result.iter().any(|m| m.sub_category.contains("IBAN")),
+            "Failed to detect IBAN with dashes"
+        );
+    }
+
+    #[test]
+    fn test_iban_with_dots() {
+        let result = scan_text("IBAN: GB29.NWBK.6016.1331.9268.19").unwrap();
+        assert!(
+            result.iter().any(|m| m.sub_category.contains("IBAN")),
+            "Failed to detect IBAN with dots"
+        );
+    }
+
+    #[test]
+    fn test_iban_no_separators() {
+        let result = scan_text("IBAN: DE89370400440532013000").unwrap();
+        assert!(
+            result.iter().any(|m| m.sub_category.contains("IBAN")),
+            "Failed to detect IBAN without separators"
+        );
+    }
+
+    #[test]
+    fn test_e164_phone_with_spaces() {
+        let result = scan_text("Phone: +1 234 567 8901").unwrap();
+        assert!(
+            result.iter().any(|m| m.sub_category.contains("Phone")),
+            "Failed to detect E.164 phone with spaces"
+        );
+    }
+
+    #[test]
+    fn test_e164_phone_with_dashes() {
+        let result = scan_text("Phone: +44-20-7183-8750").unwrap();
+        assert!(
+            result.iter().any(|m| m.sub_category.contains("Phone")),
+            "Failed to detect E.164 phone with dashes"
+        );
+    }
+
+    #[test]
+    fn test_credit_card_zero_width_evasion() {
+        // Valid Visa with zero-width spaces
+        let input = "Card: 4532\u{200B}0151\u{200B}1283\u{200B}0366";
+        let result = scan_text(input).unwrap();
+        assert!(
+            result.iter().any(|m| m.sub_category == "Visa"),
+            "Failed to detect Visa with zero-width chars"
+        );
+    }
+
+    #[test]
+    fn test_credit_card_fullwidth_digits() {
+        // Valid Visa in fullwidth: ４５３２０１５１１２８３０３６６
+        let input = "Card: \u{FF14}\u{FF15}\u{FF13}\u{FF12}\u{FF10}\u{FF11}\u{FF15}\u{FF11}\u{FF11}\u{FF12}\u{FF18}\u{FF13}\u{FF10}\u{FF13}\u{FF16}\u{FF16}";
+        let result = scan_text(input).unwrap();
+        assert!(
+            result.iter().any(|m| m.sub_category == "Visa"),
+            "Failed to detect Visa with fullwidth digits"
+        );
+    }
+
+    #[test]
+    fn test_email_fullwidth_at() {
+        // Fullwidth @ sign: user＠example.com
+        let input = "Email: user\u{FF20}example.com";
+        let result = scan_text(input).unwrap();
+        assert!(
+            result.iter().any(|m| m.sub_category == "Email Address"),
+            "Failed to detect email with fullwidth @"
+        );
+    }
+
+    #[test]
+    fn test_sin_with_unicode_separators() {
+        // Canada SIN with en-dash
+        let input = "SIN: 046\u{2013}454\u{2013}286";
+        let result = scan_text(input).unwrap();
+        assert!(
+            result.iter().any(|m| m.sub_category == "Canada SIN"),
+            "Failed to detect SIN with en-dash separators"
+        );
+    }
+
+    #[test]
+    fn test_specificity_scores_correct() {
+        // Verify the name mismatches are fixed
+        use crate::models::pattern_specificity;
+        assert!(pattern_specificity("E.164 Phone Number") > 0.5, "E.164 Phone should be > 0.5");
+        assert!(pattern_specificity("USA SSN") > 0.4, "USA SSN should be > default");
+        assert!(pattern_specificity("Canada SIN") > 0.4, "Canada SIN should be > default");
+        assert!(pattern_specificity("US Phone Number") > 0.4, "US Phone should be > default");
+        assert!(pattern_specificity("Slack Webhook") > 0.5, "Slack Webhook should be > 0.5");
+        assert!(pattern_specificity("Bitcoin Address (Legacy)") > 0.5, "BTC Legacy should be > 0.5");
+        assert!(pattern_specificity("URL with Password") > 0.5, "URL with Password should be > 0.5");
+        assert!(pattern_specificity("URL with Token") > 0.5, "URL with Token should be > 0.5");
     }
 }

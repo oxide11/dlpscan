@@ -137,9 +137,17 @@ pub fn pattern_specificity(sub_category: &str) -> f64 {
         "Teller ID" => 0.35,
         "Cardholder Name Pattern" => 0.10,
 
+        // National IDs
+        "USA SSN" => 0.55,
+        "USA ITIN" => 0.60,
+        "Canada SIN" => 0.55,
+        "UK NIN" => 0.65,
+
         // Contact Info
         "Email Address" => 0.90,
-        "Phone Number (E.164)" => 0.70,
+        "E.164 Phone Number" => 0.70,
+        "US Phone Number" => 0.50,
+        "UK Phone Number" => 0.50,
         "IPv4 Address" => 0.60,
         "IPv6 Address" => 0.80,
         "MAC Address" => 0.80,
@@ -182,7 +190,7 @@ pub fn pattern_specificity(sub_category: &str) -> f64 {
         "Bearer Token" => 0.80,
         "JWT Token" => 0.95,
         "Private Key" => 0.95,
-        "API Key Generic" | "Generic API Key" => 0.50,
+        "Generic API Key" => 0.50,
         "Database Connection String" => 0.90,
         "AWS Access Key" => 0.95,
         "AWS Secret Key" => 0.90,
@@ -192,12 +200,12 @@ pub fn pattern_specificity(sub_category: &str) -> f64 {
         "Stripe Secret Key" => 0.95,
         "Stripe Publishable Key" => 0.85,
         "Slack Bot Token" | "Slack User Token" => 0.95,
-        "Slack Webhook URL" => 0.90,
+        "Slack Webhook" => 0.90,
         "SendGrid API Key" => 0.95,
         "Twilio API Key" | "Mailgun API Key" => 0.90,
 
         // Cryptocurrency
-        "Bitcoin Address" | "Ethereum Address" | "Litecoin Address" | "Ripple Address" => 0.80,
+        "Bitcoin Address (Legacy)" | "Bitcoin Address (Bech32)" | "Ethereum Address" | "Litecoin Address" | "Ripple Address" => 0.80,
         "Bitcoin Cash Address" => 0.75,
         "Monero Address" => 0.85,
 
@@ -205,8 +213,8 @@ pub fn pattern_specificity(sub_category: &str) -> f64 {
         "VIN" => 0.70,
 
         // URLs
-        "URL with Credentials" => 0.90,
-        "URL with Token Parameter" => 0.75,
+        "URL with Password" => 0.90,
+        "URL with Token" => 0.75,
 
         _ => DEFAULT_SPECIFICITY,
     }
