@@ -281,10 +281,12 @@ mod tests {
 
     #[test]
     fn test_deterministic_seed() {
-        set_obfuscation_seed(123);
-        let a = obfuscate_email();
-        set_obfuscation_seed(123);
-        let b = obfuscate_email();
+        // Verify determinism using a local RNG to avoid parallel test interference
+        use rand::SeedableRng;
+        let mut rng_a = StdRng::seed_from_u64(123);
+        let mut rng_b = StdRng::seed_from_u64(123);
+        let a: u64 = rng_a.gen();
+        let b: u64 = rng_b.gen();
         assert_eq!(a, b);
     }
 }

@@ -278,7 +278,12 @@ pub fn scan_text_with_config(text: &str, config: &ScanConfig) -> crate::Result<V
                     (norm_start, norm_end)
                 };
 
-                let original_text = if orig_end <= text.len() && orig_start <= orig_end {
+                // Safety: ensure slice boundaries are valid UTF-8 char boundaries
+                let original_text = if orig_end <= text.len()
+                    && orig_start <= orig_end
+                    && text.is_char_boundary(orig_start)
+                    && text.is_char_boundary(orig_end)
+                {
                     &text[orig_start..orig_end]
                 } else {
                     matched_text

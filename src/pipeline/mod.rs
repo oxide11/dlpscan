@@ -156,24 +156,30 @@ impl Pipeline {
             };
         }
 
-        // Read file as text
-        let text = match fs::read_to_string(path) {
-            Ok(t) => t,
-            Err(e) => {
-                return PipelineResult {
-                    file_path,
-                    matches: vec![],
-                    format_detected: "binary".into(),
-                    duration_ms: start.elapsed().as_secs_f64() * 1000.0,
-                    error: Some(format!("Cannot read as text: {e}")),
-                    file_size_bytes: metadata.len(),
-                    extracted_text_length: 0,
-                };
+        // Try extractor first (handles DOCX, XLSX, PDF, EML, etc.), fall back to plain text
+        let file_path_str = path.display().to_string();
+        let (text, format) = match crate::extractors::extract_text(&file_path_str) {
+            Ok(result) => (result.text, result.format),
+            Err(_) => {
+                // Extractor failed, try reading as plain text
+                match fs::read_to_string(path) {
+                    Ok(t) => (t, detect_format(path)),
+                    Err(e) => {
+                        return PipelineResult {
+                            file_path,
+                            matches: vec![],
+                            format_detected: "binary".into(),
+                            duration_ms: start.elapsed().as_secs_f64() * 1000.0,
+                            error: Some(format!("Cannot read file: {e}")),
+                            file_size_bytes: metadata.len(),
+                            extracted_text_length: 0,
+                        };
+                    }
+                }
             }
         };
 
         let text_len = text.len();
-        let format = detect_format(path);
 
         let config = ScanConfig {
             categories: self.categories.clone(),
