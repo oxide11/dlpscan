@@ -48,7 +48,7 @@ impl TokenVault {
             HmacSha256::new_from_slice(&self.secret).expect("HMAC accepts any key length");
         mac.update(value.as_bytes());
         let result = mac.finalize().into_bytes();
-        let hash_hex: String = result.iter().take(4).map(|b| format!("{b:02x}")).collect();
+        let hash_hex: String = result.iter().take(16).map(|b| format!("{b:02x}")).collect();
 
         let token = format!("{}_{cat_abbrev}_{hash_hex}", self.prefix);
 

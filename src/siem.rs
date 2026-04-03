@@ -132,10 +132,10 @@ impl SIEMAdapter for SyslogAdapter {
 
 /// Splunk HTTP Event Collector adapter.
 pub struct SplunkHECAdapter {
-    pub url: String,
-    pub token: String,
-    pub source: String,
-    pub sourcetype: String,
+    pub(crate) url: String,
+    pub(crate) token: String,
+    pub(crate) source: String,
+    pub(crate) sourcetype: String,
     lock: Mutex<()>,
 }
 
@@ -440,7 +440,61 @@ fn hostname() -> String {
         .unwrap_or_else(|_| "unknown".to_string())
 }
 
-/// Simple synchronous HTTP POST using TcpStream (HTTP only, not HTTPS).
+/// Parse a URL into (scheme, host, port, path). Returns `Err` for unsupported schemes.
+fn parse_siem_url(url: &str) -> Result<(&str, &str, u16, &str), String> {
+    let (scheme, rest) = if let Some(r) = url.strip_prefix("https://") {
+        ("https", r)
+    } else if let Some(r) = url.strip_prefix("http://") {
+        ("http", r)
+    } else {
+        return Err(format!(
+            "Unsupported URL scheme (must be http:// or https://): {}",
+            crate::webhooks::sanitize_url(url)
+        ));
+    };
+
+    // Strip userinfo if present
+    let after_userinfo = if let Some(at) = rest.find('@') {
+        let slash = rest.find('/').unwrap_or(rest.len());
+        if at < slash { &rest[at + 1..] } else { rest }
+    } else {
+        rest
+    };
+
+    let (host_port, path) = after_userinfo
+        .find('/')
+        .map(|i| (&after_userinfo[..i], &after_userinfo[i..]))
+        .unwrap_or((after_userinfo, "/"));
+
+    let default_port: u16 = if scheme == "https" { 443 } else { 80 };
+    let (host, port) = if let Some(i) = host_port.find(':') {
+        (
+            &host_port[..i],
+            host_port[i + 1..].parse::<u16>().unwrap_or(default_port),
+        )
+    } else {
+        (host_port, default_port)
+    };
+
+    Ok((scheme, host, port, path))
+}
+
+/// Validate that a SIEM endpoint URL has a supported scheme.
+fn validate_siem_url(url: &str) -> Result<(), String> {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err(format!(
+            "SIEM URL must use http:// or https:// scheme (got: {})",
+            crate::webhooks::sanitize_url(url)
+        ));
+    }
+    Ok(())
+}
+
+/// Synchronous HTTP POST supporting both `http://` and `https://` URL parsing.
+///
+/// For `http://` URLs, uses a raw `TcpStream`.
+/// For `https://` URLs, returns an error directing users to enable the
+/// `async-support` feature (TLS requires additional dependencies).
 fn http_post_sync(
     url: &str,
     body: &[u8],
@@ -448,24 +502,15 @@ fn http_post_sync(
 ) -> Result<u16, String> {
     use std::io::{Read, Write};
 
-    // Parse URL
-    let url_str = url.strip_prefix("http://").ok_or_else(|| {
-        format!("Only http:// URLs supported in sync mode (got {url}). Enable async-support for HTTPS.")
-    })?;
+    let (scheme, host, port, path) = parse_siem_url(url)?;
 
-    let (host_port, path) = url_str
-        .find('/')
-        .map(|i| (&url_str[..i], &url_str[i..]))
-        .unwrap_or((url_str, "/"));
-
-    let (host, port) = if let Some(i) = host_port.find(':') {
-        (
-            &host_port[..i],
-            host_port[i + 1..].parse::<u16>().unwrap_or(80),
-        )
-    } else {
-        (host_port, 80u16)
-    };
+    if scheme == "https" {
+        return Err(format!(
+            "HTTPS URLs require the `async-support` feature for TLS. \
+             Cannot connect to {} over plaintext.",
+            crate::webhooks::sanitize_url(url)
+        ));
+    }
 
     let addr = format!("{host}:{port}");
     let mut stream = std::net::TcpStream::connect_timeout(

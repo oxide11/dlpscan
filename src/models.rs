@@ -46,10 +46,13 @@ impl Match {
     /// Return a redacted version of the matched text.
     /// Shows first 3 and last 3 characters for matches longer than 8 chars.
     pub fn redacted_text(&self) -> String {
-        if self.text.len() > 8 {
-            format!("{}...{}", &self.text[..3], &self.text[self.text.len() - 3..])
+        if self.text.len() <= 8 {
+            "*".repeat(self.text.len())
         } else {
-            "***".to_string()
+            let first: String = self.text.chars().take(3).collect();
+            let last: String = self.text.chars().rev().take(3).collect::<Vec<_>>().into_iter().rev().collect();
+            let middle_len = self.text.chars().count().saturating_sub(6);
+            format!("{}{}{}", first, "*".repeat(middle_len), last)
         }
     }
 

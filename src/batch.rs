@@ -40,11 +40,13 @@ pub struct BatchReport {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn truncate(text: &str, max_len: usize) -> String {
-    if text.len() <= max_len {
+fn truncate(text: &str, max_chars: usize) -> String {
+    let char_count = text.chars().count();
+    if char_count <= max_chars {
         text.to_string()
     } else {
-        format!("{}...", &text[..max_len.min(text.len())])
+        let truncated: String = text.chars().take(max_chars).collect();
+        format!("{}...", truncated)
     }
 }
 

@@ -77,14 +77,19 @@ impl Allowlist {
     }
 }
 
+const MAX_GLOB_RECURSION: usize = 1000;
+
 /// Simple glob matching (supports * and ?).
 fn glob_matches(pattern: &str, text: &str) -> bool {
     let pattern_chars: Vec<char> = pattern.chars().collect();
     let text_chars: Vec<char> = text.chars().collect();
-    glob_match_recursive(&pattern_chars, &text_chars, 0, 0)
+    glob_match_recursive(&pattern_chars, &text_chars, 0, 0, 0)
 }
 
-fn glob_match_recursive(pattern: &[char], text: &[char], pi: usize, ti: usize) -> bool {
+fn glob_match_recursive(pattern: &[char], text: &[char], pi: usize, ti: usize, depth: usize) -> bool {
+    if depth > MAX_GLOB_RECURSION {
+        return false; // Bail out to prevent DoS
+    }
     if pi == pattern.len() && ti == text.len() {
         return true;
     }
@@ -95,7 +100,7 @@ fn glob_match_recursive(pattern: &[char], text: &[char], pi: usize, ti: usize) -
     if pattern[pi] == '*' {
         // Try matching * with zero or more characters
         for i in ti..=text.len() {
-            if glob_match_recursive(pattern, text, pi + 1, i) {
+            if glob_match_recursive(pattern, text, pi + 1, i, depth + 1) {
                 return true;
             }
         }
@@ -107,7 +112,7 @@ fn glob_match_recursive(pattern: &[char], text: &[char], pi: usize, ti: usize) -
     }
 
     if pattern[pi] == '?' || pattern[pi] == text[ti] {
-        return glob_match_recursive(pattern, text, pi + 1, ti + 1);
+        return glob_match_recursive(pattern, text, pi + 1, ti + 1, depth + 1);
     }
 
     false

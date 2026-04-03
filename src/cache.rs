@@ -118,6 +118,10 @@ impl ScanCache {
             }
         }
 
+        // Don't retain sensitive text in cache — clear the original input
+        let mut result = result;
+        result.text = String::new();
+
         inner.map.insert(
             k.clone(),
             CacheEntry {
@@ -200,7 +204,7 @@ mod tests {
         cache.put("hello", result.clone());
         let got = cache.get("hello");
         assert!(got.is_some());
-        assert_eq!(got.unwrap().text, "hello");
+        assert_eq!(got.unwrap().text, ""); // text is cleared to avoid caching sensitive data
     }
 
     #[test]

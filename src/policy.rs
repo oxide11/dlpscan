@@ -295,8 +295,17 @@ pub fn load_policy_from_str(toml_str: &str) -> crate::Result<Policy> {
     Ok(policy)
 }
 
+const MAX_POLICY_FILE_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
+
 /// Load policy from file.
 pub fn load_policy(path: &str) -> crate::Result<Policy> {
+    let metadata = fs::metadata(path)?;
+    if metadata.len() > MAX_POLICY_FILE_SIZE {
+        return Err(crate::DlpError::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Policy file too large: {} bytes", metadata.len()),
+        )));
+    }
     let content = fs::read_to_string(path)?;
     load_policy_from_str(&content)
 }

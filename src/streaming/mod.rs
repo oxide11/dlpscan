@@ -16,6 +16,9 @@ pub struct StreamScanner {
 impl StreamScanner {
     /// Create a new stream scanner.
     pub fn new(buffer_size: usize, overlap: usize) -> Self {
+        let buffer_size = buffer_size.min(100 * 1024 * 1024); // Cap at 100MB
+        let buffer_size = buffer_size.max(1024); // At least 1KB
+        let overlap = overlap.min(buffer_size / 2); // Overlap can't exceed half buffer
         Self {
             buffer: Mutex::new(String::with_capacity(buffer_size + overlap)),
             buffer_size,

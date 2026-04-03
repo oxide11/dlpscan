@@ -11,6 +11,7 @@ static OBFUSCATION_RNG: Lazy<Mutex<StdRng>> = Lazy::new(|| Mutex::new(StdRng::fr
 
 /// Set seed for deterministic obfuscation (for testing/auditing).
 pub fn set_obfuscation_seed(seed: u64) {
+    tracing::warn!("Obfuscation seed set — output will be deterministic and predictable");
     *OBFUSCATION_RNG.lock().unwrap_or_else(|e| e.into_inner()) = StdRng::seed_from_u64(seed);
 }
 

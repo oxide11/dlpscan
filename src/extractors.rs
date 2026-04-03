@@ -12,6 +12,15 @@ use std::sync::Mutex;
 /// Maximum file size for extraction (100 MB).
 pub const MAX_EXTRACT_SIZE: usize = 100 * 1024 * 1024;
 
+/// Maximum total extracted size from archives (500 MB).
+const MAX_EXTRACT_TOTAL_SIZE: u64 = 500 * 1024 * 1024;
+
+/// Maximum single entry size from archives (100 MB).
+const MAX_EXTRACT_ENTRY_SIZE: u64 = 100 * 1024 * 1024;
+
+/// Maximum number of files to extract from archives.
+const MAX_EXTRACT_FILE_COUNT: usize = 10_000;
+
 /// Sanitize an archive entry name to prevent path traversal attacks.
 /// Returns None if the path is unsafe (contains `..`, absolute paths, etc).
 fn sanitize_archive_path(base: &std::path::Path, entry_name: &str) -> Option<std::path::PathBuf> {
@@ -85,7 +94,7 @@ pub fn register_extractor(extension: &str, func: ExtractorFn) {
     let ext = extension.trim_start_matches('.').to_lowercase();
     CUSTOM_EXTRACTORS
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .insert(ext, func);
 }
 
@@ -265,8 +274,15 @@ fn detect_and_extract(file_path: &str) -> Option<ExtractorFn> {
         return Some(extract_sqlite);
     }
 
-    // Text-based format detection (need to read content)
-    if let Ok(content) = std::fs::read_to_string(file_path) {
+    // Text-based format detection (read only first 8192 bytes)
+    let content_result: Result<String, std::io::Error> = (|| {
+        let f = std::fs::File::open(file_path)?;
+        let mut limited = std::io::Read::take(f, 8192);
+        let mut buf = Vec::with_capacity(8192);
+        std::io::Read::read_to_end(&mut limited, &mut buf)?;
+        Ok(String::from_utf8_lossy(&buf).to_string())
+    })();
+    if let Ok(content) = content_result {
         let trimmed = content.trim_start();
 
         // vCard: BEGIN:VCARD
@@ -550,11 +566,27 @@ fn extract_zip_based(file_path: &str) -> Result<ExtractionResult, String> {
         })
         .collect();
 
+    let mut total_read: u64 = 0;
+    let mut entry_count: usize = 0;
+
     for xml_path in xml_paths {
+        if entry_count >= MAX_EXTRACT_FILE_COUNT {
+            break;
+        }
         if let Ok(mut file) = archive.by_name(&xml_path) {
+            // Skip entries larger than the per-entry limit
+            if file.size() > MAX_EXTRACT_ENTRY_SIZE {
+                continue;
+            }
+            // Check total budget before reading
+            if total_read + file.size() > MAX_EXTRACT_TOTAL_SIZE {
+                break;
+            }
             use std::io::Read;
             let mut xml_content = String::new();
             if file.read_to_string(&mut xml_content).is_ok() {
+                total_read += xml_content.len() as u64;
+                entry_count += 1;
                 // Simple XML text extraction: strip tags
                 text.push_str(&strip_xml_tags(&xml_content));
                 text.push('\n');
@@ -1521,6 +1553,10 @@ fn extract_opendocument(file_path: &str) -> Result<ExtractionResult, String> {
     // Extract text from content.xml (primary content) and meta.xml (metadata)
     for xml_name in &["content.xml", "meta.xml", "styles.xml"] {
         if let Ok(mut file) = archive.by_name(xml_name) {
+            // Skip entries larger than 100MB
+            if file.size() > MAX_EXTRACT_ENTRY_SIZE {
+                continue;
+            }
             use std::io::Read;
             let mut xml_content = String::new();
             if file.read_to_string(&mut xml_content).is_ok() {
@@ -1570,7 +1606,9 @@ fn extract_msg(file_path: &str) -> Result<ExtractionResult, String> {
         if let Ok(mut stream) = comp.open_stream(&path) {
             use std::io::Read;
             let mut buf = Vec::new();
-            if stream.read_to_end(&mut buf).is_ok() && !buf.is_empty() {
+            // Limit read to 100MB per stream to prevent memory exhaustion
+            let mut limited = Read::take(&mut stream, MAX_EXTRACT_ENTRY_SIZE);
+            if limited.read_to_end(&mut buf).is_ok() && !buf.is_empty() {
                 // Try UTF-16LE first (001F suffix), then UTF-8/Latin1 (001E suffix)
                 let content = if stream_name.ends_with("001F") {
                     // UTF-16LE
@@ -1634,9 +1672,39 @@ fn extract_rar(file_path: &str) -> Result<ExtractionResult, String> {
         .map_err(|e| format!("Failed to open RAR for processing: {}", e))?;
 
     let mut cursor = archive;
+    let mut total_extracted_size: u64 = 0;
+    let mut extracted_count: usize = 0;
     while let Ok(Some(header)) = cursor.read_header() {
         let entry = header.entry();
         let name = entry.filename.to_string_lossy().to_string();
+
+        // Check file count limit
+        if extracted_count >= MAX_EXTRACT_FILE_COUNT {
+            match header.skip() {
+                Ok(next) => { cursor = next; continue; }
+                Err(_) => break,
+            }
+        }
+
+        // Validate entry name for path traversal BEFORE extraction
+        let name_path = std::path::Path::new(&name);
+        let has_traversal = name_path.components().any(|c| matches!(c, std::path::Component::ParentDir))
+            || name_path.is_absolute();
+        if has_traversal {
+            match header.skip() {
+                Ok(next) => { cursor = next; continue; }
+                Err(_) => break,
+            }
+        }
+
+        // Check total extracted size limit
+        if total_extracted_size + entry.unpacked_size > MAX_EXTRACT_TOTAL_SIZE {
+            match header.skip() {
+                Ok(next) => { cursor = next; continue; }
+                Err(_) => break,
+            }
+        }
+
         let ext = Path::new(&name)
             .extension()
             .and_then(|e| e.to_str())
@@ -1644,6 +1712,8 @@ fn extract_rar(file_path: &str) -> Result<ExtractionResult, String> {
             .to_lowercase();
 
         if text_extensions.contains(&ext.as_str()) && entry.unpacked_size < 1_048_576 {
+            total_extracted_size += entry.unpacked_size;
+            extracted_count += 1;
             match header.extract_to(tmp_dir.path()) {
                 Ok(next) => {
                     cursor = next;
@@ -1711,8 +1781,41 @@ fn extract_7z(file_path: &str) -> Result<ExtractionResult, String> {
     walk_dir(tmp_dir.path(), &mut files);
     files.sort();
 
+    // Canonicalize base path for path traversal checks
+    let canonical_base = tmp_dir.path().canonicalize().unwrap_or_else(|_| tmp_dir.path().to_path_buf());
+
+    // Archive bomb checks: enforce file count and total size limits
+    if files.len() > MAX_EXTRACT_FILE_COUNT {
+        return Err(format!(
+            "7z archive exceeds maximum file count: {} (max {})",
+            files.len(),
+            MAX_EXTRACT_FILE_COUNT
+        ));
+    }
+    let mut total_size: u64 = 0;
+    for f in &files {
+        if let Ok(meta) = f.metadata() {
+            total_size += meta.len();
+        }
+    }
+    if total_size > MAX_EXTRACT_TOTAL_SIZE {
+        return Err(format!(
+            "7z archive exceeds maximum extracted size: {} bytes (max {} bytes)",
+            total_size,
+            MAX_EXTRACT_TOTAL_SIZE
+        ));
+    }
+
     text.push_str(&format!("7z Archive ({} files):\n", files.len()));
     for f in &files {
+        // Path traversal guard: verify canonical path is under temp dir
+        if let Ok(canonical) = f.canonicalize() {
+            if !canonical.starts_with(&canonical_base) {
+                continue;
+            }
+        } else {
+            continue;
+        }
         if let Some(rel) = f.strip_prefix(tmp_dir.path()).ok() {
             text.push_str(&format!("  {}\n", rel.display()));
         }
@@ -1721,8 +1824,12 @@ fn extract_7z(file_path: &str) -> Result<ExtractionResult, String> {
 
     // Extract text from small text files (with path traversal guard)
     for f in &files {
-        // Ensure file is actually under the temp dir
-        if !f.starts_with(tmp_dir.path()) {
+        // Ensure file is actually under the temp dir using canonicalize
+        if let Ok(canonical) = f.canonicalize() {
+            if !canonical.starts_with(&canonical_base) {
+                continue;
+            }
+        } else {
             continue;
         }
 

@@ -6,7 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::sync::RwLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use crate::guard::{Action, InputGuard, Preset, ScanResult, TokenVault};
@@ -187,7 +188,7 @@ pub struct ApiConfig {
 impl Default for ApiConfig {
     fn default() -> Self {
         Self {
-            host: "0.0.0.0".to_string(),
+            host: "127.0.0.1".to_string(),
             port: 8000,
             api_key: None,
             rate_limit: 100,
@@ -207,7 +208,11 @@ impl ApiConfig {
                 .unwrap_or(8000),
             api_key: std::env::var("DLPSCAN_API_KEY")
                 .ok()
-                .filter(|k| !k.is_empty()),
+                .filter(|k| !k.is_empty())
+                .or_else(|| {
+                    tracing::warn!("DLPSCAN_API_KEY not set — API server running without authentication");
+                    None
+                }),
             rate_limit: std::env::var("DLPSCAN_API_RATE_LIMIT")
                 .ok()
                 .and_then(|r| r.parse().ok())
@@ -235,6 +240,17 @@ pub fn handle_scan(req: &ScanRequest) -> Result<ScanResponse, String> {
 
 /// Process a batch scan request.
 pub fn handle_batch_scan(req: &BatchScanRequest) -> Result<BatchScanResponse, String> {
+    const MAX_BATCH_ITEMS: usize = 1000;
+    const MAX_TEXT_SIZE: usize = 10 * 1024 * 1024; // 10 MB
+    if req.items.len() > MAX_BATCH_ITEMS {
+        return Err(format!("Batch size {} exceeds maximum {}", req.items.len(), MAX_BATCH_ITEMS));
+    }
+    for item in &req.items {
+        if item.text.len() > MAX_TEXT_SIZE {
+            return Err(format!("Text size {} exceeds maximum {}", item.text.len(), MAX_TEXT_SIZE));
+        }
+    }
+
     use rayon::prelude::*;
     let results: Vec<Result<ScanResponse, String>> =
         req.items.par_iter().map(|item| handle_scan(item)).collect();
@@ -254,22 +270,24 @@ pub fn handle_health() -> HealthResponse {
     }
 }
 
-/// Verify API key (constant-time comparison).
+/// Verify API key (constant-time comparison via SHA-256 hashing).
 pub fn verify_api_key(expected: &str, provided: &str) -> bool {
-    if expected.len() != provided.len() {
-        return false;
+    use sha2::{Sha256, Digest};
+    let expected_hash = Sha256::digest(expected.as_bytes());
+    let provided_hash = Sha256::digest(provided.as_bytes());
+    let mut result = 0u8;
+    for (a, b) in expected_hash.iter().zip(provided_hash.iter()) {
+        result |= a ^ b;
     }
-    expected
-        .as_bytes()
-        .iter()
-        .zip(provided.as_bytes())
-        .fold(0u8, |acc, (a, b)| acc | (a ^ b))
-        == 0
+    result == 0
 }
 
 // ---------------------------------------------------------------------------
 // Server (requires async-support feature)
 // ---------------------------------------------------------------------------
+
+const MAX_CONCURRENT_CONNECTIONS: usize = 256;
+const MAX_REQUEST_BODY_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
 #[cfg(feature = "async-support")]
 pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -287,11 +305,30 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
         custom_patterns: RwLock::new(Vec::new()),
     });
 
+    let active_connections = Arc::new(AtomicUsize::new(0));
+
     loop {
         let (mut socket, _) = listener.accept().await?;
         let state = state.clone();
+        let active_connections = active_connections.clone();
+
+        if active_connections.load(Ordering::SeqCst) >= MAX_CONCURRENT_CONNECTIONS {
+            let response = "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: 42\r\n\r\n{\"detail\":\"Too many concurrent connections\"}";
+            let _ = tokio::io::AsyncWriteExt::write_all(&mut socket, response.as_bytes()).await;
+            continue;
+        }
+
+        active_connections.fetch_add(1, Ordering::SeqCst);
 
         tokio::spawn(async move {
+            struct ConnGuard(Arc<AtomicUsize>);
+            impl Drop for ConnGuard {
+                fn drop(&mut self) {
+                    self.0.fetch_sub(1, Ordering::SeqCst);
+                }
+            }
+            let _guard = ConnGuard(active_connections);
+
             let mut buf = vec![0u8; 1024 * 1024];
             let n = match socket.read(&mut buf).await {
                 Ok(n) if n > 0 => n,
@@ -299,6 +336,27 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
             };
 
             let request = String::from_utf8_lossy(&buf[..n]);
+
+            // Check Content-Length header and reject oversized requests
+            let content_length = request
+                .lines()
+                .find(|l| l.to_lowercase().starts_with("content-length:"))
+                .and_then(|l| l.splitn(2, ':').nth(1))
+                .and_then(|v| v.trim().parse::<usize>().ok());
+            if let Some(cl) = content_length {
+                if cl > MAX_REQUEST_BODY_SIZE {
+                    let detail = serde_json::json!({"detail": format!("Request body size {} exceeds maximum {}", cl, MAX_REQUEST_BODY_SIZE)});
+                    let body = detail.to_string();
+                    let response = format!(
+                        "HTTP/1.1 413 Payload Too Large\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                        body.len(),
+                        body,
+                    );
+                    let _ = socket.write_all(response.as_bytes()).await;
+                    return;
+                }
+            }
+
             let (status, body) = route_request(&request, &state);
 
             let response = format!(
@@ -370,12 +428,12 @@ fn route_request(raw: &str, state: &AppState) -> (String, String) {
                 ),
                 Err(e) => (
                     "400 Bad Request".to_string(),
-                    format!(r#"{{"detail":"{e}"}}"#),
+                    serde_json::json!({"detail": e.to_string()}).to_string(),
                 ),
             },
             Err(e) => (
                 "422 Unprocessable Entity".to_string(),
-                format!(r#"{{"detail":"{e}"}}"#),
+                serde_json::json!({"detail": e.to_string()}).to_string(),
             ),
         },
         ("POST", "/v1/batch/scan") => match serde_json::from_str::<BatchScanRequest>(body) {
@@ -386,12 +444,12 @@ fn route_request(raw: &str, state: &AppState) -> (String, String) {
                 ),
                 Err(e) => (
                     "400 Bad Request".to_string(),
-                    format!(r#"{{"detail":"{e}"}}"#),
+                    serde_json::json!({"detail": e.to_string()}).to_string(),
                 ),
             },
             Err(e) => (
                 "422 Unprocessable Entity".to_string(),
-                format!(r#"{{"detail":"{e}"}}"#),
+                serde_json::json!({"detail": e.to_string()}).to_string(),
             ),
         },
         ("POST", "/v1/patterns") => match serde_json::from_str::<PatternCreateRequest>(body) {
@@ -419,7 +477,7 @@ fn route_request(raw: &str, state: &AppState) -> (String, String) {
             }
             Err(e) => (
                 "422 Unprocessable Entity".to_string(),
-                format!(r#"{{"detail":"{e}"}}"#),
+                serde_json::json!({"detail": e.to_string()}).to_string(),
             ),
         },
         ("GET", "/v1/patterns") => {
@@ -565,6 +623,7 @@ mod tests {
     #[test]
     fn test_config_default() {
         let config = ApiConfig::default();
+        assert_eq!(config.host, "127.0.0.1");
         assert_eq!(config.port, 8000);
         assert_eq!(config.rate_limit, 100);
     }

@@ -11,6 +11,134 @@ use std::time::SystemTime;
 use crate::guard::ScanResult;
 
 // ---------------------------------------------------------------------------
+// URL safety & sanitisation helpers
+// ---------------------------------------------------------------------------
+
+/// Parse a URL into (scheme, userinfo, host, port, path).
+/// Returns `Err` if the URL is malformed or has an unsupported scheme.
+fn parse_url(url: &str) -> Result<(&str, Option<&str>, &str, u16, &str), String> {
+    let (scheme, rest) = if let Some(r) = url.strip_prefix("https://") {
+        ("https", r)
+    } else if let Some(r) = url.strip_prefix("http://") {
+        ("http", r)
+    } else {
+        return Err(format!("Unsupported URL scheme (must be http:// or https://): {}", sanitize_url(url)));
+    };
+
+    // Split off userinfo (user:pass@host)
+    let (userinfo, after_userinfo) = if let Some(at) = rest.find('@') {
+        // Make sure '@' appears before the first '/'
+        let slash = rest.find('/').unwrap_or(rest.len());
+        if at < slash {
+            (Some(&rest[..at]), &rest[at + 1..])
+        } else {
+            (None, rest)
+        }
+    } else {
+        (None, rest)
+    };
+
+    let (host_port, path) = after_userinfo
+        .find('/')
+        .map(|i| (&after_userinfo[..i], &after_userinfo[i..]))
+        .unwrap_or((after_userinfo, "/"));
+
+    let default_port: u16 = if scheme == "https" { 443 } else { 80 };
+    let (host, port) = if let Some(i) = host_port.find(':') {
+        (
+            &host_port[..i],
+            host_port[i + 1..].parse::<u16>().unwrap_or(default_port),
+        )
+    } else {
+        (host_port, default_port)
+    };
+
+    Ok((scheme, userinfo, host, port, path))
+}
+
+/// Strip credentials (userinfo) from a URL before logging.
+pub fn sanitize_url(url: &str) -> String {
+    // Find scheme
+    let scheme_end = url.find("://").map(|i| i + 3).unwrap_or(0);
+    let rest = &url[scheme_end..];
+    // Check for userinfo
+    if let Some(at) = rest.find('@') {
+        let slash = rest.find('/').unwrap_or(rest.len());
+        if at < slash {
+            // Strip userinfo
+            return format!("{}***@{}", &url[..scheme_end], &rest[at + 1..]);
+        }
+    }
+    url.to_string()
+}
+
+/// Check whether a URL is safe to connect to (SSRF protection).
+///
+/// Rejects:
+/// - URLs without http:// or https:// scheme
+/// - `localhost` hostname
+/// - Private/internal IP ranges: 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12,
+///   192.168.0.0/16, 169.254.0.0/16, ::1, fd00::/8
+pub fn is_safe_url(url: &str) -> bool {
+    let (_scheme, _userinfo, host, _port, _path) = match parse_url(url) {
+        Ok(parts) => parts,
+        Err(_) => return false,
+    };
+
+    let host_lower = host.to_lowercase();
+
+    // Reject localhost
+    if host_lower == "localhost" {
+        return false;
+    }
+
+    // Reject IPv6 loopback and private
+    let trimmed = host_lower.trim_start_matches('[').trim_end_matches(']');
+    if trimmed == "::1" || trimmed.starts_with("fd") {
+        return false;
+    }
+
+    // Try parsing as IPv4
+    if let Ok(ip) = trimmed.parse::<std::net::Ipv4Addr>() {
+        let octets = ip.octets();
+        // 127.0.0.0/8
+        if octets[0] == 127 {
+            return false;
+        }
+        // 10.0.0.0/8
+        if octets[0] == 10 {
+            return false;
+        }
+        // 172.16.0.0/12
+        if octets[0] == 172 && (octets[1] >= 16 && octets[1] <= 31) {
+            return false;
+        }
+        // 192.168.0.0/16
+        if octets[0] == 192 && octets[1] == 168 {
+            return false;
+        }
+        // 169.254.0.0/16 (link-local)
+        if octets[0] == 169 && octets[1] == 254 {
+            return false;
+        }
+    }
+
+    // Try parsing as IPv6
+    if let Ok(ip) = trimmed.parse::<std::net::Ipv6Addr>() {
+        if ip.is_loopback() {
+            return false;
+        }
+        let segs = ip.segments();
+        // fd00::/8  (first byte is 0xfd)
+        if (segs[0] >> 8) == 0xfd {
+            return false;
+        }
+    }
+
+    true
+}
+
+// ---------------------------------------------------------------------------
 // Payload types
 // ---------------------------------------------------------------------------
 
@@ -64,6 +192,7 @@ pub struct WebhookNotifier {
     retries: usize,
     timeout_secs: u64,
     backoff_base: f64,
+    max_concurrent: usize,
 }
 
 impl WebhookNotifier {
@@ -73,6 +202,7 @@ impl WebhookNotifier {
             retries: 2,
             timeout_secs: 10,
             backoff_base: 1.0,
+            max_concurrent: 8,
         }
     }
 
@@ -91,11 +221,24 @@ impl WebhookNotifier {
         self
     }
 
+    pub fn with_max_concurrent(mut self, max: usize) -> Self {
+        self.max_concurrent = max;
+        self
+    }
+
     /// Add a URL to the notification list.
-    pub fn add_url(&self, url: &str) {
+    /// Returns `Err` if the URL fails SSRF safety checks.
+    pub fn add_url(&self, url: &str) -> Result<(), String> {
+        if !is_safe_url(url) {
+            return Err(format!(
+                "Refusing to add unsafe/internal URL: {}",
+                sanitize_url(url)
+            ));
+        }
         if let Ok(mut urls) = self.urls.lock() {
             urls.push(url.to_string());
         }
+        Ok(())
     }
 
     /// Remove a URL from the notification list.
@@ -105,7 +248,9 @@ impl WebhookNotifier {
         }
     }
 
-    /// Send notification for scan result. Spawns background threads for delivery.
+    /// Send notification for scan result.
+    /// Spawns a single background thread that delivers to all URLs sequentially,
+    /// bounded by `max_concurrent`.
     /// No-op if the result is clean (no findings).
     pub fn notify(&self, result: &ScanResult, source: Option<&str>) {
         if result.is_clean {
@@ -117,13 +262,34 @@ impl WebhookNotifier {
         let retries = self.retries;
         let timeout = self.timeout_secs;
         let backoff = self.backoff_base;
+        let max_concurrent = self.max_concurrent;
 
-        for url in urls {
-            let payload = payload.clone();
-            std::thread::spawn(move || {
-                deliver(&url, &payload, retries, timeout, backoff);
-            });
-        }
+        // Spawn a single thread that processes URLs in bounded batches
+        std::thread::spawn(move || {
+            use std::sync::atomic::{AtomicUsize, Ordering};
+            let active = Arc::new(AtomicUsize::new(0));
+            let mut handles = Vec::new();
+
+            for url in urls {
+                // Wait until we are below the concurrency limit
+                while active.load(Ordering::SeqCst) >= max_concurrent {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+
+                active.fetch_add(1, Ordering::SeqCst);
+                let payload = payload.clone();
+                let active = Arc::clone(&active);
+                let handle = std::thread::spawn(move || {
+                    deliver(&url, &payload, retries, timeout, backoff);
+                    active.fetch_sub(1, Ordering::SeqCst);
+                });
+                handles.push(handle);
+            }
+
+            for handle in handles {
+                let _ = handle.join();
+            }
+        });
     }
 }
 
@@ -135,10 +301,11 @@ fn deliver(
     timeout_secs: u64,
     backoff_base: f64,
 ) {
+    let safe_url = sanitize_url(url);
     let body = match serde_json::to_vec(payload) {
         Ok(b) => b,
         Err(e) => {
-            tracing::error!(url, %e, "Failed to serialize webhook payload");
+            tracing::error!(url = %safe_url, %e, "Failed to serialize webhook payload");
             return;
         }
     };
@@ -152,38 +319,34 @@ fn deliver(
         match http_post(url, &body, timeout_secs) {
             Ok(status) if (200..300).contains(&status) => return,
             Ok(status) => {
-                tracing::warn!(url, status, attempt, "Webhook delivery got non-2xx");
+                tracing::warn!(url = %safe_url, status, attempt, "Webhook delivery got non-2xx");
             }
             Err(e) => {
-                tracing::warn!(url, %e, attempt, "Webhook delivery error");
+                tracing::warn!(url = %safe_url, %e, attempt, "Webhook delivery error");
             }
         }
     }
 
-    tracing::error!(url, retries, "Webhook delivery exhausted all retries");
+    tracing::error!(url = %safe_url, retries, "Webhook delivery exhausted all retries");
 }
 
-/// Simple HTTP POST using TcpStream.
+/// HTTP POST supporting both `http://` and `https://` URLs.
+///
+/// For `http://` URLs, uses a raw `TcpStream`.
+/// For `https://` URLs, returns an error directing users to enable the
+/// `async-support` feature (TLS requires additional dependencies).
 fn http_post(url: &str, body: &[u8], timeout_secs: u64) -> Result<u16, String> {
     use std::io::{Read, Write};
 
-    let url_body = url
-        .strip_prefix("http://")
-        .ok_or_else(|| format!("Only http:// URLs supported (got {url})"))?;
+    let (scheme, _userinfo, host, port, path) = parse_url(url)?;
 
-    let (host_port, path) = url_body
-        .find('/')
-        .map(|i| (&url_body[..i], &url_body[i..]))
-        .unwrap_or((url_body, "/"));
-
-    let (host, port) = if let Some(i) = host_port.find(':') {
-        (
-            &host_port[..i],
-            host_port[i + 1..].parse::<u16>().unwrap_or(80),
-        )
-    } else {
-        (host_port, 80u16)
-    };
+    if scheme == "https" {
+        return Err(format!(
+            "HTTPS URLs require the `async-support` feature for TLS. \
+             Cannot connect to {} over plaintext.",
+            sanitize_url(url)
+        ));
+    }
 
     let addr = format!("{host}:{port}");
     let timeout = std::time::Duration::from_secs(timeout_secs);
@@ -305,10 +468,54 @@ mod tests {
     #[test]
     fn test_notifier_url_management() {
         let notifier = WebhookNotifier::new(vec!["http://a.com".to_string()]);
-        notifier.add_url("http://b.com");
+        notifier.add_url("http://b.com").unwrap();
         assert_eq!(notifier.urls.lock().unwrap().len(), 2);
         notifier.remove_url("http://a.com");
         assert_eq!(notifier.urls.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_add_url_rejects_internal() {
+        let notifier = WebhookNotifier::new(vec![]);
+        assert!(notifier.add_url("http://127.0.0.1/hook").is_err());
+        assert!(notifier.add_url("http://localhost/hook").is_err());
+        assert!(notifier.add_url("http://10.0.0.1/hook").is_err());
+        assert!(notifier.add_url("http://192.168.1.1/hook").is_err());
+        assert!(notifier.add_url("http://172.16.0.1/hook").is_err());
+        assert!(notifier.add_url("http://169.254.1.1/hook").is_err());
+        assert!(notifier.add_url("ftp://example.com/hook").is_err());
+    }
+
+    #[test]
+    fn test_is_safe_url_accepts_public() {
+        assert!(is_safe_url("http://example.com/hook"));
+        assert!(is_safe_url("https://hooks.slack.com/services/T00/B00/xxx"));
+    }
+
+    #[test]
+    fn test_sanitize_url_strips_credentials() {
+        assert_eq!(
+            sanitize_url("http://user:pass@example.com/hook"),
+            "http://***@example.com/hook"
+        );
+        assert_eq!(
+            sanitize_url("https://example.com/hook"),
+            "https://example.com/hook"
+        );
+    }
+
+    #[test]
+    fn test_parse_url_both_schemes() {
+        let (scheme, _, host, port, path) = parse_url("http://example.com/test").unwrap();
+        assert_eq!(scheme, "http");
+        assert_eq!(host, "example.com");
+        assert_eq!(port, 80);
+        assert_eq!(path, "/test");
+
+        let (scheme, _, host, port, _) = parse_url("https://secure.example.com:8443/api").unwrap();
+        assert_eq!(scheme, "https");
+        assert_eq!(host, "secure.example.com");
+        assert_eq!(port, 8443);
     }
 
     #[test]

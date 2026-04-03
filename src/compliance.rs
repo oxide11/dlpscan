@@ -157,7 +157,8 @@ impl ComplianceReporter {
                 .map(|m| {
                     let text = &m.text;
                     if text.len() > 20 {
-                        format!("{}...", &text[..17])
+                        let truncated: String = text.chars().take(17).collect();
+                        format!("{}...", truncated)
                     } else {
                         text.clone()
                     }

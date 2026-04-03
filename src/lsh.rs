@@ -198,7 +198,18 @@ impl DocumentVault {
         });
 
         let json = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
-        std::fs::write(path, json).map_err(|e| e.to_string())
+        use std::os::unix::fs::OpenOptionsExt;
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+            .map_err(|e| format!("Failed to open {}: {}", path, e))?;
+        use std::io::Write;
+        let mut writer = std::io::BufWriter::new(file);
+        writer.write_all(json.as_bytes()).map_err(|e| format!("Failed to write {}: {}", path, e))?;
+        Ok(())
     }
 
     /// Load vault from JSON file.

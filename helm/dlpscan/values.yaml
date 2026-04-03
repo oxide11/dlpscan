@@ -80,7 +80,7 @@ config:
     enabled: false
     type: ""  # splunk, elasticsearch, datadog, syslog
     endpoint: ""
-    token: ""
+    # token is stored in secrets.siemToken below
 
   # Vault backend
   vault:
@@ -91,6 +91,7 @@ config:
 secrets:
   apiKey: ""
   vaultEncryptionKey: ""
+  siemToken: ""
 
 livenessProbe:
   httpGet:

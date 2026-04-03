@@ -116,6 +116,30 @@ pub fn context_distance(category: &str) -> usize {
     DEFAULT_DISTANCE
 }
 
+/// Adjust index down to the nearest UTF-8 char boundary.
+fn floor_char_boundary(s: &str, index: usize) -> usize {
+    if index >= s.len() {
+        return s.len();
+    }
+    let mut i = index;
+    while i > 0 && !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
+}
+
+/// Adjust index up to the nearest UTF-8 char boundary.
+fn ceil_char_boundary(s: &str, index: usize) -> usize {
+    if index >= s.len() {
+        return s.len();
+    }
+    let mut i = index;
+    while i < s.len() && !s.is_char_boundary(i) {
+        i += 1;
+    }
+    i
+}
+
 /// Check if context keywords appear near a match span.
 ///
 /// Three-pass matching:
@@ -151,6 +175,10 @@ pub fn check_context(
         return false;
     }
 
+    let range_start = floor_char_boundary(text, range_start);
+    let start = floor_char_boundary(text, start);
+    let end = ceil_char_boundary(text, end);
+    let range_end = ceil_char_boundary(text, range_end);
     let pre_text = &text[range_start..start];
     let post_text = &text[end..range_end];
     let context_window = format!("{} {}", pre_text, post_text);

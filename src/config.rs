@@ -108,7 +108,13 @@ pub fn find_config_file(start_dir: Option<&Path>) -> Option<PathBuf> {
 // ---------------------------------------------------------------------------
 
 /// Parse [tool.dlpscan] section from pyproject.toml.
+const MAX_CONFIG_FILE_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
+
 fn parse_pyproject_toml(path: &Path) -> Result<Config, String> {
+    let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
+    if metadata.len() > MAX_CONFIG_FILE_SIZE {
+        return Err(format!("Config file too large: {} bytes", metadata.len()));
+    }
     let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     let table: toml::Value = toml::from_str(&content).map_err(|e| e.to_string())?;
 
@@ -124,6 +130,10 @@ fn parse_pyproject_toml(path: &Path) -> Result<Config, String> {
 
 /// Parse .dlpscanrc JSON file.
 fn parse_dlpscanrc(path: &Path) -> Result<Config, String> {
+    let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
+    if metadata.len() > MAX_CONFIG_FILE_SIZE {
+        return Err(format!("Config file too large: {} bytes", metadata.len()));
+    }
     let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     let config: Config = serde_json::from_str(&content).map_err(|e| e.to_string())?;
     Ok(config)

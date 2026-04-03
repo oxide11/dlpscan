@@ -298,17 +298,29 @@ pub fn results_to_json(results: &[PipelineResult], pretty: bool) -> crate::Resul
     }
 }
 
+fn escape_csv_field(field: &str) -> String {
+    let needs_quoting = field.contains(',') || field.contains('"') || field.contains('\n')
+        || field.contains('\r')
+        || field.starts_with('=') || field.starts_with('+')
+        || field.starts_with('-') || field.starts_with('@');
+    if needs_quoting {
+        format!("\"{}\"", field.replace('"', "\"\""))
+    } else {
+        field.to_string()
+    }
+}
+
 /// Export results as CSV.
 pub fn results_to_csv(results: &[PipelineResult]) -> String {
     let mut output = String::from("file_path,match_count,format,duration_ms,error\n");
     for r in results {
         output.push_str(&format!(
             "{},{},{},{:.2},{}\n",
-            r.file_path,
+            escape_csv_field(&r.file_path),
             r.match_count(),
-            r.format_detected,
+            escape_csv_field(&r.format_detected),
             r.duration_ms,
-            r.error.as_deref().unwrap_or("")
+            escape_csv_field(r.error.as_deref().unwrap_or(""))
         ));
     }
     output

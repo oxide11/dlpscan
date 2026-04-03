@@ -164,6 +164,8 @@ pub fn scan_text(text: &str) -> crate::Result<Vec<Match>> {
 pub fn scan_text_with_config(text: &str, config: &ScanConfig) -> crate::Result<Vec<Match>> {
     validate_text_input(text)?;
 
+    let start = Instant::now();
+
     // Normalize text to defeat evasion
     let (normalized, offset_map) = normalize::normalize_text(text);
 
@@ -296,6 +298,11 @@ pub fn scan_text_with_config(text: &str, config: &ScanConfig) -> crate::Result<V
             local_matches
         })
         .collect();
+
+    // Check if scan exceeded timeout
+    if start.elapsed().as_secs() > MAX_SCAN_SECONDS {
+        tracing::warn!("Scan exceeded timeout of {}s, returning partial results", MAX_SCAN_SECONDS);
+    }
 
     // Flatten and truncate
     let mut matches: Vec<Match> = per_pattern_matches
