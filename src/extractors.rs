@@ -800,8 +800,7 @@ fn extract_vcard_type(prop_params: &str) -> Option<String> {
     let upper = prop_params.to_uppercase();
     for part in upper.split(';').skip(1) {
         let part = part.trim();
-        if part.starts_with("TYPE=") {
-            let types = part.strip_prefix("TYPE=").unwrap();
+        if let Some(types) = part.strip_prefix("TYPE=") {
             return Some(types.replace(',', "/"));
         }
         // vCard 2.1 style: TEL;HOME;VOICE:
@@ -1066,8 +1065,7 @@ fn extract_jcard(file_path: &str) -> Result<ExtractionResult, String> {
     let mut text = String::new();
 
     // jCard can be a single vcard array or an array of vcards
-    let vcards = if value.is_array() {
-        let arr = value.as_array().unwrap();
+    let vcards = if let Some(arr) = value.as_array() {
         if arr.first().and_then(|v| v.as_str()) == Some("vcard") {
             // Single vcard: ["vcard", [...properties...]]
             vec![&value]

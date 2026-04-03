@@ -341,20 +341,23 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
             }
             let _guard = ConnGuard(active_connections);
 
-            let mut buf = vec![0u8; 1024 * 1024];
+            // Read initial chunk (headers + start of body)
+            let mut buf = vec![0u8; 64 * 1024];
             let n = match socket.read(&mut buf).await {
                 Ok(n) if n > 0 => n,
                 _ => return,
             };
+            buf.truncate(n);
 
-            let request = String::from_utf8_lossy(&buf[..n]);
-
-            // Check Content-Length header and reject oversized requests
-            let content_length = request
+            // Parse Content-Length from headers to know total expected size
+            let header_str = String::from_utf8_lossy(&buf);
+            let content_length = header_str
                 .lines()
                 .find(|l| l.to_lowercase().starts_with("content-length:"))
                 .and_then(|l| l.splitn(2, ':').nth(1))
                 .and_then(|v| v.trim().parse::<usize>().ok());
+
+            // Reject oversized requests early
             if let Some(cl) = content_length {
                 if cl > MAX_REQUEST_BODY_SIZE {
                     let detail = serde_json::json!({"detail": format!("Request body size {} exceeds maximum {}", cl, MAX_REQUEST_BODY_SIZE)});
@@ -369,6 +372,36 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
                 }
             }
 
+            // Find end of headers to determine how much body we already have
+            let header_end = buf.windows(4)
+                .position(|w| w == b"\r\n\r\n")
+                .map(|p| p + 4);
+
+            // Read remaining body if Content-Length indicates more data
+            if let (Some(cl), Some(he)) = (content_length, header_end) {
+                let body_received = buf.len() - he;
+                let remaining = cl.saturating_sub(body_received);
+                if remaining > 0 {
+                    buf.reserve(remaining);
+                    let mut total_read = 0;
+                    let mut chunk = vec![0u8; 64 * 1024];
+                    while total_read < remaining {
+                        match tokio::time::timeout(
+                            std::time::Duration::from_secs(30),
+                            socket.read(&mut chunk),
+                        ).await {
+                            Ok(Ok(0)) => break,
+                            Ok(Ok(n)) => {
+                                buf.extend_from_slice(&chunk[..n]);
+                                total_read += n;
+                            }
+                            _ => break,
+                        }
+                    }
+                }
+            }
+
+            let request = String::from_utf8_lossy(&buf);
             let (status, body) = route_request(&request, &state);
 
             let response = format!(

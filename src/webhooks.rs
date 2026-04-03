@@ -381,7 +381,9 @@ fn http_post(url: &str, body: &[u8], timeout_secs: u64) -> Result<u16, String> {
         timeout,
     )
     .map_err(|e| e.to_string())?;
-    stream.set_read_timeout(Some(timeout)).ok();
+    if let Err(e) = stream.set_read_timeout(Some(timeout)) {
+        tracing::warn!(error = %e, "Failed to set read timeout on webhook socket");
+    }
 
     let req = format!(
         "POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",

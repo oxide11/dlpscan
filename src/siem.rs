@@ -519,9 +519,9 @@ fn http_post_sync(
     )
     .map_err(|e| e.to_string())?;
 
-    stream
-        .set_read_timeout(Some(std::time::Duration::from_secs(30)))
-        .ok();
+    if let Err(e) = stream.set_read_timeout(Some(std::time::Duration::from_secs(30))) {
+        tracing::warn!(error = %e, "Failed to set read timeout on SIEM socket");
+    }
 
     let mut req = format!("POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Length: {}\r\n", body.len());
     for (k, v) in headers {
