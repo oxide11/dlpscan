@@ -4,6 +4,37 @@ All notable changes to dlpscan will be documented in this file.
 
 ## [2.1.0] - 2026-04-03
 
+### Enterprise Readiness
+
+#### Prometheus Metrics
+- 9 metrics wired into scan operations via `MetricsCollector` callback:
+  `dlpscan_scans_total`, `dlpscan_scan_errors_total`, `dlpscan_findings_total`,
+  `dlpscan_bytes_scanned_total`, `dlpscan_scan_duration_seconds` (histogram),
+  `dlpscan_files_scanned_total`, `dlpscan_patterns_timed_out_total`,
+  `dlpscan_scans_truncated_total`, `dlpscan_scans_in_flight` (gauge)
+- `GET /metrics` endpoint returns Prometheus text exposition format
+- `enable_prometheus()` auto-called on API server startup
+- `prometheus_text_output()` for custom integrations
+
+#### TLS/HTTPS Support
+- **API server**: `DLPSCAN_TLS_CERT` and `DLPSCAN_TLS_KEY` environment variables
+  enable HTTPS via `tokio-rustls` with PEM cert/key loading
+- **Webhooks**: `http_post()` supports `https://` URLs via `rustls` +
+  `webpki-roots` for sync TLS connections
+- **SIEM adapters**: Same `rustls` TLS support for Splunk HEC, Elasticsearch,
+  Datadog HTTPS endpoints
+- New `tls` feature flag (included in `async-support` and `full`)
+
+#### Test Coverage
+- 64 new tests across 6 previously untested modules:
+  - `streaming/mod.rs` (10): buffer clamping, feed/flush, multibyte safety
+  - `models.rs` (9): Match creation, redacted_text, pattern_specificity
+  - `guard/mod.rs` (13): scan, flag/redact/reject/obfuscate actions, sanitize
+  - `guard/tokenize.rs` (12): tokenize/detokenize roundtrip, determinism
+  - `guard/presets.rs` (6): preset coverage, superset validation, serde
+  - `pipeline/mod.rs` (14): file processing, directory scan, CSV/JSON export
+- Total: **238 tests** (up from 174)
+
 ### Security Hardening
 
 Comprehensive security audit and vulnerability remediation across the entire

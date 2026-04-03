@@ -4,7 +4,7 @@ High-performance DLP scanner written in Rust. Detects, redacts, and protects
 sensitive data with exceptional throughput.
 
 **560 patterns** across **126 categories** — full parity with the Python version.
-**15,000+ lines** of Rust across 37 modules. **174 tests** passing.
+**15,000+ lines** of Rust across 37 modules. **238 tests** passing.
 
 ## Performance
 
@@ -34,13 +34,14 @@ cargo run --release --bin benchmark
 
 | Feature | Default | Description |
 |---|---|---|
-| `metrics` | Yes | Prometheus metrics via `prometheus` crate |
+| `metrics` | Yes | Prometheus metrics with `/metrics` endpoint via `prometheus` crate |
+| `tls` | No | TLS support for webhooks/SIEM via `rustls` + `webpki-roots` |
 | `pdf` | No | PDF text extraction via `pdf-extract` |
 | `office` | No | DOCX/XLSX/ODS/ODT/PPTX extraction via `calamine` + `quick-xml` |
 | `archives` | No | RAR and 7z archive extraction via `unrar` + `sevenz-rust` |
 | `data-formats` | No | Parquet, SQLite extraction via `parquet` + `arrow` + `rusqlite` |
 | `msg` | No | Outlook MSG extraction via `cfb` |
-| `async-support` | No | Async HTTP server with graceful shutdown via `tokio` + `reqwest` |
+| `async-support` | No | Async HTTPS server with graceful shutdown via `tokio` + `rustls` |
 | `python` | No | Python bindings via `pyo3` |
 | `full` | No | All optional features |
 
@@ -223,8 +224,11 @@ dlpscan has been hardened through a comprehensive security audit:
 DLPSCAN_LOG_FORMAT=json     # JSON structured logging (default: text)
 RUST_LOG=info               # Log level (default: warn)
 DLPSCAN_API_KEY=<key>       # API server authentication
-DLPSCAN_BIND=127.0.0.1     # Server bind address (default: 127.0.0.1)
-DLPSCAN_PORT=8080           # Server port (default: 8080)
+DLPSCAN_API_HOST=127.0.0.1  # Server bind address (default: 127.0.0.1)
+DLPSCAN_API_PORT=8000       # Server port (default: 8000)
+DLPSCAN_TLS_CERT=/path.pem  # TLS certificate PEM (enables HTTPS)
+DLPSCAN_TLS_KEY=/path.pem   # TLS private key PEM
+DLPSCAN_API_RATE_LIMIT=100  # Requests per 60s (default: 100)
 ```
 
 ### Server
