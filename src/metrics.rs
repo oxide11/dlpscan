@@ -2,6 +2,14 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+#[cfg(feature = "metrics")]
+use once_cell::sync::Lazy;
+#[cfg(feature = "metrics")]
+use prometheus::{
+    self, Counter, Gauge, Histogram, HistogramOpts, IntCounter, IntGauge, Opts, Registry,
+    TextEncoder, Encoder,
+};
+
 /// Scan metrics collected during a scan operation.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ScanMetrics {
@@ -78,6 +86,129 @@ pub fn clear_metrics_callback() {
 
 fn get_metrics_callback() -> Option<MetricsCallback> {
     global_callback().lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+// ---------------------------------------------------------------------------
+// Prometheus instrumentation (requires `metrics` feature)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "metrics")]
+static PROM_REGISTRY: Lazy<Registry> = Lazy::new(Registry::new);
+
+#[cfg(feature = "metrics")]
+static SCANS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+    let c = IntCounter::with_opts(Opts::new("dlpscan_scans_total", "Total number of scans performed")).unwrap();
+    PROM_REGISTRY.register(Box::new(c.clone())).ok();
+    c
+});
+
+#[cfg(feature = "metrics")]
+static SCAN_ERRORS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+    let c = IntCounter::with_opts(Opts::new("dlpscan_scan_errors_total", "Total scan errors")).unwrap();
+    PROM_REGISTRY.register(Box::new(c.clone())).ok();
+    c
+});
+
+#[cfg(feature = "metrics")]
+static FINDINGS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+    let c = IntCounter::with_opts(Opts::new("dlpscan_findings_total", "Total sensitive data findings")).unwrap();
+    PROM_REGISTRY.register(Box::new(c.clone())).ok();
+    c
+});
+
+#[cfg(feature = "metrics")]
+static BYTES_SCANNED_TOTAL: Lazy<Counter> = Lazy::new(|| {
+    let c = Counter::with_opts(Opts::new("dlpscan_bytes_scanned_total", "Total bytes scanned")).unwrap();
+    PROM_REGISTRY.register(Box::new(c.clone())).ok();
+    c
+});
+
+#[cfg(feature = "metrics")]
+static SCAN_DURATION: Lazy<Histogram> = Lazy::new(|| {
+    let h = Histogram::with_opts(
+        HistogramOpts::new("dlpscan_scan_duration_seconds", "Scan duration in seconds")
+            .buckets(vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 30.0, 120.0]),
+    ).unwrap();
+    PROM_REGISTRY.register(Box::new(h.clone())).ok();
+    h
+});
+
+#[cfg(feature = "metrics")]
+static FILES_SCANNED_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+    let c = IntCounter::with_opts(Opts::new("dlpscan_files_scanned_total", "Total files scanned")).unwrap();
+    PROM_REGISTRY.register(Box::new(c.clone())).ok();
+    c
+});
+
+#[cfg(feature = "metrics")]
+static PATTERNS_TIMED_OUT: Lazy<IntCounter> = Lazy::new(|| {
+    let c = IntCounter::with_opts(Opts::new("dlpscan_patterns_timed_out_total", "Total pattern timeouts")).unwrap();
+    PROM_REGISTRY.register(Box::new(c.clone())).ok();
+    c
+});
+
+#[cfg(feature = "metrics")]
+static SCANS_TRUNCATED: Lazy<IntCounter> = Lazy::new(|| {
+    let c = IntCounter::with_opts(Opts::new("dlpscan_scans_truncated_total", "Scans that returned partial results")).unwrap();
+    PROM_REGISTRY.register(Box::new(c.clone())).ok();
+    c
+});
+
+#[cfg(feature = "metrics")]
+static SCANS_IN_FLIGHT: Lazy<IntGauge> = Lazy::new(|| {
+    let g = IntGauge::with_opts(Opts::new("dlpscan_scans_in_flight", "Currently active scans")).unwrap();
+    PROM_REGISTRY.register(Box::new(g.clone())).ok();
+    g
+});
+
+/// Record a completed scan's metrics into Prometheus counters.
+#[cfg(feature = "metrics")]
+fn record_prometheus(m: &ScanMetrics) {
+    SCANS_TOTAL.inc();
+    FINDINGS_TOTAL.inc_by(m.match_count as u64);
+    BYTES_SCANNED_TOTAL.inc_by(m.bytes_scanned as f64);
+    SCAN_DURATION.observe(m.duration_ms / 1000.0);
+    FILES_SCANNED_TOTAL.inc_by(m.files_scanned as u64);
+    if m.patterns_timed_out > 0 {
+        PATTERNS_TIMED_OUT.inc_by(m.patterns_timed_out as u64);
+    }
+    if m.scan_truncated {
+        SCANS_TRUNCATED.inc();
+    }
+    if m.error.is_some() {
+        SCAN_ERRORS_TOTAL.inc();
+    }
+}
+
+/// Enable automatic Prometheus instrumentation. Registers a global callback
+/// that records every scan's metrics into Prometheus counters/histograms.
+/// Call once at startup.
+#[cfg(feature = "metrics")]
+pub fn enable_prometheus() {
+    set_metrics_callback(record_prometheus);
+    tracing::info!("Prometheus metrics instrumentation enabled");
+}
+
+/// Render all metrics in Prometheus text exposition format.
+#[cfg(feature = "metrics")]
+pub fn prometheus_text_output() -> String {
+    let encoder = TextEncoder::new();
+    let metric_families = PROM_REGISTRY.gather();
+    let mut buffer = Vec::new();
+    encoder.encode(&metric_families, &mut buffer).unwrap_or_default();
+    String::from_utf8(buffer).unwrap_or_default()
+}
+
+/// Increment the in-flight gauge (call at scan start).
+#[cfg(feature = "metrics")]
+pub fn inc_in_flight() {
+    SCANS_IN_FLIGHT.inc();
+}
+
+/// Decrement the in-flight gauge (call at scan end).
+#[cfg(feature = "metrics")]
+pub fn dec_in_flight() {
+    SCANS_IN_FLIGHT.dec();
 }
 
 // ---------------------------------------------------------------------------

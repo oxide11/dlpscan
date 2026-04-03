@@ -504,22 +504,15 @@ fn http_post_sync(
 
     let (scheme, host, port, path) = parse_siem_url(url)?;
 
-    if scheme == "https" {
-        return Err(format!(
-            "HTTPS URLs require the `async-support` feature for TLS. \
-             Cannot connect to {} over plaintext.",
-            crate::webhooks::sanitize_url(url)
-        ));
-    }
-
     let addr = format!("{host}:{port}");
-    let mut stream = std::net::TcpStream::connect_timeout(
+    let timeout = std::time::Duration::from_secs(30);
+    let tcp_stream = std::net::TcpStream::connect_timeout(
         &addr.parse().map_err(|e: std::net::AddrParseError| e.to_string())?,
-        std::time::Duration::from_secs(30),
+        timeout,
     )
     .map_err(|e| e.to_string())?;
 
-    if let Err(e) = stream.set_read_timeout(Some(std::time::Duration::from_secs(30))) {
+    if let Err(e) = tcp_stream.set_read_timeout(Some(timeout)) {
         tracing::warn!(error = %e, "Failed to set read timeout on SIEM socket");
     }
 
@@ -529,6 +522,43 @@ fn http_post_sync(
     }
     req.push_str("Connection: close\r\n\r\n");
 
+    if scheme == "https" {
+        #[cfg(feature = "tls")]
+        {
+            let root_store = rustls::RootCertStore::from_iter(
+                webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
+            );
+            let tls_config = rustls::ClientConfig::builder()
+                .with_root_certificates(root_store)
+                .with_no_client_auth();
+            let server_name = host.to_string().try_into()
+                .map_err(|e: rustls::pki_types::InvalidDnsNameError| e.to_string())?;
+            let mut conn = rustls::ClientConnection::new(
+                std::sync::Arc::new(tls_config),
+                server_name,
+            ).map_err(|e| e.to_string())?;
+            let mut tls = rustls::Stream::new(&mut conn, &mut &tcp_stream);
+            tls.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
+            tls.write_all(body).map_err(|e| e.to_string())?;
+            let mut response = vec![0u8; 1024];
+            let n = tls.read(&mut response).map_err(|e| e.to_string())?;
+            let resp = String::from_utf8_lossy(&response[..n]);
+            let status = resp.lines().next()
+                .and_then(|line| line.split_whitespace().nth(1))
+                .and_then(|s| s.parse::<u16>().ok())
+                .unwrap_or(0);
+            return if (200..300).contains(&status) { Ok(status) }
+            else { Err(format!("SIEM HTTP POST to {} returned status {}", crate::webhooks::sanitize_url(url), status)) };
+        }
+        #[cfg(not(feature = "tls"))]
+        return Err(format!(
+            "HTTPS URLs require the `tls` or `async-support` feature. \
+             Cannot connect to {} without TLS support.",
+            crate::webhooks::sanitize_url(url)
+        ));
+    }
+
+    let mut stream = tcp_stream;
     stream.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
     stream.write_all(body).map_err(|e| e.to_string())?;
 

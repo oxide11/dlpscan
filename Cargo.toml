@@ -30,6 +30,10 @@ rayon = "1"
 
 # Async runtime (for webhooks, SIEM, server)
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util", "signal", "net", "time"], optional = true }
+tokio-rustls = { version = "0.26", optional = true }
+rustls-pemfile = { version = "2", optional = true }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["std", "tls12", "ring"] }
+webpki-roots = { version = "0.26", optional = true }
 
 # HTTP client (webhooks, SIEM adapters)
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
@@ -83,9 +87,10 @@ office = ["dep:calamine", "dep:quick-xml"]
 archives = ["dep:sevenz-rust", "dep:unrar"]
 data-formats = ["dep:parquet", "dep:arrow", "dep:rusqlite"]
 msg = ["dep:cfb"]
-async-support = ["dep:tokio", "dep:reqwest"]
+tls = ["dep:rustls", "dep:webpki-roots"]
+async-support = ["dep:tokio", "dep:reqwest", "dep:tokio-rustls", "dep:rustls-pemfile", "tls"]
 python = ["dep:pyo3"]
-full = ["pdf", "office", "archives", "data-formats", "msg", "async-support", "metrics"]
+full = ["pdf", "office", "archives", "data-formats", "msg", "async-support", "metrics", "tls"]
 
 [dev-dependencies]
 criterion = "0.5"

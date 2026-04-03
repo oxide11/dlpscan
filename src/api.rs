@@ -186,6 +186,10 @@ pub struct ApiConfig {
     pub api_key: Option<String>,
     pub rate_limit: usize,
     pub cache_enabled: bool,
+    /// Path to TLS certificate PEM file (enables HTTPS when set).
+    pub tls_cert: Option<String>,
+    /// Path to TLS private key PEM file.
+    pub tls_key: Option<String>,
 }
 
 impl std::fmt::Debug for ApiConfig {
@@ -196,6 +200,8 @@ impl std::fmt::Debug for ApiConfig {
             .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
             .field("rate_limit", &self.rate_limit)
             .field("cache_enabled", &self.cache_enabled)
+            .field("tls_cert", &self.tls_cert)
+            .field("tls_key", &self.tls_key.as_ref().map(|_| "[REDACTED]"))
             .finish()
     }
 }
@@ -208,6 +214,8 @@ impl Default for ApiConfig {
             api_key: None,
             rate_limit: 100,
             cache_enabled: false,
+            tls_cert: None,
+            tls_key: None,
         }
     }
 }
@@ -236,6 +244,8 @@ impl ApiConfig {
                 .ok()
                 .map(|v| v == "1" || v == "true")
                 .unwrap_or(false),
+            tls_cert: std::env::var("DLPSCAN_TLS_CERT").ok().filter(|v| !v.is_empty()),
+            tls_key: std::env::var("DLPSCAN_TLS_KEY").ok().filter(|v| !v.is_empty()),
         }
     }
 }
@@ -305,13 +315,58 @@ const MAX_CONCURRENT_CONNECTIONS: usize = 256;
 const MAX_REQUEST_BODY_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
 #[cfg(feature = "async-support")]
+fn load_tls_config(
+    cert_path: &str,
+    key_path: &str,
+) -> Result<tokio_rustls::TlsAcceptor, Box<dyn std::error::Error>> {
+    use std::io::BufReader;
+    let cert_file = std::fs::File::open(cert_path)?;
+    let key_file = std::fs::File::open(key_path)?;
+
+    let certs: Vec<_> = rustls_pemfile::certs(&mut BufReader::new(cert_file))
+        .filter_map(|r| r.ok())
+        .collect();
+    if certs.is_empty() {
+        return Err("No certificates found in cert file".into());
+    }
+
+    let key = rustls_pemfile::private_key(&mut BufReader::new(key_file))?
+        .ok_or("No private key found in key file")?;
+
+    let tls_config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(certs, key)?;
+
+    Ok(tokio_rustls::TlsAcceptor::from(std::sync::Arc::new(tls_config)))
+}
+
+#[cfg(feature = "async-support")]
 pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
     let addr = format!("{}:{}", config.host, config.port);
     let listener = TcpListener::bind(&addr).await?;
-    tracing::info!("dlpscan API server listening on {}", addr);
+
+    // Set up optional TLS
+    let tls_acceptor = match (&config.tls_cert, &config.tls_key) {
+        (Some(cert), Some(key)) => {
+            let acceptor = load_tls_config(cert, key)?;
+            tracing::info!("dlpscan API server listening on {} (HTTPS)", addr);
+            Some(acceptor)
+        }
+        (Some(_), None) | (None, Some(_)) => {
+            return Err("Both DLPSCAN_TLS_CERT and DLPSCAN_TLS_KEY must be set for TLS".into());
+        }
+        _ => {
+            tracing::info!("dlpscan API server listening on {} (HTTP)", addr);
+            None
+        }
+    };
+
+    // Enable Prometheus metrics if the feature is available
+    #[cfg(feature = "metrics")]
+    crate::metrics::enable_prometheus();
 
     let state = Arc::new(AppState {
         api_key: config.api_key,
@@ -321,12 +376,13 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
     });
 
     let active_connections = Arc::new(AtomicUsize::new(0));
+    let tls_acceptor = tls_acceptor.map(Arc::new);
     let shutdown = tokio::signal::ctrl_c();
     tokio::pin!(shutdown);
 
     loop {
         let accept = listener.accept();
-        let (mut socket, _) = tokio::select! {
+        let (tcp_socket, _) = tokio::select! {
             result = accept => match result {
                 Ok(conn) => conn,
                 Err(e) => {
@@ -355,10 +411,11 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
         };
         let state = state.clone();
         let active_connections = active_connections.clone();
+        let tls = tls_acceptor.clone();
 
         if active_connections.load(Ordering::SeqCst) >= MAX_CONCURRENT_CONNECTIONS {
-            let response = "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: 42\r\n\r\n{\"detail\":\"Too many concurrent connections\"}";
-            let _ = tokio::io::AsyncWriteExt::write_all(&mut socket, response.as_bytes()).await;
+            let response = b"HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: 42\r\n\r\n{\"detail\":\"Too many concurrent connections\"}";
+            let _ = tokio::io::AsyncWriteExt::write_all(&mut tcp_socket, response).await;
             continue;
         }
 
@@ -372,6 +429,20 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
                 }
             }
             let _guard = ConnGuard(active_connections);
+
+            // Wrap socket with TLS if configured
+            let mut socket: Box<dyn tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send> =
+                if let Some(acceptor) = tls {
+                    match acceptor.accept(tcp_socket).await {
+                        Ok(tls_stream) => Box::new(tls_stream),
+                        Err(e) => {
+                            tracing::debug!(error = %e, "TLS handshake failed");
+                            return;
+                        }
+                    }
+                } else {
+                    Box::new(tcp_socket)
+                };
 
             // Read initial chunk (headers + start of body)
             let mut buf = vec![0u8; 64 * 1024];
@@ -499,6 +570,13 @@ fn route_request(raw: &str, state: &AppState) -> (String, String) {
             (
                 "200 OK".to_string(),
                 serde_json::to_string(&resp).unwrap_or_default(),
+            )
+        }
+        #[cfg(feature = "metrics")]
+        ("GET", "/metrics") => {
+            (
+                "200 OK".to_string(),
+                crate::metrics::prometheus_text_output(),
             )
         }
         ("POST", "/v1/scan") => match serde_json::from_str::<ScanRequest>(body) {

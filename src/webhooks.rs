@@ -378,29 +378,20 @@ fn deliver(
 /// HTTP POST supporting both `http://` and `https://` URLs.
 ///
 /// For `http://` URLs, uses a raw `TcpStream`.
-/// For `https://` URLs, returns an error directing users to enable the
-/// `async-support` feature (TLS requires additional dependencies).
+/// For `https://` URLs, uses rustls when the `tls` feature is enabled.
 fn http_post(url: &str, body: &[u8], timeout_secs: u64) -> Result<u16, String> {
     use std::io::{Read, Write};
 
     let (scheme, _userinfo, host, port, path) = parse_url(url)?;
 
-    if scheme == "https" {
-        return Err(format!(
-            "HTTPS URLs require the `async-support` feature for TLS. \
-             Cannot connect to {} over plaintext.",
-            sanitize_url(url)
-        ));
-    }
-
     let addr = format!("{host}:{port}");
     let timeout = std::time::Duration::from_secs(timeout_secs);
-    let mut stream = std::net::TcpStream::connect_timeout(
+    let tcp_stream = std::net::TcpStream::connect_timeout(
         &addr.parse().map_err(|e: std::net::AddrParseError| e.to_string())?,
         timeout,
     )
     .map_err(|e| e.to_string())?;
-    if let Err(e) = stream.set_read_timeout(Some(timeout)) {
+    if let Err(e) = tcp_stream.set_read_timeout(Some(timeout)) {
         tracing::warn!(error = %e, "Failed to set read timeout on webhook socket");
     }
 
@@ -408,6 +399,43 @@ fn http_post(url: &str, body: &[u8], timeout_secs: u64) -> Result<u16, String> {
         "POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
     );
+
+    if scheme == "https" {
+        #[cfg(feature = "tls")]
+        {
+            let root_store = rustls::RootCertStore::from_iter(
+                webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
+            );
+            let tls_config = rustls::ClientConfig::builder()
+                .with_root_certificates(root_store)
+                .with_no_client_auth();
+            let server_name = host.to_string().try_into()
+                .map_err(|e: rustls::pki_types::InvalidDnsNameError| e.to_string())?;
+            let mut conn = rustls::ClientConnection::new(
+                std::sync::Arc::new(tls_config),
+                server_name,
+            ).map_err(|e| e.to_string())?;
+            let mut tls = rustls::Stream::new(&mut conn, &mut &tcp_stream);
+            tls.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
+            tls.write_all(body).map_err(|e| e.to_string())?;
+            let mut response = vec![0u8; 512];
+            let n = tls.read(&mut response).map_err(|e| e.to_string())?;
+            let resp = String::from_utf8_lossy(&response[..n]);
+            return resp.lines()
+                .next()
+                .and_then(|line| line.split_whitespace().nth(1))
+                .and_then(|s| s.parse::<u16>().ok())
+                .ok_or_else(|| "Could not parse HTTP status".to_string());
+        }
+        #[cfg(not(feature = "tls"))]
+        return Err(format!(
+            "HTTPS URLs require the `tls` or `async-support` feature. \
+             Cannot connect to {} without TLS support.",
+            sanitize_url(url)
+        ));
+    }
+
+    let mut stream = tcp_stream;
     stream.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
     stream.write_all(body).map_err(|e| e.to_string())?;
 
