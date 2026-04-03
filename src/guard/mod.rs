@@ -275,3 +275,138 @@ impl Default for InputGuard {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_guard() {
+        let guard = InputGuard::default();
+        assert_eq!(guard.action, Action::Flag);
+        assert_eq!(guard.mode, Mode::Denylist);
+        assert_eq!(guard.min_confidence, 0.0);
+        assert!(!guard.require_context);
+        assert_eq!(guard.redaction_char, 'X');
+    }
+
+    #[test]
+    fn test_scan_clean_text() {
+        let guard = InputGuard::new();
+        let result = guard.scan("Hello world, just a test.").unwrap();
+        assert!(result.is_clean);
+        assert_eq!(result.finding_count(), 0);
+        assert!(result.categories_found.is_empty());
+    }
+
+    #[test]
+    fn test_scan_detects_email() {
+        let guard = InputGuard::new()
+            .with_presets(vec![Preset::ContactInfo]);
+        let result = guard.scan("Contact us at test@example.com").unwrap();
+        assert!(!result.is_clean);
+        assert!(result.findings.iter().any(|m| m.sub_category == "Email Address"));
+        assert!(result.categories_found.contains("Contact Information"));
+    }
+
+    #[test]
+    fn test_flag_action_preserves_text() {
+        let guard = InputGuard::new()
+            .with_action(Action::Flag);
+        let result = guard.scan("Card: 4532015112830366").unwrap();
+        assert!(result.redacted_text.is_none());
+    }
+
+    #[test]
+    fn test_redact_action() {
+        let guard = InputGuard::new()
+            .with_presets(vec![Preset::ContactInfo])
+            .with_action(Action::Redact);
+        let result = guard.scan("Email: test@example.com").unwrap();
+        assert!(result.redacted_text.is_some());
+        let redacted = result.redacted_text.unwrap();
+        assert!(!redacted.contains("test@example.com"));
+        assert!(redacted.contains('X'));
+    }
+
+    #[test]
+    fn test_reject_action_returns_error() {
+        let guard = InputGuard::new()
+            .with_presets(vec![Preset::PciDss])
+            .with_action(Action::Reject);
+        let result = guard.scan("Card: 4532015112830366");
+        assert!(result.is_err());
+        match result {
+            Err(crate::errors::DlpError::SensitiveDataDetected { finding_count, .. }) => {
+                assert!(finding_count > 0);
+            }
+            _ => panic!("Expected SensitiveDataDetected error"),
+        }
+    }
+
+    #[test]
+    fn test_check_returns_bool() {
+        let guard = InputGuard::new();
+        assert!(guard.check("Hello world, just a test."));
+        // Text with PII should return false when scanning all categories
+        assert!(!guard.check("My email is test@example.com"));
+    }
+
+    #[test]
+    fn test_sanitize_returns_redacted_string() {
+        let guard = InputGuard::new()
+            .with_presets(vec![Preset::ContactInfo]);
+        let sanitized = guard.sanitize("Email: test@example.com").unwrap();
+        assert!(!sanitized.contains("test@example.com"));
+    }
+
+    #[test]
+    fn test_min_confidence_filters() {
+        let guard = InputGuard::new()
+            .with_min_confidence(0.99);
+        let result = guard.scan("Email: test@example.com").unwrap();
+        // At 0.99 confidence, most matches should be filtered
+        assert!(result.finding_count() == 0 || result.findings.iter().all(|m| m.confidence >= 0.99));
+    }
+
+    #[test]
+    fn test_obfuscate_action() {
+        let guard = InputGuard::new()
+            .with_presets(vec![Preset::ContactInfo])
+            .with_action(Action::Obfuscate);
+        let result = guard.scan("Email: test@example.com").unwrap();
+        assert!(result.redacted_text.is_some());
+        let obfuscated = result.redacted_text.unwrap();
+        assert!(!obfuscated.contains("test@example.com"));
+        assert!(obfuscated.contains('@')); // Obfuscated email still has @
+    }
+
+    #[test]
+    fn test_resolve_categories_with_presets() {
+        let guard = InputGuard::new()
+            .with_presets(vec![Preset::PciDss]);
+        let cats = guard.resolve_categories().unwrap();
+        assert!(cats.contains("Credit Card Numbers"));
+    }
+
+    #[test]
+    fn test_resolve_categories_empty_returns_none() {
+        let guard = InputGuard::new();
+        assert!(guard.resolve_categories().is_none());
+    }
+
+    #[test]
+    fn test_scan_result_finding_count() {
+        let result = ScanResult {
+            text: String::new(),
+            is_clean: false,
+            findings: vec![
+                Match::new("test".into(), "cat".into(), "sub".into(), false, 0.5, (0, 4), false),
+            ],
+            redacted_text: None,
+            categories_found: HashSet::new(),
+            scan_truncated: false,
+        };
+        assert_eq!(result.finding_count(), 1);
+    }
+}

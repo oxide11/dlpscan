@@ -212,6 +212,95 @@ pub fn pattern_specificity(sub_category: &str) -> f64 {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_match(text: &str) -> Match {
+        Match::new(
+            text.to_string(),
+            "Credit Card Numbers".to_string(),
+            "Visa".to_string(),
+            true,
+            0.9,
+            (0, text.len()),
+            false,
+        )
+    }
+
+    #[test]
+    fn test_match_new() {
+        let m = sample_match("4111111111111111");
+        assert_eq!(m.category, "Credit Card Numbers");
+        assert_eq!(m.sub_category, "Visa");
+        assert!(m.has_context);
+        assert_eq!(m.confidence, 0.9);
+        assert_eq!(m.span, (0, 16));
+        assert!(!m.context_required);
+    }
+
+    #[test]
+    fn test_redacted_text_short() {
+        let m = sample_match("secret");
+        assert_eq!(m.redacted_text(), "******");
+    }
+
+    #[test]
+    fn test_redacted_text_long() {
+        let m = sample_match("4111111111111111");
+        let redacted = m.redacted_text();
+        assert!(redacted.starts_with("411"));
+        assert!(redacted.ends_with("111"));
+        assert!(redacted.contains('*'));
+        assert_eq!(redacted.len(), 16);
+    }
+
+    #[test]
+    fn test_to_dict_not_redacted() {
+        let m = sample_match("4111111111111111");
+        let val = m.to_dict(false);
+        assert_eq!(val["text"], "4111111111111111");
+    }
+
+    #[test]
+    fn test_to_dict_redacted() {
+        let m = sample_match("4111111111111111");
+        let val = m.to_dict(true);
+        assert_ne!(val["text"], "4111111111111111");
+        assert!(val["text"].as_str().unwrap().contains('*'));
+    }
+
+    #[test]
+    fn test_pattern_specificity_known() {
+        assert_eq!(pattern_specificity("Visa"), 0.90);
+        assert_eq!(pattern_specificity("Email Address"), 0.90);
+        assert_eq!(pattern_specificity("JWT Token"), 0.95);
+    }
+
+    #[test]
+    fn test_pattern_specificity_unknown_returns_default() {
+        assert_eq!(pattern_specificity("NoSuchPattern"), DEFAULT_SPECIFICITY);
+    }
+
+    #[test]
+    fn test_context_required() {
+        assert!(is_context_required("US Bank Account Number"));
+        assert!(is_context_required("Card Expiry"));
+        assert!(!is_context_required("Visa"));
+        assert!(!is_context_required("Email Address"));
+    }
+
+    #[test]
+    fn test_redacted_text_multibyte() {
+        let m = sample_match("テスト日本語データ"); // 8 chars, 24 bytes
+        let redacted = m.redacted_text();
+        // len() is 24 bytes (>8), so redacted_text uses first 3 + stars + last 3 chars
+        assert!(redacted.starts_with("テスト"));
+        assert!(redacted.ends_with("データ"));
+        assert!(redacted.contains('*'));
+    }
+}
+
 /// Patterns that REQUIRE context to be reported.
 /// These are patterns so broad that without context keywords nearby,
 /// they produce too many false positives.

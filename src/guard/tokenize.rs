@@ -94,3 +94,102 @@ impl Default for TokenVault {
         Self::new("TOK", None)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_with_secret() {
+        let vault = TokenVault::new("PFX", Some(b"mysecret"));
+        assert_eq!(vault.size(), 0);
+    }
+
+    #[test]
+    fn test_new_generates_random_secret() {
+        let vault = TokenVault::new("PFX", None);
+        assert_eq!(vault.size(), 0);
+        assert_eq!(vault.secret.len(), 32);
+    }
+
+    #[test]
+    fn test_default() {
+        let vault = TokenVault::default();
+        assert_eq!(vault.prefix, "TOK");
+    }
+
+    #[test]
+    fn test_tokenize_returns_prefixed_token() {
+        let mut vault = TokenVault::new("TOK", Some(b"test-secret"));
+        let token = vault.tokenize("4111111111111111", "Credit Card Numbers");
+        assert!(token.starts_with("TOK_CCN_"));
+        assert_eq!(vault.size(), 1);
+    }
+
+    #[test]
+    fn test_tokenize_deterministic() {
+        let mut vault = TokenVault::new("TOK", Some(b"test-secret"));
+        let token1 = vault.tokenize("secret", "Generic Secrets");
+        let token2 = vault.tokenize("secret", "Generic Secrets");
+        assert_eq!(token1, token2);
+        assert_eq!(vault.size(), 1);
+    }
+
+    #[test]
+    fn test_tokenize_different_values_different_tokens() {
+        let mut vault = TokenVault::new("TOK", Some(b"test-secret"));
+        let token1 = vault.tokenize("value1", "Test");
+        let token2 = vault.tokenize("value2", "Test");
+        assert_ne!(token1, token2);
+        assert_eq!(vault.size(), 2);
+    }
+
+    #[test]
+    fn test_detokenize_roundtrip() {
+        let mut vault = TokenVault::new("TOK", Some(b"test-secret"));
+        let token = vault.tokenize("4111111111111111", "Credit Card");
+        let recovered = vault.detokenize(&token);
+        assert_eq!(recovered, Some("4111111111111111"));
+    }
+
+    #[test]
+    fn test_detokenize_unknown_returns_none() {
+        let vault = TokenVault::default();
+        assert_eq!(vault.detokenize("TOK_UNKNOWN_abc123"), None);
+    }
+
+    #[test]
+    fn test_detokenize_text() {
+        let mut vault = TokenVault::new("TOK", Some(b"test-secret"));
+        let token = vault.tokenize("test@example.com", "Contact Info");
+        let text = format!("Email is {token} for contact.");
+        let recovered = vault.detokenize_text(&text);
+        assert!(recovered.contains("test@example.com"));
+        assert!(!recovered.contains(&token));
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut vault = TokenVault::default();
+        vault.tokenize("value", "Cat");
+        assert_eq!(vault.size(), 1);
+        vault.clear();
+        assert_eq!(vault.size(), 0);
+    }
+
+    #[test]
+    fn test_export_map() {
+        let mut vault = TokenVault::new("TOK", Some(b"test-secret"));
+        let token = vault.tokenize("secret_value", "Secrets");
+        let map = vault.export_map();
+        assert_eq!(map.get(&token), Some(&"secret_value".to_string()));
+    }
+
+    #[test]
+    fn test_category_abbreviation() {
+        let mut vault = TokenVault::new("TOK", Some(b"test-secret"));
+        let token = vault.tokenize("val", "Credit Card Numbers");
+        // "Credit Card Numbers" → "CCN"
+        assert!(token.contains("_CCN_"));
+    }
+}

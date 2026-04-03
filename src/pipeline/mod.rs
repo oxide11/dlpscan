@@ -335,3 +335,177 @@ pub fn results_to_csv(results: &[PipelineResult]) -> String {
     }
     output
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn test_pipeline_default() {
+        let pipeline = Pipeline::default();
+        assert_eq!(pipeline.max_file_size, DEFAULT_MAX_FILE_SIZE);
+        assert!(!pipeline.require_context);
+    }
+
+    #[test]
+    fn test_pipeline_builder() {
+        let pipeline = Pipeline::new()
+            .with_max_file_size(1024)
+            .with_require_context(true)
+            .with_min_confidence(0.5);
+        assert_eq!(pipeline.max_file_size, 1024);
+        assert!(pipeline.require_context);
+        assert_eq!(pipeline.min_confidence, 0.5);
+    }
+
+    #[test]
+    fn test_process_file_with_sensitive_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("test.txt");
+        let mut f = fs::File::create(&file_path).unwrap();
+        writeln!(f, "Contact email: test@example.com").unwrap();
+
+        let pipeline = Pipeline::new();
+        let result = pipeline.process_file(&file_path);
+        assert!(result.success());
+        assert!(result.match_count() > 0);
+        assert!(["text", "txt"].contains(&result.format_detected.as_str()));
+        assert!(result.file_size_bytes > 0);
+    }
+
+    #[test]
+    fn test_process_file_clean() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("clean.txt");
+        let mut f = fs::File::create(&file_path).unwrap();
+        writeln!(f, "Hello world, no sensitive data here.").unwrap();
+
+        let pipeline = Pipeline::new();
+        let result = pipeline.process_file(&file_path);
+        assert!(result.success());
+    }
+
+    #[test]
+    fn test_process_file_not_found() {
+        let pipeline = Pipeline::new();
+        let result = pipeline.process_file(Path::new("/nonexistent/file.txt"));
+        assert!(!result.success());
+        assert!(result.error.is_some());
+    }
+
+    #[test]
+    fn test_process_file_too_large() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("big.txt");
+        let mut f = fs::File::create(&file_path).unwrap();
+        f.write_all(&vec![b'a'; 1024]).unwrap();
+
+        let pipeline = Pipeline::new().with_max_file_size(100);
+        let result = pipeline.process_file(&file_path);
+        assert!(!result.success());
+        assert!(result.error.as_ref().unwrap().contains("too large"));
+    }
+
+    #[test]
+    fn test_process_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let f1 = dir.path().join("a.txt");
+        let f2 = dir.path().join("b.txt");
+        fs::write(&f1, "Email: test@example.com").unwrap();
+        fs::write(&f2, "Clean text here").unwrap();
+
+        let pipeline = Pipeline::new();
+        let results = pipeline.process_directory(dir.path(), false);
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|r| r.success()));
+    }
+
+    #[test]
+    fn test_process_files_parallel() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths: Vec<PathBuf> = (0..5).map(|i| {
+            let p = dir.path().join(format!("file{i}.txt"));
+            fs::write(&p, format!("File {i}: contact@test.com")).unwrap();
+            p
+        }).collect();
+
+        let pipeline = Pipeline::new();
+        let results = pipeline.process_files(&paths);
+        assert_eq!(results.len(), 5);
+    }
+
+    #[test]
+    fn test_detect_format() {
+        assert_eq!(detect_format(Path::new("test.txt")), "text");
+        assert_eq!(detect_format(Path::new("data.json")), "json");
+        assert_eq!(detect_format(Path::new("doc.pdf")), "pdf");
+        assert_eq!(detect_format(Path::new("code.rs")), "source_code");
+        assert_eq!(detect_format(Path::new("noext")), "unknown");
+    }
+
+    #[test]
+    fn test_results_to_json() {
+        let results = vec![PipelineResult {
+            file_path: "test.txt".into(),
+            matches: vec![],
+            format_detected: "text".into(),
+            duration_ms: 1.5,
+            error: None,
+            file_size_bytes: 100,
+            extracted_text_length: 100,
+        }];
+        let json = results_to_json(&results, false).unwrap();
+        assert!(json.contains("test.txt"));
+    }
+
+    #[test]
+    fn test_results_to_csv() {
+        let results = vec![PipelineResult {
+            file_path: "test.txt".into(),
+            matches: vec![],
+            format_detected: "text".into(),
+            duration_ms: 1.5,
+            error: None,
+            file_size_bytes: 100,
+            extracted_text_length: 100,
+        }];
+        let csv = results_to_csv(&results);
+        assert!(csv.starts_with("file_path,"));
+        assert!(csv.contains("test.txt"));
+    }
+
+    #[test]
+    fn test_escape_csv_field() {
+        assert_eq!(escape_csv_field("simple"), "simple");
+        assert_eq!(escape_csv_field("has,comma"), "\"has,comma\"");
+        assert_eq!(escape_csv_field("has\"quote"), "\"has\"\"quote\"");
+        assert_eq!(escape_csv_field("=formula"), "\"=formula\"");
+    }
+
+    #[test]
+    fn test_pipeline_result_methods() {
+        let r = PipelineResult {
+            file_path: "f.txt".into(),
+            matches: vec![],
+            format_detected: "text".into(),
+            duration_ms: 0.0,
+            error: None,
+            file_size_bytes: 0,
+            extracted_text_length: 0,
+        };
+        assert!(r.success());
+        assert_eq!(r.match_count(), 0);
+    }
+
+    #[test]
+    fn test_collect_files_skips_hidden() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("visible.txt"), "data").unwrap();
+        fs::write(dir.path().join(".hidden"), "data").unwrap();
+
+        let files = collect_files(dir.path(), false);
+        assert_eq!(files.len(), 1);
+        assert!(files[0].file_name().unwrap().to_str().unwrap() == "visible.txt");
+    }
+}
