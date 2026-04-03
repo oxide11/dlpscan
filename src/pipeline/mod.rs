@@ -189,8 +189,8 @@ impl Pipeline {
             ..Default::default()
         };
 
-        let mut matches = match scanner::scan_text_with_config(&text, &config) {
-            Ok(m) => m,
+        let output = match scanner::scan_text_with_config(&text, &config) {
+            Ok(o) => o,
             Err(e) => {
                 return PipelineResult {
                     file_path,
@@ -203,6 +203,10 @@ impl Pipeline {
                 };
             }
         };
+        if output.truncated {
+            tracing::warn!(file = %file_path, "Scan results truncated (timeout or match cap)");
+        }
+        let mut matches = output.matches;
 
         // Apply allowlist
         if let Some(ref allowlist) = self.allowlist {

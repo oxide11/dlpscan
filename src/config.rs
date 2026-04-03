@@ -207,6 +207,17 @@ pub fn merge_configs(file: &Config, overrides: &HashMap<String, serde_json::Valu
     if merged.max_matches == 0 {
         merged.max_matches = 50_000;
     }
+    // Cap max_matches to prevent excessive memory usage
+    merged.max_matches = merged.max_matches.min(500_000);
+
+    // Validate context_backend
+    if merged.context_backend != "regex" {
+        tracing::warn!(
+            backend = %merged.context_backend,
+            "Unknown context_backend, falling back to 'regex'"
+        );
+        merged.context_backend = "regex".to_string();
+    }
 
     merged
 }

@@ -6,8 +6,11 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+#[cfg(feature = "async-support")]
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, RwLock};
+#[cfg(feature = "async-support")]
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Instant;
 
 use crate::guard::{Action, InputGuard, Preset, ScanResult, TokenVault};
@@ -318,9 +321,38 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
     });
 
     let active_connections = Arc::new(AtomicUsize::new(0));
+    let shutdown = tokio::signal::ctrl_c();
+    tokio::pin!(shutdown);
 
     loop {
-        let (mut socket, _) = listener.accept().await?;
+        let accept = listener.accept();
+        let (mut socket, _) = tokio::select! {
+            result = accept => match result {
+                Ok(conn) => conn,
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to accept connection");
+                    continue;
+                }
+            },
+            _ = &mut shutdown => {
+                tracing::info!("Shutdown signal received, draining {} active connections",
+                    active_connections.load(Ordering::SeqCst));
+                // Wait for active connections to drain (up to 30s)
+                let drain_start = std::time::Instant::now();
+                while active_connections.load(Ordering::SeqCst) > 0
+                    && drain_start.elapsed() < std::time::Duration::from_secs(30)
+                {
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+                let remaining = active_connections.load(Ordering::SeqCst);
+                if remaining > 0 {
+                    tracing::warn!(remaining, "Shutting down with active connections");
+                } else {
+                    tracing::info!("All connections drained, shutting down cleanly");
+                }
+                return Ok(());
+            }
+        };
         let state = state.clone();
         let active_connections = active_connections.clone();
 
@@ -402,12 +434,16 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
             }
 
             let request = String::from_utf8_lossy(&buf);
+            let request_id = simple_uuid();
+            let _span = tracing::info_span!("request", request_id = %request_id).entered();
+
             let (status, body) = route_request(&request, &state);
+            tracing::info!(status = %status, "Request completed");
 
             let response = format!(
                 "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nX-Request-ID: {}\r\n\r\n{body}",
                 body.len(),
-                simple_uuid(),
+                request_id,
             );
 
             let _ = socket.write_all(response.as_bytes()).await;

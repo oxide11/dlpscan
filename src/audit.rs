@@ -185,8 +185,13 @@ pub struct StderrAuditHandler;
 
 impl AuditHandler for StderrAuditHandler {
     fn handle(&self, event: &AuditEvent) {
-        if let Ok(json) = serde_json::to_string(event) {
-            let _ = writeln!(std::io::stderr(), "{json}");
+        match serde_json::to_string(event) {
+            Ok(json) => {
+                let _ = writeln!(std::io::stderr(), "{json}");
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to serialize audit event for stderr");
+            }
         }
     }
 }

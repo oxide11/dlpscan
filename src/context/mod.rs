@@ -72,11 +72,17 @@ static AC_MATCHER: Lazy<Option<(AhoCorasick, Vec<(&'static str, &'static str)>)>
             }
         }
 
-        let ac = AhoCorasickBuilder::new()
+        let ac = match AhoCorasickBuilder::new()
             .match_kind(MatchKind::LeftmostFirst)
             .ascii_case_insensitive(true)
             .build(&patterns)
-            .ok()?;
+        {
+            Ok(ac) => ac,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to build Aho-Corasick context matcher; context detection disabled");
+                return None;
+            }
+        };
 
         Some((ac, pattern_keys))
     });

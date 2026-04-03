@@ -35,31 +35,36 @@ impl StreamScanner {
 
     /// Feed a chunk of text. Returns matches if the buffer is full.
     pub fn feed(&self, chunk: &str) -> Vec<Match> {
-        let mut buf = self.buffer.lock().unwrap_or_else(|e| e.into_inner());
-        buf.push_str(chunk);
+        // Take the text out of the lock quickly to minimize lock hold time
+        let text = {
+            let mut buf = self.buffer.lock().unwrap_or_else(|e| e.into_inner());
+            buf.push_str(chunk);
 
-        if buf.len() >= self.buffer_size {
-            let text = buf.clone();
-            // Keep overlap for cross-boundary matches (char-boundary safe)
-            if text.len() > self.overlap {
-                let mut split_at = text.len() - self.overlap;
-                while split_at > 0 && !text.is_char_boundary(split_at) {
-                    split_at -= 1;
+            if buf.len() >= self.buffer_size {
+                // Take the full buffer, replace with overlap tail
+                let text = std::mem::take(&mut *buf);
+                if text.len() > self.overlap {
+                    let mut split_at = text.len() - self.overlap;
+                    while split_at > 0 && !text.is_char_boundary(split_at) {
+                        split_at -= 1;
+                    }
+                    *buf = text[split_at..].to_string();
                 }
-                *buf = text[split_at..].to_string();
+                Some(text)
             } else {
-                buf.clear();
+                None
             }
-
-            match scanner::scan_text_with_config(&text, &self.config) {
-                Ok(matches) => matches,
+        };
+        // Lock is released — scan outside the critical section
+        match text {
+            Some(text) => match scanner::scan_text_with_config(&text, &self.config) {
+                Ok(output) => output.matches,
                 Err(e) => {
                     tracing::error!(error = %e, "Streaming scan failed on buffer flush");
                     vec![]
                 }
-            }
-        } else {
-            vec![]
+            },
+            None => vec![],
         }
     }
 
@@ -72,7 +77,7 @@ impl StreamScanner {
 
         let text = std::mem::take(&mut *buf);
         match scanner::scan_text_with_config(&text, &self.config) {
-            Ok(matches) => matches,
+            Ok(output) => output.matches,
             Err(e) => {
                 tracing::error!(error = %e, "Streaming scan failed on final flush");
                 vec![]

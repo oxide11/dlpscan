@@ -186,7 +186,8 @@ impl InputGuard {
             ..Default::default()
         };
 
-        let mut findings = scanner::scan_text_with_config(text, &config)?;
+        let output = scanner::scan_text_with_config(text, &config)?;
+        let mut findings = output.matches;
 
         // Apply allowlist
         if let Some(ref allowlist) = self.allowlist {
@@ -237,8 +238,8 @@ impl InputGuard {
             baseline_only: self.baseline_only,
             ..Default::default()
         };
-        let findings = scanner::scan_text_with_config(text, &config)?;
-        Ok(self.redact_text(text, &findings))
+        let output = scanner::scan_text_with_config(text, &config)?;
+        Ok(self.redact_text(text, &output.matches))
     }
 
     /// Redact findings in text.

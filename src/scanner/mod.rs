@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 use rayon::prelude::*;
 use regex::Regex;
 use std::collections::HashSet;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::context;
 use crate::models::{is_context_required, pattern_specificity, Match, PatternDef};
@@ -27,6 +27,15 @@ pub const REGEX_TIMEOUT_SECONDS: u64 = 5;
 
 /// Maximum input size (10 MB).
 pub const MAX_INPUT_SIZE: usize = 10 * 1024 * 1024;
+
+/// Result of a scan operation, including whether results may be incomplete.
+#[derive(Debug, Clone)]
+pub struct ScanOutput {
+    /// Matched findings.
+    pub matches: Vec<Match>,
+    /// True if the scan was terminated early (timeout or match cap reached).
+    pub truncated: bool,
+}
 
 /// Scanner configuration.
 #[derive(Debug, Clone)]
@@ -155,13 +164,13 @@ fn is_always_run(sub_category: &str) -> bool {
 /// Uses Aho-Corasick prefilter to skip ~80% of regex patterns when their
 /// context keywords aren't present, then runs remaining patterns in parallel.
 pub fn scan_text(text: &str) -> crate::Result<Vec<Match>> {
-    scan_text_with_config(text, &ScanConfig::default())
+    scan_text_with_config(text, &ScanConfig::default()).map(|o| o.matches)
 }
 
 /// Scan text with custom configuration.
 ///
 /// Uses parallel iteration over compiled regexes with Rayon for throughput.
-pub fn scan_text_with_config(text: &str, config: &ScanConfig) -> crate::Result<Vec<Match>> {
+pub fn scan_text_with_config(text: &str, config: &ScanConfig) -> crate::Result<ScanOutput> {
     validate_text_input(text)?;
 
     let start = Instant::now();
@@ -309,23 +318,28 @@ pub fn scan_text_with_config(text: &str, config: &ScanConfig) -> crate::Result<V
         .collect();
 
     // Check if scan exceeded timeout
-    if start.elapsed().as_secs() > MAX_SCAN_SECONDS {
+    let timed_out = start.elapsed().as_secs() > MAX_SCAN_SECONDS;
+    if timed_out {
         tracing::warn!("Scan exceeded timeout of {}s, returning partial results", MAX_SCAN_SECONDS);
     }
 
     // Flatten and truncate
-    let mut matches: Vec<Match> = per_pattern_matches
+    let all_matches: Vec<Match> = per_pattern_matches
         .into_iter()
         .flatten()
-        .take(config.max_matches)
         .collect();
+    let match_cap_hit = all_matches.len() > config.max_matches;
+    let mut matches: Vec<Match> = all_matches.into_iter().take(config.max_matches).collect();
 
     // Deduplicate overlapping matches
     if config.deduplicate {
         deduplicate_overlapping(&mut matches);
     }
 
-    Ok(matches)
+    Ok(ScanOutput {
+        matches,
+        truncated: timed_out || match_cap_hit,
+    })
 }
 
 #[cfg(test)]
@@ -363,8 +377,8 @@ mod tests {
             categories: Some(["Contact Information".to_string()].into_iter().collect()),
             ..Default::default()
         };
-        let result =
+        let output =
             scan_text_with_config("Email: test@example.com SSN: 123-45-6789", &config).unwrap();
-        assert!(result.iter().all(|m| m.category == "Contact Information"));
+        assert!(output.matches.iter().all(|m| m.category == "Contact Information"));
     }
 }

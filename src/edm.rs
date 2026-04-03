@@ -48,7 +48,7 @@ pub type Tokenizer = fn(&str) -> Vec<(String, (usize, usize))>;
 
 /// Extract numeric sequences (digits, hyphens, dots, spaces) 5-20 chars.
 fn tokenize_numeric(text: &str) -> Vec<(String, (usize, usize))> {
-    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\d[\d\-. ]{3,18}\d").unwrap());
+    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\d[\d\-. ]{3,18}\d").expect("hardcoded numeric regex"));
     RE.find_iter(text)
         .map(|m| (m.as_str().to_string(), (m.start(), m.end())))
         .collect()
@@ -57,7 +57,7 @@ fn tokenize_numeric(text: &str) -> Vec<(String, (usize, usize))> {
 /// Extract email addresses.
 fn tokenize_emails(text: &str) -> Vec<(String, (usize, usize))> {
     static RE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}").unwrap());
+        Lazy::new(|| Regex::new(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}").expect("hardcoded email regex"));
     RE.find_iter(text)
         .map(|m| (m.as_str().to_string(), (m.start(), m.end())))
         .collect()
@@ -65,7 +65,7 @@ fn tokenize_emails(text: &str) -> Vec<(String, (usize, usize))> {
 
 /// Extract individual words (1-grams).
 fn tokenize_words_1(text: &str) -> Vec<(String, (usize, usize))> {
-    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b\w+\b").unwrap());
+    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b\w+\b").expect("hardcoded word regex"));
     RE.find_iter(text)
         .map(|m| (m.as_str().to_string(), (m.start(), m.end())))
         .collect()
@@ -126,7 +126,7 @@ fn normalize_value(value: &str) -> String {
     let lower = normalized.to_lowercase();
     let trimmed = lower.trim();
     // Remove separators
-    static SEP_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[\s\-./()]+").unwrap());
+    static SEP_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[\s\-./()]+").expect("hardcoded separator regex"));
     SEP_RE.replace_all(trimmed, "").to_string()
 }
 

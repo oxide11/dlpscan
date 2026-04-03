@@ -5,10 +5,17 @@
 
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use crate::guard::ScanResult;
+
+/// Maximum number of concurrent notify dispatch threads across all notifiers.
+const MAX_NOTIFY_THREADS: usize = 16;
+
+/// Global counter for active notify dispatch threads.
+static ACTIVE_NOTIFY_THREADS: AtomicUsize = AtomicUsize::new(0);
 
 // ---------------------------------------------------------------------------
 // URL safety & sanitisation helpers
@@ -261,17 +268,15 @@ impl WebhookNotifier {
                 sanitize_url(url)
             ));
         }
-        if let Ok(mut urls) = self.urls.lock() {
-            urls.push(url.to_string());
-        }
+        let mut urls = self.urls.lock().unwrap_or_else(|e| e.into_inner());
+        urls.push(url.to_string());
         Ok(())
     }
 
     /// Remove a URL from the notification list.
     pub fn remove_url(&self, url: &str) {
-        if let Ok(mut urls) = self.urls.lock() {
-            urls.retain(|u| u != url);
-        }
+        let mut urls = self.urls.lock().unwrap_or_else(|e| e.into_inner());
+        urls.retain(|u| u != url);
     }
 
     /// Send notification for scan result.
@@ -290,9 +295,23 @@ impl WebhookNotifier {
         let backoff = self.backoff_base;
         let max_concurrent = self.max_concurrent;
 
+        // Check global thread bound before spawning
+        if ACTIVE_NOTIFY_THREADS.load(Ordering::SeqCst) >= MAX_NOTIFY_THREADS {
+            tracing::warn!("Webhook notification thread limit reached, dropping notification");
+            return;
+        }
+        ACTIVE_NOTIFY_THREADS.fetch_add(1, Ordering::SeqCst);
+
         // Spawn a single thread that processes URLs in bounded batches
         std::thread::spawn(move || {
-            use std::sync::atomic::{AtomicUsize, Ordering};
+            struct ThreadGuard;
+            impl Drop for ThreadGuard {
+                fn drop(&mut self) {
+                    ACTIVE_NOTIFY_THREADS.fetch_sub(1, Ordering::SeqCst);
+                }
+            }
+            let _guard = ThreadGuard;
+
             let active = Arc::new(AtomicUsize::new(0));
             let mut handles = Vec::new();
 

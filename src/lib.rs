@@ -37,7 +37,7 @@ pub use errors::{DlpError, Result};
 pub use guard::{Action, InputGuard, Mode, Preset, ScanResult};
 pub use models::{Match, PatternDef};
 pub use pipeline::{FileJob, Pipeline, PipelineResult};
-pub use scanner::{scan_text, ScanConfig};
+pub use scanner::{scan_text, ScanConfig, ScanOutput};
 pub use streaming::StreamScanner;
 
 // Module re-exports

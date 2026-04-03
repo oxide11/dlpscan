@@ -113,13 +113,24 @@ enum GuardMode {
 }
 
 fn main() {
-    // Initialize logging
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
-        )
-        .init();
+    // Initialize logging — use JSON format if DLPSCAN_LOG_FORMAT=json
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"));
+
+    let use_json = std::env::var("DLPSCAN_LOG_FORMAT")
+        .map(|v| v.eq_ignore_ascii_case("json"))
+        .unwrap_or(false);
+
+    if use_json {
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .json()
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .init();
+    }
 
     let cli = Cli::parse();
 
@@ -140,7 +151,7 @@ fn main() {
             let elapsed = start.elapsed();
 
             if let Some(ref err) = result.error {
-                eprintln!("Error: {err}");
+                tracing::error!(error = %err, "File scan failed");
                 process::exit(1);
             }
 
@@ -235,7 +246,7 @@ fn main() {
                 match io::stdin().take(max_stdin as u64).read_to_string(&mut buf) {
                     Ok(_) => buf,
                     Err(e) => {
-                        eprintln!("Error reading stdin: {e}");
+                        tracing::error!(error = %e, "Failed to read stdin");
                         process::exit(1);
                     }
                 }
@@ -249,7 +260,11 @@ fn main() {
             };
 
             match scanner::scan_text_with_config(&text, &config) {
-                Ok(matches) => {
+                Ok(output) => {
+                    if output.truncated {
+                        tracing::warn!("Scan results may be incomplete (timeout or match cap reached)");
+                    }
+                    let matches = output.matches;
                     match cli.format {
                         OutputFormat::Json => {
                             let json_matches: Vec<_> =
@@ -277,7 +292,7 @@ fn main() {
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error: {e}");
+                    tracing::error!(error = %e, "Text scan failed");
                     process::exit(1);
                 }
             }
@@ -296,7 +311,7 @@ fn main() {
                 match io::stdin().take(max_stdin as u64).read_to_string(&mut buf) {
                     Ok(_) => buf,
                     Err(e) => {
-                        eprintln!("Error reading stdin: {e}");
+                        tracing::error!(error = %e, "Failed to read stdin");
                         process::exit(1);
                     }
                 }
@@ -328,7 +343,7 @@ fn main() {
                             "healthcare" => Some(Preset::Healthcare),
                             "contact_info" | "contact-info" => Some(Preset::ContactInfo),
                             _ => {
-                                eprintln!("Unknown preset: {s}");
+                                tracing::warn!(preset = %s, "Unknown preset, skipping");
                                 None
                             }
                         })
@@ -375,14 +390,15 @@ fn main() {
                     finding_count,
                     categories,
                 }) => {
-                    eprintln!(
-                        "REJECTED: {finding_count} sensitive data findings in: {}",
-                        categories.join(", ")
+                    tracing::warn!(
+                        finding_count,
+                        categories = %categories.join(", "),
+                        "REJECTED: sensitive data detected"
                     );
                     process::exit(2);
                 }
                 Err(e) => {
-                    eprintln!("Error: {e}");
+                    tracing::error!(error = %e, "Guard scan failed");
                     process::exit(1);
                 }
             }
