@@ -139,11 +139,11 @@ impl ComplianceReporter {
                 .push(m);
 
             if m.confidence >= 0.75 {
-                *severity_counts.get_mut("high").unwrap() += 1;
+                severity_counts.get_mut("high").map(|v| *v += 1);
             } else if m.confidence >= 0.40 {
-                *severity_counts.get_mut("medium").unwrap() += 1;
+                severity_counts.get_mut("medium").map(|v| *v += 1);
             } else {
-                *severity_counts.get_mut("low").unwrap() += 1;
+                severity_counts.get_mut("low").map(|v| *v += 1);
             }
         }
 

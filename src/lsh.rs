@@ -111,7 +111,7 @@ impl DocumentVault {
 
         self.documents
             .lock()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .insert(doc_id.to_string(), entry);
     }
 
@@ -155,7 +155,7 @@ impl DocumentVault {
             })
             .collect();
 
-        matches.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap());
+        matches.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal));
         matches
     }
 

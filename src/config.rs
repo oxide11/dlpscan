@@ -199,6 +199,15 @@ pub fn merge_configs(file: &Config, overrides: &HashMap<String, serde_json::Valu
         merged.format = v.to_string();
     }
 
+    // Validate config values
+    if merged.min_confidence.is_nan() || merged.min_confidence.is_infinite() {
+        merged.min_confidence = 0.0;
+    }
+    merged.min_confidence = merged.min_confidence.clamp(0.0, 1.0);
+    if merged.max_matches == 0 {
+        merged.max_matches = 50_000;
+    }
+
     merged
 }
 

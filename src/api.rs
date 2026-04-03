@@ -296,7 +296,7 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
 
     let addr = format!("{}:{}", config.host, config.port);
     let listener = TcpListener::bind(&addr).await?;
-    eprintln!("dlpscan API server listening on {addr}");
+    tracing::info!("dlpscan API server listening on {}", addr);
 
     let state = Arc::new(AppState {
         api_key: config.api_key,

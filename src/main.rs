@@ -231,8 +231,14 @@ fn main() {
         Commands::ScanText { text } => {
             let text = text.unwrap_or_else(|| {
                 let mut buf = String::new();
-                io::stdin().read_to_string(&mut buf).expect("Failed to read stdin");
-                buf
+                let max_stdin = 10 * 1024 * 1024; // 10 MB
+                match io::stdin().take(max_stdin as u64).read_to_string(&mut buf) {
+                    Ok(_) => buf,
+                    Err(e) => {
+                        eprintln!("Error reading stdin: {e}");
+                        process::exit(1);
+                    }
+                }
             });
 
             let config = scanner::ScanConfig {
@@ -286,8 +292,14 @@ fn main() {
         } => {
             let text = text.unwrap_or_else(|| {
                 let mut buf = String::new();
-                io::stdin().read_to_string(&mut buf).expect("Failed to read stdin");
-                buf
+                let max_stdin = 10 * 1024 * 1024; // 10 MB
+                match io::stdin().take(max_stdin as u64).read_to_string(&mut buf) {
+                    Ok(_) => buf,
+                    Err(e) => {
+                        eprintln!("Error reading stdin: {e}");
+                        process::exit(1);
+                    }
+                }
             });
 
             let action = match action {

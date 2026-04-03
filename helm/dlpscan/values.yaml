@@ -88,6 +88,8 @@ config:
     redisUrl: ""
 
 # Secrets (use K8s secrets or external secrets operator)
+# WARNING: Do not set secrets directly in values files for production.
+# Use External Secrets Operator, Sealed Secrets, or --set on the command line.
 secrets:
   apiKey: ""
   vaultEncryptionKey: ""

@@ -58,16 +58,13 @@ pub struct AuditEvent {
 impl AuditEvent {
     /// Create a new [`AuditEvent`] with the given `event_type`.
     ///
-    /// # Panics
-    ///
-    /// Panics if `event_type` is not one of [`VALID_EVENT_TYPES`].
-    pub fn new(event_type: &str) -> Self {
-        assert!(
-            VALID_EVENT_TYPES.contains(&event_type),
-            "Invalid event type: {event_type}. Must be one of: {VALID_EVENT_TYPES:?}"
-        );
+    /// Returns an error if `event_type` is not one of [`VALID_EVENT_TYPES`].
+    pub fn new(event_type: &str) -> Result<Self, String> {
+        if !VALID_EVENT_TYPES.contains(&event_type) {
+            return Err(format!("Invalid event type: {}", event_type));
+        }
 
-        Self {
+        Ok(Self {
             event_type: event_type.to_string(),
             timestamp: iso8601_now(),
             user: None,
@@ -79,7 +76,7 @@ impl AuditEvent {
             source: None,
             duration_ms: None,
             metadata: HashMap::new(),
-        }
+        })
     }
 
     pub fn with_user(mut self, user: &str) -> Self {
@@ -388,7 +385,27 @@ pub fn event_from_scan(
         _ => "SCAN",
     };
 
-    let mut event = AuditEvent::new(event_type)
+    let mut event = match AuditEvent::new(event_type) {
+        Ok(e) => e,
+        Err(err) => {
+            tracing::warn!("Failed to create audit event: {}", err);
+            return AuditEvent::new("SCAN").unwrap_or_else(|_| AuditEvent {
+                event_type: "SCAN".to_string(),
+                timestamp: iso8601_now(),
+                user: None,
+                action: None,
+                categories_scanned: Vec::new(),
+                categories_found: Vec::new(),
+                finding_count: 0,
+                is_clean: false,
+                source: None,
+                duration_ms: None,
+                metadata: HashMap::new(),
+            });
+        }
+    };
+
+    event = event
         .with_action(action)
         .with_is_clean(result.is_clean)
         .with_finding_count(result.finding_count())
@@ -425,20 +442,22 @@ mod tests {
     #[test]
     fn test_valid_event_types() {
         for &et in VALID_EVENT_TYPES {
-            let event = AuditEvent::new(et);
+            let event = AuditEvent::new(et).unwrap();
             assert_eq!(event.event_type, et);
         }
     }
 
     #[test]
-    #[should_panic(expected = "Invalid event type")]
-    fn test_invalid_event_type_panics() {
-        AuditEvent::new("INVALID");
+    fn test_invalid_event_type_returns_error() {
+        let result = AuditEvent::new("INVALID");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid event type"));
     }
 
     #[test]
     fn test_builder_methods() {
         let event = AuditEvent::new("SCAN")
+            .unwrap()
             .with_user("alice")
             .with_action("scan")
             .with_source("api")
@@ -463,7 +482,7 @@ mod tests {
 
     #[test]
     fn test_timestamp_format() {
-        let event = AuditEvent::new("SCAN");
+        let event = AuditEvent::new("SCAN").unwrap();
         // Should match ISO 8601 pattern: YYYY-MM-DDTHH:MM:SSZ
         assert!(event.timestamp.ends_with('Z'));
         assert_eq!(event.timestamp.len(), 20);
@@ -477,6 +496,7 @@ mod tests {
     #[test]
     fn test_serialization_roundtrip() {
         let event = AuditEvent::new("REDACT")
+            .unwrap()
             .with_user("bob")
             .with_finding_count(2)
             .with_is_clean(false);
@@ -494,7 +514,7 @@ mod tests {
     fn test_null_handler() {
         // Should not panic.
         let handler = NullAuditHandler;
-        handler.handle(&AuditEvent::new("SCAN"));
+        handler.handle(&AuditEvent::new("SCAN").unwrap());
     }
 
     #[test]
@@ -509,8 +529,8 @@ mod tests {
                 .push(event.event_type.clone());
         });
 
-        handler.handle(&AuditEvent::new("SCAN"));
-        handler.handle(&AuditEvent::new("REJECT"));
+        handler.handle(&AuditEvent::new("SCAN").unwrap());
+        handler.handle(&AuditEvent::new("REJECT").unwrap());
 
         let events = captured.lock().unwrap();
         assert_eq!(*events, vec!["SCAN", "REJECT"]);
@@ -527,8 +547,8 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         let handler = FileAuditHandler::new(&path_str);
-        handler.handle(&AuditEvent::new("SCAN").with_user("test"));
-        handler.handle(&AuditEvent::new("REDACT"));
+        handler.handle(&AuditEvent::new("SCAN").unwrap().with_user("test"));
+        handler.handle(&AuditEvent::new("REDACT").unwrap());
 
         let contents = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = contents.trim().lines().collect();
@@ -553,8 +573,8 @@ mod tests {
                 c.lock().unwrap().push(e.event_type.clone());
             })));
 
-        logger.log(&AuditEvent::new("SCAN"));
-        logger.log(&AuditEvent::new("FLAG"));
+        logger.log(&AuditEvent::new("SCAN").unwrap());
+        logger.log(&AuditEvent::new("FLAG").unwrap());
 
         let events = captured.lock().unwrap();
         assert_eq!(*events, vec!["SCAN", "FLAG"]);
@@ -573,9 +593,9 @@ mod tests {
             })));
 
         // Event without user -> should get default.
-        logger.log(&AuditEvent::new("SCAN"));
+        logger.log(&AuditEvent::new("SCAN").unwrap());
         // Event with explicit user -> should keep its own.
-        logger.log(&AuditEvent::new("SCAN").with_user("explicit"));
+        logger.log(&AuditEvent::new("SCAN").unwrap().with_user("explicit"));
 
         let users = captured.lock().unwrap();
         assert_eq!(users[0], Some("default_user".to_string()));
@@ -592,14 +612,14 @@ mod tests {
             *c.lock().unwrap() += 1;
         })));
 
-        logger.log(&AuditEvent::new("SCAN"));
+        logger.log(&AuditEvent::new("SCAN").unwrap());
         assert_eq!(*captured.lock().unwrap(), 1);
     }
 
     #[test]
     fn test_global_audit_event_no_logger() {
         // Should be a no-op, not panic.
-        audit_event(&AuditEvent::new("SCAN"));
+        audit_event(&AuditEvent::new("SCAN").unwrap());
     }
 
     #[test]

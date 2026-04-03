@@ -226,8 +226,12 @@ pub fn scan_text_with_config(text: &str, config: &ScanConfig) -> crate::Result<V
         .map(|cp| {
             let pat = cp.def;
             let mut local_matches = Vec::new();
+            const MAX_MATCHES_PER_PATTERN: usize = 10_000;
 
             for mat in cp.regex.find_iter(&normalized) {
+                if local_matches.len() >= MAX_MATCHES_PER_PATTERN {
+                    break;
+                }
                 let norm_start = mat.start();
                 let norm_end = mat.end();
                 let matched_text = mat.as_str();

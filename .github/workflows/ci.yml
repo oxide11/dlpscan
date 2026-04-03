@@ -59,3 +59,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t dlpscan:test .
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'dlpscan:test'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'

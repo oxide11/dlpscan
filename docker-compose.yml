@@ -12,6 +12,20 @@ services:
     environment:
       - RUST_LOG=info
     command: ["scan-dir", "/data", "--format", "json"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # Scan a single file
   dlpscan-file:
