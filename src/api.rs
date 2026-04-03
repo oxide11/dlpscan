@@ -176,13 +176,25 @@ impl RateLimiter {
 // API Configuration
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ApiConfig {
     pub host: String,
     pub port: u16,
     pub api_key: Option<String>,
     pub rate_limit: usize,
     pub cache_enabled: bool,
+}
+
+impl std::fmt::Debug for ApiConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ApiConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
+            .field("rate_limit", &self.rate_limit)
+            .field("cache_enabled", &self.cache_enabled)
+            .finish()
+    }
 }
 
 impl Default for ApiConfig {
@@ -201,7 +213,7 @@ impl ApiConfig {
     /// Load from environment variables.
     pub fn from_env() -> Self {
         Self {
-            host: std::env::var("DLPSCAN_API_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
+            host: std::env::var("DLPSCAN_API_HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
             port: std::env::var("DLPSCAN_API_PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())

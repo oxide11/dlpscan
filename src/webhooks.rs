@@ -44,11 +44,28 @@ fn parse_url(url: &str) -> Result<(&str, Option<&str>, &str, u16, &str), String>
         .unwrap_or((after_userinfo, "/"));
 
     let default_port: u16 = if scheme == "https" { 443 } else { 80 };
-    let (host, port) = if let Some(i) = host_port.find(':') {
-        (
-            &host_port[..i],
-            host_port[i + 1..].parse::<u16>().unwrap_or(default_port),
-        )
+    let (host, port) = if host_port.starts_with('[') {
+        // IPv6 bracket notation: [::1]:port or [::ffff:127.0.0.1]
+        if let Some(bracket_end) = host_port.find(']') {
+            let ipv6_host = &host_port[..bracket_end + 1];
+            let after_bracket = &host_port[bracket_end + 1..];
+            let port = if let Some(colon_port) = after_bracket.strip_prefix(':') {
+                colon_port.parse::<u16>().unwrap_or(default_port)
+            } else {
+                default_port
+            };
+            (ipv6_host, port)
+        } else {
+            (host_port, default_port)
+        }
+    } else if let Some(i) = host_port.rfind(':') {
+        // IPv4 or hostname with port — use rfind to handle edge cases
+        let potential_port = &host_port[i + 1..];
+        if let Ok(p) = potential_port.parse::<u16>() {
+            (&host_port[..i], p)
+        } else {
+            (host_port, default_port)
+        }
     } else {
         (host_port, default_port)
     };
@@ -100,25 +117,7 @@ pub fn is_safe_url(url: &str) -> bool {
 
     // Try parsing as IPv4
     if let Ok(ip) = trimmed.parse::<std::net::Ipv4Addr>() {
-        let octets = ip.octets();
-        // 127.0.0.0/8
-        if octets[0] == 127 {
-            return false;
-        }
-        // 10.0.0.0/8
-        if octets[0] == 10 {
-            return false;
-        }
-        // 172.16.0.0/12
-        if octets[0] == 172 && (octets[1] >= 16 && octets[1] <= 31) {
-            return false;
-        }
-        // 192.168.0.0/16
-        if octets[0] == 192 && octets[1] == 168 {
-            return false;
-        }
-        // 169.254.0.0/16 (link-local)
-        if octets[0] == 169 && octets[1] == 254 {
+        if is_private_ipv4(&ip) {
             return false;
         }
     }
@@ -129,13 +128,40 @@ pub fn is_safe_url(url: &str) -> bool {
             return false;
         }
         let segs = ip.segments();
-        // fd00::/8  (first byte is 0xfd)
+        // fd00::/8 (unique local)
         if (segs[0] >> 8) == 0xfd {
             return false;
+        }
+        // fe80::/10 (link-local)
+        if (segs[0] & 0xffc0) == 0xfe80 {
+            return false;
+        }
+        // Check IPv4-mapped IPv6 (::ffff:x.x.x.x) to prevent SSRF bypass
+        if segs[0] == 0 && segs[1] == 0 && segs[2] == 0
+            && segs[3] == 0 && segs[4] == 0 && segs[5] == 0xffff
+        {
+            let ipv4 = std::net::Ipv4Addr::new(
+                (segs[6] >> 8) as u8, segs[6] as u8,
+                (segs[7] >> 8) as u8, segs[7] as u8,
+            );
+            if is_private_ipv4(&ipv4) {
+                return false;
+            }
         }
     }
 
     true
+}
+
+/// Check if an IPv4 address is private/internal.
+fn is_private_ipv4(ip: &std::net::Ipv4Addr) -> bool {
+    let o = ip.octets();
+    o[0] == 0           // 0.0.0.0/8 (includes 0.0.0.0)
+    || o[0] == 127      // 127.0.0.0/8 (loopback)
+    || o[0] == 10       // 10.0.0.0/8
+    || (o[0] == 172 && (o[1] >= 16 && o[1] <= 31))  // 172.16.0.0/12
+    || (o[0] == 192 && o[1] == 168)                  // 192.168.0.0/16
+    || (o[0] == 169 && o[1] == 254)                  // 169.254.0.0/16 (link-local)
 }
 
 // ---------------------------------------------------------------------------
@@ -490,6 +516,22 @@ mod tests {
     fn test_is_safe_url_accepts_public() {
         assert!(is_safe_url("http://example.com/hook"));
         assert!(is_safe_url("https://hooks.slack.com/services/T00/B00/xxx"));
+    }
+
+    #[test]
+    fn test_is_safe_url_blocks_zero_address() {
+        assert!(!is_safe_url("http://0.0.0.0/hook"));
+        assert!(!is_safe_url("http://0.0.0.1/hook"));
+    }
+
+    #[test]
+    fn test_is_safe_url_blocks_ipv4_mapped_ipv6() {
+        // ::ffff:127.0.0.1 — IPv4-mapped loopback
+        assert!(!is_safe_url("http://[::ffff:127.0.0.1]/hook"));
+        // ::ffff:10.0.0.1 — IPv4-mapped private
+        assert!(!is_safe_url("http://[::ffff:10.0.0.1]/hook"));
+        // ::ffff:192.168.1.1 — IPv4-mapped private
+        assert!(!is_safe_url("http://[::ffff:192.168.1.1]/hook"));
     }
 
     #[test]
