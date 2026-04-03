@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  dlpscan:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dlpscan:latest
+    container_name: dlpscan
+    volumes:
+      - ./data:/data:ro
+    environment:
+      - RUST_LOG=info
+    command: ["scan-dir", "/data", "--format", "json"]
+
+  # Scan a single file
+  dlpscan-file:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dlpscan:latest
+    profiles:
+      - tools
+    volumes:
+      - ./data:/data:ro
+    command: ["scan", "/data/input.txt"]
+
+  # Run with InputGuard in redact mode
+  dlpscan-guard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dlpscan:latest
+    profiles:
+      - tools
+    environment:
+      - RUST_LOG=info
+    command: ["guard", "--action", "redact", "--presets", "pci-dss,credentials"]
