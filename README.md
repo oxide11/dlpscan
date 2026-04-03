@@ -4,7 +4,7 @@ High-performance DLP scanner written in Rust. Detects, redacts, and protects
 sensitive data with exceptional throughput.
 
 **560 patterns** across **126 categories** — full parity with the Python version.
-**15,000+ lines** of Rust across 37 modules. **127 tests** passing.
+**15,000+ lines** of Rust across 37 modules. **174 tests** passing.
 
 ## Performance
 
@@ -40,12 +40,22 @@ cargo run --release --bin benchmark
 | `archives` | No | RAR and 7z archive extraction via `unrar` + `sevenz-rust` |
 | `data-formats` | No | Parquet, SQLite extraction via `parquet` + `arrow` + `rusqlite` |
 | `msg` | No | Outlook MSG extraction via `cfb` |
-| `async-support` | No | Async HTTP server and webhooks via `tokio` + `reqwest` |
+| `async-support` | No | Async HTTP server with graceful shutdown via `tokio` + `reqwest` |
 | `python` | No | Python bindings via `pyo3` |
 | `full` | No | All optional features |
 
 ```bash
 cargo build --release --features full
+```
+
+### Docker
+
+```bash
+# Build image
+docker build -t dlpscan .
+
+# Run with docker-compose (includes resource limits and health checks)
+docker compose up -d
 ```
 
 ## Quick Start
@@ -128,7 +138,8 @@ let config = ScanConfig {
     baseline_only: false,
     ..Default::default()
 };
-let matches = scan_text_with_config("Card: 4532015112830366", &config)?;
+let output = scan_text_with_config("Card: 4532015112830366", &config)?;
+println!("Matches: {}, Truncated: {}", output.matches.len(), output.truncated);
 ```
 
 ## Modules
@@ -187,6 +198,50 @@ let matches = scan_text_with_config("Card: 4532015112830366", &config)?;
 | `siem` | SIEM adapters (Splunk HEC, Elasticsearch, Syslog, Datadog) |
 | `webhooks` | Webhook notifications with retry and exponential backoff |
 | `api` | HTTP API server with rate limiting and auth |
+
+## Security
+
+dlpscan has been hardened through a comprehensive security audit:
+
+- **Unicode evasion defense** — 4-stage normalization pipeline (zero-width strip,
+  whitespace normalize, NFKC, homoglyph mapping with 120+ entries) with byte-level
+  offset tracking through every transform
+- **SSRF protection** — All webhook and SIEM URLs validated against RFC 1918,
+  loopback, link-local, and IPv4-mapped IPv6 ranges
+- **Constant-time auth** — API key verification via SHA-256 hash comparison
+- **Archive bomb protection** — Size and file count limits on ZIP/RAR/7z extraction
+- **Path traversal prevention** — Entry name validation and path canonicalization
+- **No sensitive data in cache** — Matched text stripped before LRU caching
+- **Safe string handling** — UTF-8 char boundary checks on all slicing operations
+
+## Operations
+
+### Configuration
+
+```bash
+# Environment variables
+DLPSCAN_LOG_FORMAT=json     # JSON structured logging (default: text)
+RUST_LOG=info               # Log level (default: warn)
+DLPSCAN_API_KEY=<key>       # API server authentication
+DLPSCAN_BIND=127.0.0.1     # Server bind address (default: 127.0.0.1)
+DLPSCAN_PORT=8080           # Server port (default: 8080)
+```
+
+### Server
+
+The API server (`--features async-support`) supports:
+- Graceful shutdown on SIGTERM/SIGINT with 30s connection drain
+- Rate limiting and API key authentication
+- Connection cap (256 concurrent)
+- Request size limit (10MB)
+- Request correlation via `X-Request-ID` header (propagated to log spans)
+- Health check at `GET /health`
+
+### Deployment
+
+- **Dockerfile** with multi-stage build, health checks, non-root user
+- **docker-compose.yml** with resource limits, log rotation, restart policy
+- **Helm chart** with startup/liveness/readiness probes and NetworkPolicy
 
 ## Architecture
 

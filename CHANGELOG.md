@@ -2,6 +2,109 @@
 
 All notable changes to dlpscan will be documented in this file.
 
+## [2.1.0] - 2026-04-03
+
+### Security Hardening
+
+Comprehensive security audit and vulnerability remediation across the entire
+Rust codebase. All critical, high, medium, and low findings resolved.
+
+#### Critical & High Fixes
+- **UTF-8 boundary safety** — All string slicing (`&text[start..end]`) across
+  scanner, streaming, guard, compliance, batch, and models modules now validates
+  `is_char_boundary()` before slicing. Eliminates 6 crash vectors on multi-byte
+  input discovered by Evadex evasion testing
+- **4-stage normalization with byte-level offset tracking** — Complete rewrite of
+  `normalize_text()`. Each stage (zero-width strip, whitespace normalize, NFKC,
+  homoglyph map) propagates `offset_map[output_byte] = original_byte` through
+  character-width-changing transforms via `remap_char_transform()` and
+  `remap_nfkc()`. Fixes 104 detection gaps for Unicode-encoded evasion attacks
+- **Homoglyph map expansion** — 40 to 120+ entries: fullwidth ASCII A-Z/a-z
+  (U+FF21-FF5A), fullwidth digits (U+FF10-FF19), fullwidth punctuation,
+  subscript/superscript digits, Cyrillic/Greek lookalikes
+- **SSRF protection** — `is_safe_url()` with `is_private_ipv4()` blocking
+  0.0.0.0/8, 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16,
+  169.254.0.0/16. IPv4-mapped IPv6 (`::ffff:x.x.x.x`) detection. IPv6 bracket
+  notation in URL parsing
+- **Constant-time API key verification** — SHA-256 hash comparison instead of
+  string equality to prevent timing attacks
+- **Archive bomb protection** — `MAX_EXTRACT_TOTAL_SIZE` (500MB),
+  `MAX_EXTRACT_ENTRY_SIZE` (100MB), `MAX_EXTRACT_FILE_COUNT` (10,000) limits on
+  ZIP/RAR/7z extraction
+- **Path traversal prevention** — Pre-validate RAR entry names, canonicalize 7z
+  paths post-extraction
+- **API request body reading** — Full Content-Length loop with 30s timeout per
+  chunk, preventing silent truncation of 1-10MB requests (was a DLP bypass)
+- **Sensitive data in cache** — `ScanCache::put()` clears `result.text` before
+  storing to avoid retaining plaintext PII
+- **TOCTOU race fix** — Single lock acquisition in `run_validators` instead of
+  check-then-act with two separate locks
+- **HMAC token strength** — Truncation increased from 32-bit to 128-bit
+
+#### Medium Fixes
+- **Graceful shutdown** — `tokio::select!` with `ctrl_c()` signal handler, 30s
+  connection drain before termination
+- **JSON structured logging** — `DLPSCAN_LOG_FORMAT=json` environment variable
+  enables JSON output via `tracing-subscriber`
+- **Scan truncation indicator** — New `ScanOutput` struct with `truncated: bool`
+  flag returned from `scan_text_with_config()`. Callers can now distinguish
+  complete results from timeout/cap-limited partial results
+- **Request correlation IDs** — `X-Request-ID` propagated to `tracing::info_span`
+  so all log lines within a request share the same ID
+- **Bounded webhook threads** — Global cap of 16 concurrent dispatch threads with
+  RAII drop guard, preventing unbounded thread spawning under load
+- **StreamScanner lock optimization** — `std::mem::take` extracts buffer then
+  scans outside the mutex, eliminating clone-under-lock contention
+- **Config validation** — `context_backend` validated with warning fallback to
+  "regex"; `max_matches` capped at 500,000; `min_confidence` clamped to [0.0, 1.0]
+  with NaN/Inf rejection
+- **Structured error logging** — All `eprintln!` error paths in CLI replaced with
+  `tracing::error!` / `tracing::warn!` for consistent structured output
+- **Per-pattern match limit** — `MAX_MATCHES_PER_PATTERN = 10,000` prevents
+  unbounded memory growth from pathological regex inputs
+- **Bounded stdin reads** — 10MB cap with proper error handling
+- **ApiConfig Debug redaction** — Custom `Debug` impl masks `api_key` as
+  `[REDACTED]` to prevent accidental logging of secrets
+- **Default bind address** — Changed from `0.0.0.0` to `127.0.0.1` in both
+  `Default` and `from_env()` to prevent unintended network exposure
+
+#### Low Fixes
+- **Regex `.unwrap()` cleanup** — All hardcoded regex patterns in `edm.rs` use
+  `.expect()` with descriptive messages
+- **StderrAuditHandler** — Serialization failures now logged via
+  `tracing::error!` instead of silently dropped
+- **Webhook mutex recovery** — `add_url`/`remove_url` use
+  `unwrap_or_else(|e| e.into_inner())` for poisoned-lock recovery
+- **AhoCorasick build failure** — Logs warning instead of silently disabling
+  context keyword detection
+- **AuditEvent::new()** — Returns `Result` instead of panicking on invalid event
+  type
+- **File permissions** — EDM and LSH persistence files created with `0o600` mode
+- **Glob recursion** — Allowlist glob matching capped at depth 1,000
+- **Obfuscation seed warning** — `tracing::warn!` when deterministic seed is set
+
+### Deployment & Operations
+- **Dockerfile** — Rust 1.77 to 1.85, `--locked` builds, curl health check,
+  removed silent error suppression
+- **docker-compose.yml** — `restart: unless-stopped`, CPU/memory limits, log
+  rotation
+- **Helm chart** — `startupProbe`, `NetworkPolicy` source restrictions, secrets
+  warning comment
+- **CI** — Trivy container image scanning step added to GitHub Actions workflow
+
+### Binary Format Support
+- **CLI file scanning** — `process_file()` now tries `extractors::extract_text()`
+  before `fs::read_to_string()`, enabling DOCX, XLSX, PDF, and other binary
+  formats from the command line
+
+### Tests
+- 174 tests passing (up from 127), including:
+  - 7 new normalization tests (fullwidth digits/letters, Cyrillic homoglyphs,
+    mixed Unicode evasion, offset map accuracy)
+  - 3 SSRF bypass tests (0.0.0.0, IPv4-mapped IPv6, bracket notation)
+  - Stabilized flaky tests (`test_register_and_run_validator`,
+    `test_deterministic_seed`)
+
 ## [2.0.0] - 2026-04-02
 
 ### Rust Port (`dlpscan-rs`)
