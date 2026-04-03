@@ -47,33 +47,33 @@ static LEET_MAP: Lazy<HashMap<char, char>> = Lazy::new(|| {
 /// Applied AFTER NFKC, so this catches anything NFKC doesn't normalize.
 static HOMOGLYPH_MAP: Lazy<HashMap<char, char>> = Lazy::new(|| {
     let pairs = [
-        // Cyrillic uppercase
+        // ---- Cyrillic uppercase ----
         ('\u{0410}', 'A'), ('\u{0412}', 'B'), ('\u{0421}', 'C'),
         ('\u{0415}', 'E'), ('\u{041D}', 'H'), ('\u{0406}', 'I'),
         ('\u{0408}', 'J'), ('\u{041A}', 'K'), ('\u{041C}', 'M'),
         ('\u{041E}', 'O'), ('\u{0420}', 'P'), ('\u{0405}', 'S'),
         ('\u{0422}', 'T'), ('\u{0425}', 'X'), ('\u{0417}', 'Z'),
-        // Cyrillic lowercase
+        // ---- Cyrillic lowercase ----
         ('\u{0430}', 'a'), ('\u{0435}', 'e'), ('\u{0456}', 'i'),
         ('\u{0458}', 'j'), ('\u{043E}', 'o'), ('\u{0440}', 'p'),
         ('\u{0441}', 'c'), ('\u{0443}', 'y'), ('\u{0445}', 'x'),
         ('\u{0455}', 's'),
-        // Greek uppercase
+        // ---- Greek uppercase ----
         ('\u{0391}', 'A'), ('\u{0392}', 'B'), ('\u{0393}', 'G'),
         ('\u{0395}', 'E'), ('\u{0397}', 'H'), ('\u{0399}', 'I'),
         ('\u{039A}', 'K'), ('\u{039C}', 'M'), ('\u{039D}', 'N'),
         ('\u{039F}', 'O'), ('\u{03A1}', 'P'), ('\u{03A4}', 'T'),
         ('\u{03A5}', 'Y'), ('\u{03A7}', 'X'), ('\u{0396}', 'Z'),
-        // Greek lowercase
+        // ---- Greek lowercase ----
         ('\u{03B1}', 'a'), ('\u{03BF}', 'o'), ('\u{03B9}', 'i'),
         ('\u{03BA}', 'k'), ('\u{03BD}', 'v'), ('\u{03C1}', 'p'),
         ('\u{03C5}', 'u'), ('\u{03C7}', 'x'),
-        // Fullwidth digits (backup — NFKC should handle these)
+        // ---- Fullwidth digits (backup — NFKC should handle these) ----
         ('\u{FF10}', '0'), ('\u{FF11}', '1'), ('\u{FF12}', '2'),
         ('\u{FF13}', '3'), ('\u{FF14}', '4'), ('\u{FF15}', '5'),
         ('\u{FF16}', '6'), ('\u{FF17}', '7'), ('\u{FF18}', '8'),
         ('\u{FF19}', '9'),
-        // Fullwidth ASCII letters (backup — NFKC should handle these)
+        // ---- Fullwidth ASCII A-Z (backup — NFKC should handle) ----
         ('\u{FF21}', 'A'), ('\u{FF22}', 'B'), ('\u{FF23}', 'C'),
         ('\u{FF24}', 'D'), ('\u{FF25}', 'E'), ('\u{FF26}', 'F'),
         ('\u{FF27}', 'G'), ('\u{FF28}', 'H'), ('\u{FF29}', 'I'),
@@ -83,6 +83,7 @@ static HOMOGLYPH_MAP: Lazy<HashMap<char, char>> = Lazy::new(|| {
         ('\u{FF33}', 'S'), ('\u{FF34}', 'T'), ('\u{FF35}', 'U'),
         ('\u{FF36}', 'V'), ('\u{FF37}', 'W'), ('\u{FF38}', 'X'),
         ('\u{FF39}', 'Y'), ('\u{FF3A}', 'Z'),
+        // ---- Fullwidth ASCII a-z (backup — NFKC should handle) ----
         ('\u{FF41}', 'a'), ('\u{FF42}', 'b'), ('\u{FF43}', 'c'),
         ('\u{FF44}', 'd'), ('\u{FF45}', 'e'), ('\u{FF46}', 'f'),
         ('\u{FF47}', 'g'), ('\u{FF48}', 'h'), ('\u{FF49}', 'i'),
@@ -92,25 +93,190 @@ static HOMOGLYPH_MAP: Lazy<HashMap<char, char>> = Lazy::new(|| {
         ('\u{FF53}', 's'), ('\u{FF54}', 't'), ('\u{FF55}', 'u'),
         ('\u{FF56}', 'v'), ('\u{FF57}', 'w'), ('\u{FF58}', 'x'),
         ('\u{FF59}', 'y'), ('\u{FF5A}', 'z'),
-        // Fullwidth punctuation commonly used in evasion
+        // ---- Fullwidth punctuation ----
         ('\u{FF0D}', '-'), ('\u{FF0E}', '.'), ('\u{FF20}', '@'),
         ('\u{FF3F}', '_'), ('\u{FF0A}', '*'),
-        // Mathematical/script homoglyphs (commonly used for evasion)
+        // ---- Superscript digits ----
         ('\u{2070}', '0'), ('\u{00B9}', '1'), ('\u{00B2}', '2'),
-        ('\u{00B3}', '3'),
-        // Subscript digits
+        ('\u{00B3}', '3'), ('\u{2074}', '4'), ('\u{2075}', '5'),
+        ('\u{2076}', '6'), ('\u{2077}', '7'), ('\u{2078}', '8'),
+        ('\u{2079}', '9'),
+        // ---- Subscript digits ----
         ('\u{2080}', '0'), ('\u{2081}', '1'), ('\u{2082}', '2'),
         ('\u{2083}', '3'), ('\u{2084}', '4'), ('\u{2085}', '5'),
         ('\u{2086}', '6'), ('\u{2087}', '7'), ('\u{2088}', '8'),
         ('\u{2089}', '9'),
-        // Other common lookalikes
+        // ---- Enclosed/circled digits (U+2460-2473, U+24EA, U+2776-277F) ----
+        ('\u{2460}', '1'), ('\u{2461}', '2'), ('\u{2462}', '3'),
+        ('\u{2463}', '4'), ('\u{2464}', '5'), ('\u{2465}', '6'),
+        ('\u{2466}', '7'), ('\u{2467}', '8'), ('\u{2468}', '9'),
+        ('\u{24EA}', '0'), // circled 0
+        // Parenthesized digits
+        ('\u{2474}', '1'), ('\u{2475}', '2'), ('\u{2476}', '3'),
+        ('\u{2477}', '4'), ('\u{2478}', '5'), ('\u{2479}', '6'),
+        ('\u{247A}', '7'), ('\u{247B}', '8'), ('\u{247C}', '9'),
+        // Negative circled digits (dingbats)
+        ('\u{2776}', '1'), ('\u{2777}', '2'), ('\u{2778}', '3'),
+        ('\u{2779}', '4'), ('\u{277A}', '5'), ('\u{277B}', '6'),
+        ('\u{277C}', '7'), ('\u{277D}', '8'), ('\u{277E}', '9'),
+        ('\u{277F}', '0'),
+        // ---- Enclosed/circled letters (U+24B6-24E9) ----
+        ('\u{24B6}', 'A'), ('\u{24B7}', 'B'), ('\u{24B8}', 'C'),
+        ('\u{24B9}', 'D'), ('\u{24BA}', 'E'), ('\u{24BB}', 'F'),
+        ('\u{24BC}', 'G'), ('\u{24BD}', 'H'), ('\u{24BE}', 'I'),
+        ('\u{24BF}', 'J'), ('\u{24C0}', 'K'), ('\u{24C1}', 'L'),
+        ('\u{24C2}', 'M'), ('\u{24C3}', 'N'), ('\u{24C4}', 'O'),
+        ('\u{24C5}', 'P'), ('\u{24C6}', 'Q'), ('\u{24C7}', 'R'),
+        ('\u{24C8}', 'S'), ('\u{24C9}', 'T'), ('\u{24CA}', 'U'),
+        ('\u{24CB}', 'V'), ('\u{24CC}', 'W'), ('\u{24CD}', 'X'),
+        ('\u{24CE}', 'Y'), ('\u{24CF}', 'Z'),
+        ('\u{24D0}', 'a'), ('\u{24D1}', 'b'), ('\u{24D2}', 'c'),
+        ('\u{24D3}', 'd'), ('\u{24D4}', 'e'), ('\u{24D5}', 'f'),
+        ('\u{24D6}', 'g'), ('\u{24D7}', 'h'), ('\u{24D8}', 'i'),
+        ('\u{24D9}', 'j'), ('\u{24DA}', 'k'), ('\u{24DB}', 'l'),
+        ('\u{24DC}', 'm'), ('\u{24DD}', 'n'), ('\u{24DE}', 'o'),
+        ('\u{24DF}', 'p'), ('\u{24E0}', 'q'), ('\u{24E1}', 'r'),
+        ('\u{24E2}', 's'), ('\u{24E3}', 't'), ('\u{24E4}', 'u'),
+        ('\u{24E5}', 'v'), ('\u{24E6}', 'w'), ('\u{24E7}', 'x'),
+        ('\u{24E8}', 'y'), ('\u{24E9}', 'z'),
+        // ---- Roman numerals (U+2160-217F) ----
+        ('\u{2160}', 'I'), ('\u{2161}', 'I'), ('\u{2162}', 'I'),
+        ('\u{2163}', 'I'), ('\u{2164}', 'V'), ('\u{2165}', 'V'),
+        ('\u{2166}', 'V'), ('\u{2167}', 'V'), ('\u{2168}', 'I'),
+        ('\u{2169}', 'X'), ('\u{216A}', 'X'), ('\u{216B}', 'X'),
+        ('\u{216C}', 'L'), ('\u{216D}', 'C'), ('\u{216E}', 'D'),
+        ('\u{216F}', 'M'),
+        ('\u{2170}', 'i'), ('\u{2171}', 'i'), ('\u{2172}', 'i'),
+        ('\u{2173}', 'i'), ('\u{2174}', 'v'), ('\u{2175}', 'v'),
+        ('\u{2176}', 'v'), ('\u{2177}', 'v'), ('\u{2178}', 'i'),
+        ('\u{2179}', 'x'), ('\u{217A}', 'x'), ('\u{217B}', 'x'),
+        ('\u{217C}', 'l'), ('\u{217D}', 'c'), ('\u{217E}', 'd'),
+        ('\u{217F}', 'm'),
+        // ---- Mathematical bold digits (U+1D7CE-1D7D7) ----
+        ('\u{1D7CE}', '0'), ('\u{1D7CF}', '1'), ('\u{1D7D0}', '2'),
+        ('\u{1D7D1}', '3'), ('\u{1D7D2}', '4'), ('\u{1D7D3}', '5'),
+        ('\u{1D7D4}', '6'), ('\u{1D7D5}', '7'), ('\u{1D7D6}', '8'),
+        ('\u{1D7D7}', '9'),
+        // ---- Mathematical double-struck digits (U+1D7D8-1D7E1) ----
+        ('\u{1D7D8}', '0'), ('\u{1D7D9}', '1'), ('\u{1D7DA}', '2'),
+        ('\u{1D7DB}', '3'), ('\u{1D7DC}', '4'), ('\u{1D7DD}', '5'),
+        ('\u{1D7DE}', '6'), ('\u{1D7DF}', '7'), ('\u{1D7E0}', '8'),
+        ('\u{1D7E1}', '9'),
+        // ---- Mathematical sans-serif digits (U+1D7E2-1D7EB) ----
+        ('\u{1D7E2}', '0'), ('\u{1D7E3}', '1'), ('\u{1D7E4}', '2'),
+        ('\u{1D7E5}', '3'), ('\u{1D7E6}', '4'), ('\u{1D7E7}', '5'),
+        ('\u{1D7E8}', '6'), ('\u{1D7E9}', '7'), ('\u{1D7EA}', '8'),
+        ('\u{1D7EB}', '9'),
+        // ---- Mathematical sans-serif bold digits (U+1D7EC-1D7F5) ----
+        ('\u{1D7EC}', '0'), ('\u{1D7ED}', '1'), ('\u{1D7EE}', '2'),
+        ('\u{1D7EF}', '3'), ('\u{1D7F0}', '4'), ('\u{1D7F1}', '5'),
+        ('\u{1D7F2}', '6'), ('\u{1D7F3}', '7'), ('\u{1D7F4}', '8'),
+        ('\u{1D7F5}', '9'),
+        // ---- Mathematical monospace digits (U+1D7F6-1D7FF) ----
+        ('\u{1D7F6}', '0'), ('\u{1D7F7}', '1'), ('\u{1D7F8}', '2'),
+        ('\u{1D7F9}', '3'), ('\u{1D7FA}', '4'), ('\u{1D7FB}', '5'),
+        ('\u{1D7FC}', '6'), ('\u{1D7FD}', '7'), ('\u{1D7FE}', '8'),
+        ('\u{1D7FF}', '9'),
+        // ---- Mathematical bold uppercase (U+1D400-1D419) ----
+        ('\u{1D400}', 'A'), ('\u{1D401}', 'B'), ('\u{1D402}', 'C'),
+        ('\u{1D403}', 'D'), ('\u{1D404}', 'E'), ('\u{1D405}', 'F'),
+        ('\u{1D406}', 'G'), ('\u{1D407}', 'H'), ('\u{1D408}', 'I'),
+        ('\u{1D409}', 'J'), ('\u{1D40A}', 'K'), ('\u{1D40B}', 'L'),
+        ('\u{1D40C}', 'M'), ('\u{1D40D}', 'N'), ('\u{1D40E}', 'O'),
+        ('\u{1D40F}', 'P'), ('\u{1D410}', 'Q'), ('\u{1D411}', 'R'),
+        ('\u{1D412}', 'S'), ('\u{1D413}', 'T'), ('\u{1D414}', 'U'),
+        ('\u{1D415}', 'V'), ('\u{1D416}', 'W'), ('\u{1D417}', 'X'),
+        ('\u{1D418}', 'Y'), ('\u{1D419}', 'Z'),
+        // ---- Mathematical bold lowercase (U+1D41A-1D433) ----
+        ('\u{1D41A}', 'a'), ('\u{1D41B}', 'b'), ('\u{1D41C}', 'c'),
+        ('\u{1D41D}', 'd'), ('\u{1D41E}', 'e'), ('\u{1D41F}', 'f'),
+        ('\u{1D420}', 'g'), ('\u{1D421}', 'h'), ('\u{1D422}', 'i'),
+        ('\u{1D423}', 'j'), ('\u{1D424}', 'k'), ('\u{1D425}', 'l'),
+        ('\u{1D426}', 'm'), ('\u{1D427}', 'n'), ('\u{1D428}', 'o'),
+        ('\u{1D429}', 'p'), ('\u{1D42A}', 'q'), ('\u{1D42B}', 'r'),
+        ('\u{1D42C}', 's'), ('\u{1D42D}', 't'), ('\u{1D42E}', 'u'),
+        ('\u{1D42F}', 'v'), ('\u{1D430}', 'w'), ('\u{1D431}', 'x'),
+        ('\u{1D432}', 'y'), ('\u{1D433}', 'z'),
+        // ---- Mathematical italic uppercase (U+1D434-1D44D) ----
+        ('\u{1D434}', 'A'), ('\u{1D435}', 'B'), ('\u{1D436}', 'C'),
+        ('\u{1D437}', 'D'), ('\u{1D438}', 'E'), ('\u{1D439}', 'F'),
+        ('\u{1D43A}', 'G'), ('\u{1D43B}', 'H'), ('\u{1D43C}', 'I'),
+        ('\u{1D43D}', 'J'), ('\u{1D43E}', 'K'), ('\u{1D43F}', 'L'),
+        ('\u{1D440}', 'M'), ('\u{1D441}', 'N'), ('\u{1D442}', 'O'),
+        ('\u{1D443}', 'P'), ('\u{1D444}', 'Q'), ('\u{1D445}', 'R'),
+        ('\u{1D446}', 'S'), ('\u{1D447}', 'T'), ('\u{1D448}', 'U'),
+        ('\u{1D449}', 'V'), ('\u{1D44A}', 'W'), ('\u{1D44B}', 'X'),
+        ('\u{1D44C}', 'Y'), ('\u{1D44D}', 'Z'),
+        // ---- Mathematical italic lowercase (U+1D44E-1D467) ----
+        ('\u{1D44E}', 'a'), ('\u{1D44F}', 'b'), ('\u{1D450}', 'c'),
+        ('\u{1D451}', 'd'), ('\u{1D452}', 'e'), ('\u{1D453}', 'f'),
+        ('\u{1D454}', 'g'), // U+1D455 is unassigned (h is at U+210E)
+        ('\u{1D456}', 'i'), ('\u{1D457}', 'j'), ('\u{1D458}', 'k'),
+        ('\u{1D459}', 'l'), ('\u{1D45A}', 'm'), ('\u{1D45B}', 'n'),
+        ('\u{1D45C}', 'o'), ('\u{1D45D}', 'p'), ('\u{1D45E}', 'q'),
+        ('\u{1D45F}', 'r'), ('\u{1D460}', 's'), ('\u{1D461}', 't'),
+        ('\u{1D462}', 'u'), ('\u{1D463}', 'v'), ('\u{1D464}', 'w'),
+        ('\u{1D465}', 'x'), ('\u{1D466}', 'y'), ('\u{1D467}', 'z'),
+        // ---- Mathematical script uppercase (U+1D49C-1D4B5) ----
+        ('\u{1D49C}', 'A'), // B at U+212C, C at U+1D49E...
+        ('\u{1D49E}', 'C'), ('\u{1D49F}', 'D'),
+        ('\u{1D4A2}', 'G'),
+        ('\u{1D4A5}', 'J'), ('\u{1D4A6}', 'K'),
+        ('\u{1D4A9}', 'N'), ('\u{1D4AA}', 'O'), ('\u{1D4AB}', 'P'),
+        ('\u{1D4AC}', 'Q'), ('\u{1D4AE}', 'S'), ('\u{1D4AF}', 'T'),
+        ('\u{1D4B0}', 'U'), ('\u{1D4B1}', 'V'), ('\u{1D4B2}', 'W'),
+        ('\u{1D4B3}', 'X'), ('\u{1D4B4}', 'Y'), ('\u{1D4B5}', 'Z'),
+        // ---- Mathematical script lowercase (U+1D4B6-1D4CF) ----
+        ('\u{1D4B6}', 'a'), ('\u{1D4B7}', 'b'), ('\u{1D4B8}', 'c'),
+        ('\u{1D4B9}', 'd'), ('\u{1D4BB}', 'f'),
+        ('\u{1D4BD}', 'h'), ('\u{1D4BE}', 'i'), ('\u{1D4BF}', 'j'),
+        ('\u{1D4C0}', 'k'), ('\u{1D4C1}', 'l'), ('\u{1D4C2}', 'm'),
+        ('\u{1D4C3}', 'n'), ('\u{1D4C5}', 'p'), ('\u{1D4C6}', 'q'),
+        ('\u{1D4C7}', 'r'), ('\u{1D4C8}', 's'), ('\u{1D4C9}', 't'),
+        ('\u{1D4CA}', 'u'), ('\u{1D4CB}', 'v'), ('\u{1D4CC}', 'w'),
+        ('\u{1D4CD}', 'x'), ('\u{1D4CE}', 'y'), ('\u{1D4CF}', 'z'),
+        // ---- Mathematical fraktur uppercase (selected) ----
+        ('\u{1D504}', 'A'), ('\u{1D505}', 'B'),
+        ('\u{1D507}', 'D'), ('\u{1D508}', 'E'), ('\u{1D509}', 'F'),
+        ('\u{1D50A}', 'G'), ('\u{1D50D}', 'J'), ('\u{1D50E}', 'K'),
+        ('\u{1D50F}', 'L'), ('\u{1D510}', 'M'), ('\u{1D511}', 'N'),
+        ('\u{1D512}', 'O'), ('\u{1D513}', 'P'), ('\u{1D514}', 'Q'),
+        ('\u{1D516}', 'S'), ('\u{1D517}', 'T'), ('\u{1D518}', 'U'),
+        ('\u{1D519}', 'V'), ('\u{1D51A}', 'W'), ('\u{1D51B}', 'X'),
+        ('\u{1D51C}', 'Y'),
+        // ---- Mathematical fraktur lowercase ----
+        ('\u{1D51E}', 'a'), ('\u{1D51F}', 'b'), ('\u{1D520}', 'c'),
+        ('\u{1D521}', 'd'), ('\u{1D522}', 'e'), ('\u{1D523}', 'f'),
+        ('\u{1D524}', 'g'), ('\u{1D525}', 'h'), ('\u{1D526}', 'i'),
+        ('\u{1D527}', 'j'), ('\u{1D528}', 'k'), ('\u{1D529}', 'l'),
+        ('\u{1D52A}', 'm'), ('\u{1D52B}', 'n'), ('\u{1D52C}', 'o'),
+        ('\u{1D52D}', 'p'), ('\u{1D52E}', 'q'), ('\u{1D52F}', 'r'),
+        ('\u{1D530}', 's'), ('\u{1D531}', 't'), ('\u{1D532}', 'u'),
+        ('\u{1D533}', 'v'), ('\u{1D534}', 'w'), ('\u{1D535}', 'x'),
+        ('\u{1D536}', 'y'), ('\u{1D537}', 'z'),
+        // ---- IPA / Latin Extended lookalikes ----
         ('\u{0131}', 'i'), // dotless i
         ('\u{0237}', 'j'), // dotless j
-        ('\u{1D00}', 'A'), // small cap A
-        ('\u{0299}', 'B'), // small cap B
-        ('\u{1D04}', 'C'), // small cap C
-        ('\u{1D05}', 'D'), // small cap D
-        ('\u{1D07}', 'E'), // small cap E
+        ('\u{0251}', 'a'), // ɑ (open back unrounded)
+        ('\u{0261}', 'g'), // ɡ (voiced velar plosive)
+        ('\u{026A}', 'i'), // ɪ (near-close front)
+        ('\u{0280}', 'R'), // ʀ (uvular trill)
+        ('\u{0299}', 'B'), // ʙ (bilabial trill)
+        // ---- Small capitals ----
+        ('\u{1D00}', 'A'), ('\u{1D04}', 'C'), ('\u{1D05}', 'D'),
+        ('\u{1D07}', 'E'), ('\u{1D0A}', 'J'), ('\u{1D0B}', 'K'),
+        ('\u{1D0C}', 'L'), ('\u{1D0D}', 'M'), ('\u{1D0F}', 'O'),
+        ('\u{1D18}', 'P'), ('\u{1D1B}', 'T'), ('\u{1D1C}', 'U'),
+        ('\u{1D20}', 'V'), ('\u{1D21}', 'W'), ('\u{1D22}', 'Z'),
+        // ---- Letterlike symbols ----
+        ('\u{210E}', 'h'), // Planck constant (italic h)
+        ('\u{2110}', 'I'), // script I
+        ('\u{2112}', 'L'), // script L
+        ('\u{211B}', 'R'), // script R
+        ('\u{212C}', 'B'), // script B
+        ('\u{2130}', 'E'), // script E
+        ('\u{2131}', 'F'), // script F
+        ('\u{2133}', 'M'), // script M
     ];
     pairs.iter().copied().collect()
 });
@@ -168,9 +334,25 @@ fn is_ascii_only(text: &str) -> bool {
     text.as_bytes().iter().all(|&b| b < 128)
 }
 
+/// Returns true if a character is a combining diacritical mark that should be
+/// stripped during normalization. Covers the main combining ranges used in
+/// evasion attacks (e.g., `1̃2̃3̃` to break `\d{3}` matching).
+#[inline]
+fn is_combining_mark(c: char) -> bool {
+    matches!(c,
+        '\u{0300}'..='\u{036F}'  // Combining Diacritical Marks
+        | '\u{0483}'..='\u{0489}' // Combining Cyrillic
+        | '\u{1AB0}'..='\u{1AFF}' // Combining Diacritical Marks Extended
+        | '\u{1DC0}'..='\u{1DFF}' // Combining Diacritical Marks Supplement
+        | '\u{20D0}'..='\u{20FF}' // Combining Diacritical Marks for Symbols
+        | '\u{FE20}'..='\u{FE2F}' // Combining Half Marks
+    )
+}
+
 /// Full normalization pipeline with accurate byte-level offset tracking.
 ///
-/// Pipeline: zero-width strip → whitespace normalize → NFKC → homoglyph map.
+/// Pipeline: zero-width strip → combining mark strip → whitespace normalize
+///         → NFKC → homoglyph map.
 /// The returned offset_map maps each byte index in the normalized output back
 /// to the corresponding byte index in the original input. Empty offset_map
 /// means identity mapping (text was pure ASCII, nothing changed).
@@ -179,13 +361,15 @@ pub fn normalize_text(text: &str) -> (String, Vec<usize>) {
         return (text.to_string(), Vec::new());
     }
 
-    // Stage 1: Strip zero-width characters, building initial offset map.
-    // offset1[output_byte] = original_byte
+    // Stage 1: Strip zero-width characters AND combining diacritical marks,
+    // building initial offset map. offset[output_byte] = original_byte.
+    // Combining marks (U+0300-036F etc.) are stripped because attackers insert
+    // them between digits to break regex continuity (e.g., 1̃2̃3̃ vs 123).
     let mut current = String::with_capacity(text.len());
     let mut offsets: Vec<usize> = Vec::with_capacity(text.len());
 
     for (byte_idx, ch) in text.char_indices() {
-        if !ZERO_WIDTH_CHARS.contains(&ch) {
+        if !ZERO_WIDTH_CHARS.contains(&ch) && !is_combining_mark(ch) {
             current.push(ch);
             for i in 0..ch.len_utf8() {
                 offsets.push(byte_idx + i);
@@ -204,8 +388,9 @@ pub fn normalize_text(text: &str) -> (String, Vec<usize>) {
     // original byte offset of the input char that produced it.
     let (current, offsets) = remap_nfkc(&current, &offsets);
 
-    // Stage 4: Homoglyph map (Cyrillic/Greek → ASCII). Always 1:1 char replacement,
-    // but replacement char may have different UTF-8 byte width.
+    // Stage 4: Homoglyph map (Cyrillic/Greek/mathematical/enclosed → ASCII).
+    // Always 1:1 char replacement, but replacement char may have different UTF-8
+    // byte width.
     let (current, offsets) = remap_char_transform(&current, &offsets, |c| {
         *HOMOGLYPH_MAP.get(&c).unwrap_or(&c)
     });
@@ -365,5 +550,147 @@ mod tests {
         let (result, offsets) = normalize_text("hello world");
         assert_eq!(result, "hello world");
         assert!(offsets.is_empty()); // Empty = identity mapping
+    }
+
+    // ---- Combining diacritical marks stripping ----
+
+    #[test]
+    fn test_combining_marks_stripped() {
+        // SSN with combining tildes: 1̃2̃3̃-4̃5̃-6̃7̃8̃9̃
+        let input = "1\u{0303}2\u{0303}3\u{0303}-4\u{0303}5\u{0303}-6\u{0303}7\u{0303}8\u{0303}9\u{0303}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "123-45-6789");
+    }
+
+    #[test]
+    fn test_combining_grave_accent_stripped() {
+        // Digits with combining grave accents
+        let input = "4\u{0300}5\u{0300}3\u{0300}2";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "4532");
+    }
+
+    #[test]
+    fn test_combining_marks_cyrillic_range() {
+        // Cyrillic combining marks (U+0483-0489)
+        let input = "test\u{0483}123";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "test123");
+    }
+
+    // ---- Enclosed alphanumerics ----
+
+    #[test]
+    fn test_circled_digits_normalized() {
+        // ①②③④⑤ → 12345
+        let input = "\u{2460}\u{2461}\u{2462}\u{2463}\u{2464}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "12345");
+    }
+
+    #[test]
+    fn test_circled_letters_normalized() {
+        // Ⓐ Ⓑ Ⓒ → A B C
+        let input = "\u{24B6}\u{24B7}\u{24B8}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "ABC");
+    }
+
+    #[test]
+    fn test_negative_circled_digits_normalized() {
+        // Dingbat negative circled digits
+        let input = "\u{2776}\u{2777}\u{2778}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "123");
+    }
+
+    // ---- Roman numerals ----
+
+    #[test]
+    fn test_roman_numerals_normalized() {
+        // Ⅰ → I, Ⅴ → V, Ⅹ → X
+        let input = "\u{2160}\u{2164}\u{2169}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "IVX");
+    }
+
+    // ---- Mathematical symbols ----
+
+    #[test]
+    fn test_math_bold_digits_normalized() {
+        // Mathematical bold digits 𝟎𝟏𝟐𝟑 → 0123
+        let input = "\u{1D7CE}\u{1D7CF}\u{1D7D0}\u{1D7D1}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "0123");
+    }
+
+    #[test]
+    fn test_math_bold_letters_normalized() {
+        // Mathematical bold A B C → A B C
+        let input = "\u{1D400}\u{1D401}\u{1D402}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "ABC");
+    }
+
+    #[test]
+    fn test_math_italic_letters_normalized() {
+        // Mathematical italic a b c → a b c
+        let input = "\u{1D44E}\u{1D44F}\u{1D450}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "abc");
+    }
+
+    #[test]
+    fn test_math_fraktur_letters_normalized() {
+        // Mathematical fraktur A B → A B
+        let input = "\u{1D504}\u{1D505}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "AB");
+    }
+
+    #[test]
+    fn test_math_monospace_digits_normalized() {
+        // Mathematical monospace 𝟶𝟷𝟸𝟹 → 0123
+        let input = "\u{1D7F6}\u{1D7F7}\u{1D7F8}\u{1D7F9}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "0123");
+    }
+
+    // ---- IPA lookalikes ----
+
+    #[test]
+    fn test_ipa_lookalikes_normalized() {
+        // ɑ → a, ɡ → g, ɪ → i
+        let input = "\u{0251}\u{0261}\u{026A}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "agi");
+    }
+
+    // ---- Letterlike symbols ----
+
+    #[test]
+    fn test_letterlike_symbols_normalized() {
+        // ℎ (Planck) → h, ℬ (script B) → B
+        let input = "\u{210E}\u{212C}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "hB");
+    }
+
+    // ---- Combined evasion scenarios ----
+
+    #[test]
+    fn test_ssn_combining_marks_plus_fullwidth() {
+        // SSN: fullwidth digits with combining marks
+        let input = "\u{FF11}\u{0303}\u{FF12}\u{0303}\u{FF13}\u{0303}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "123");
+    }
+
+    #[test]
+    fn test_credit_card_math_bold_digits() {
+        // Credit card number in mathematical bold: 𝟒𝟓𝟑𝟐𝟎𝟏𝟓𝟏𝟏𝟐𝟖𝟑𝟎𝟑𝟔𝟔
+        let input = "\u{1D7D2}\u{1D7D3}\u{1D7D1}\u{1D7D0}\u{1D7CE}\u{1D7CF}\u{1D7D3}\u{1D7CF}\u{1D7CF}\u{1D7D0}\u{1D7D6}\u{1D7D1}\u{1D7CE}\u{1D7D1}\u{1D7D4}\u{1D7D4}";
+        let (result, _) = normalize_text(input);
+        assert_eq!(result, "4532015112830366");
     }
 }

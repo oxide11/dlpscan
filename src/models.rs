@@ -216,6 +216,319 @@ pub fn pattern_specificity(sub_category: &str) -> f64 {
         "URL with Password" => 0.90,
         "URL with Token" => 0.75,
 
+        // --- US State Driver's Licenses ---
+        "Alabama DL" | "Alaska DL" | "Arizona DL" | "Arkansas DL" | "California DL"
+        | "Colorado DL" | "Connecticut DL" | "DC DL" | "Delaware DL" | "Florida DL"
+        | "Georgia DL" | "Hawaii DL" | "Idaho DL" | "Illinois DL" | "Indiana DL"
+        | "Iowa DL" | "Kansas DL" | "Kentucky DL" | "Louisiana DL" | "Maine DL"
+        | "Maryland DL" | "Massachusetts DL" | "Michigan DL" | "Minnesota DL"
+        | "Mississippi DL" | "Missouri DL" | "Montana DL" | "Nebraska DL"
+        | "Nevada DL" | "New Hampshire DL" | "New Jersey DL" | "New Mexico DL"
+        | "New York DL" | "North Carolina DL" | "North Dakota DL" | "Ohio DL"
+        | "Oklahoma DL" | "Oregon DL" | "Pennsylvania DL" | "Rhode Island DL"
+        | "South Carolina DL" | "South Dakota DL" | "Tennessee DL" | "Texas DL"
+        | "Utah DL" | "Vermont DL" | "Virginia DL" | "Washington DL"
+        | "West Virginia DL" | "Wisconsin DL" | "Wyoming DL"
+        | "Generic US DL" => 0.55,
+
+        // --- Canadian Provincial Driver's Licenses ---
+        "Alberta DL" | "British Columbia DL" | "Manitoba DL" | "New Brunswick DL"
+        | "Newfoundland DL" | "Nova Scotia DL" | "NWT DL" | "Nunavut DL"
+        | "Ontario DL" | "PEI DL" | "Quebec DL" | "Saskatchewan DL"
+        | "Yukon DL" => 0.55,
+
+        // --- Canadian Provincial Health Cards ---
+        "Alberta HC" | "BC HC" | "Manitoba HC" | "New Brunswick HC"
+        | "Newfoundland HC" | "Nova Scotia HC" | "Ontario HC" | "PEI HC"
+        | "Quebec HC" | "Saskatchewan HC" => 0.55,
+
+        // --- Canadian National IDs ---
+        "Canada Passport" | "Canada PR Card" | "Canada NEXUS" => 0.80,
+        "Canada BN" | "Canada Bank Code" => 0.70,
+
+        // --- US National IDs ---
+        "USA Passport" | "USA Passport Card" => 0.80,
+        "USA EIN" => 0.70,
+        "USA Routing Number" => 0.55,
+        "US DoD ID" => 0.70,
+        "US Known Traveler Number" => 0.70,
+        "US MBI" => 0.70,
+        "US NPI" | "NPI" => 0.70,
+        "US DEA Number" => 0.55,
+
+        // --- UK IDs ---
+        "UK Passport" => 0.80,
+        "UK DL" => 0.55,
+        "UK Sort Code" => 0.50,
+        "UK UTR" => 0.70,
+        "British NHS" => 0.70,
+
+        // --- Ireland ---
+        "Ireland Passport" => 0.80,
+        "Ireland PPS" => 0.70,
+        "Ireland DL" => 0.55,
+        "Ireland Eircode" => 0.50,
+
+        // --- France ---
+        "France Passport" => 0.80,
+        "France CNI" => 0.70,
+        "France NIR" => 0.70,
+        "France DL" => 0.55,
+        "France IBAN" => 0.90,
+
+        // --- Germany ---
+        "Germany Passport" => 0.80,
+        "Germany ID" => 0.70,
+        "Germany Tax ID" => 0.70,
+        "Germany Social Insurance" => 0.70,
+        "Germany DL" => 0.55,
+        "Germany IBAN" => 0.90,
+
+        // --- Italy ---
+        "Italy Passport" => 0.80,
+        "Italy Codice Fiscale" => 0.70,
+        "Italy SSN" => 0.70,
+        "Italy Partita IVA" => 0.70,
+        "Italy DL" => 0.55,
+
+        // --- Spain ---
+        "Spain Passport" => 0.80,
+        "Spain DNI" => 0.70,
+        "Spain NIE" => 0.70,
+        "Spain NSS" => 0.70,
+        "Spain DL" => 0.55,
+
+        // --- Portugal ---
+        "Portugal Passport" => 0.80,
+        "Portugal CC" => 0.70,
+        "Portugal NIF" => 0.70,
+        "Portugal NISS" => 0.70,
+
+        // --- Netherlands ---
+        "Netherlands Passport" => 0.80,
+        "Netherlands BSN" => 0.70,
+        "Netherlands DL" => 0.55,
+        "Netherlands IBAN" => 0.90,
+
+        // --- Belgium ---
+        "Belgium Passport" => 0.80,
+        "Belgium NRN" => 0.70,
+        "Belgium VAT" => 0.70,
+        "Belgium DL" => 0.55,
+
+        // --- Austria ---
+        "Austria Passport" => 0.80,
+        "Austria ID Card" => 0.70,
+        "Austria SVN" => 0.70,
+        "Austria Tax Number" => 0.70,
+        "Austria DL" => 0.55,
+
+        // --- Switzerland ---
+        "Switzerland Passport" => 0.80,
+        "Switzerland AHV" => 0.70,
+        "Switzerland UID" => 0.70,
+        "Switzerland DL" => 0.55,
+
+        // --- Liechtenstein ---
+        "Liechtenstein Passport" => 0.80,
+        "Liechtenstein PIN" => 0.70,
+
+        // --- Luxembourg ---
+        "Luxembourg Passport" => 0.80,
+        "Luxembourg NIN" => 0.70,
+        "Luxembourg DL" => 0.55,
+
+        // --- Nordics ---
+        "Denmark Passport" | "Finland Passport" | "Iceland Passport"
+        | "Norway Passport" | "Sweden Passport" => 0.80,
+        "Denmark CPR" | "Finland HETU" | "Iceland Kennitala"
+        | "Norway FNR" | "Norway D-Number" | "Sweden PIN"
+        | "Sweden Organisation Number" => 0.70,
+        "Denmark DL" | "Finland DL" | "Norway DL" | "Sweden DL" => 0.55,
+
+        // --- Baltics ---
+        "Estonia Passport" | "Latvia Passport" | "Lithuania Passport" => 0.80,
+        "Estonia Isikukood" | "Latvia Personas Kods" | "Lithuania Asmens Kodas" => 0.70,
+        "Estonia DL" | "Latvia DL" | "Lithuania DL" => 0.55,
+
+        // --- Eastern Europe ---
+        "Poland Passport" | "Czech Passport" | "Slovakia Passport"
+        | "Hungary Passport" | "Romania Passport" | "Bulgaria Passport"
+        | "Croatia Passport" | "Slovenia Passport" => 0.80,
+        "Poland PESEL" | "Poland NIP" | "Poland REGON" | "Poland ID Card" => 0.70,
+        "Czech Birth Number" | "Czech ICO" => 0.70,
+        "Slovakia Birth Number" => 0.70,
+        "Hungary Personal ID" | "Hungary TAJ" | "Hungary Tax Number" => 0.70,
+        "Romania CNP" | "Romania CIF" => 0.70,
+        "Bulgaria EGN" | "Bulgaria LNC" | "Bulgaria ID Card" => 0.70,
+        "Croatia OIB" | "Croatia ID Card" => 0.70,
+        "Slovenia EMSO" | "Slovenia Tax Number" => 0.70,
+        "Poland DL" | "Czech DL" | "Slovakia DL" | "Hungary DL"
+        | "Romania DL" | "Croatia DL" | "Slovenia DL" => 0.55,
+
+        // --- Greece ---
+        "Greece Passport" => 0.80,
+        "Greece AFM" | "Greece AMKA" | "Greece ID Card" => 0.70,
+        "Greece DL" => 0.55,
+
+        // --- Cyprus / Malta ---
+        "Cyprus Passport" | "Malta Passport" => 0.80,
+        "Cyprus ID Card" | "Cyprus TIN" => 0.70,
+        "Malta ID Card" | "Malta TIN" => 0.70,
+
+        // --- Turkey ---
+        "Turkey Passport" => 0.80,
+        "Turkey TC Kimlik" => 0.70,
+        "Turkey Tax ID" => 0.70,
+        "Turkey DL" => 0.55,
+
+        // --- EU generic ---
+        "EU VAT Generic" => 0.70,
+        "EU ETD" => 0.80,
+
+        // --- India ---
+        "India Passport" => 0.80,
+        "India Aadhaar" => 0.70,
+        "India PAN" => 0.70,
+        "India Voter ID" => 0.70,
+        "India Ration Card" => 0.70,
+        "India DL" => 0.55,
+
+        // --- China ---
+        "China Passport" => 0.80,
+        "China Resident ID" => 0.70,
+
+        // --- Japan ---
+        "Japan Passport" => 0.80,
+        "Japan My Number" => 0.70,
+        "Japan DL" => 0.55,
+        "Japan Health Insurance" => 0.70,
+        "Japan Juminhyo Code" => 0.70,
+        "Japan Residence Card" => 0.70,
+
+        // --- South Korea ---
+        "South Korea Passport" => 0.80,
+        "South Korea RRN" => 0.70,
+        "South Korea DL" => 0.55,
+
+        // --- Southeast Asia ---
+        "Singapore Passport" | "Malaysia Passport" | "Indonesia Passport"
+        | "Philippines Passport" | "Thailand Passport" | "Vietnam Passport"
+        | "Sri Lanka Passport" => 0.80,
+        "Singapore NRIC" | "Singapore FIN" => 0.70,
+        "Malaysia MyKad" => 0.70,
+        "Indonesia NIK" | "Indonesia NPWP" => 0.70,
+        "Philippines PhilSys" | "Philippines SSS" | "Philippines TIN"
+        | "Philippines UMID" | "Philippines PhilHealth" => 0.70,
+        "Thailand National ID" | "Thailand Tax ID" => 0.70,
+        "Vietnam CCCD" | "Vietnam Tax Code" => 0.70,
+        "Sri Lanka NIC New" | "Sri Lanka NIC Old" => 0.70,
+        "Singapore DL" | "Thailand DL" => 0.55,
+
+        // --- Hong Kong / Macau / Taiwan ---
+        "Hong Kong ID" => 0.70,
+        "Macau ID" => 0.70,
+        "Taiwan National ID" => 0.70,
+
+        // --- Bangladesh / Pakistan ---
+        "Bangladesh Passport" | "Pakistan Passport" => 0.80,
+        "Bangladesh NID" | "Bangladesh TIN" => 0.70,
+        "Pakistan CNIC" | "Pakistan NICOP" => 0.70,
+
+        // --- Australia / New Zealand ---
+        "Australia Passport" | "New Zealand Passport" => 0.80,
+        "Australia TFN" | "Australia Medicare" => 0.70,
+        "Australia DL ACT" | "Australia DL NSW" | "Australia DL NT"
+        | "Australia DL QLD" | "Australia DL SA" | "Australia DL TAS"
+        | "Australia DL VIC" | "Australia DL WA" => 0.70,
+        "New Zealand IRD" | "New Zealand NHI" => 0.70,
+        "New Zealand DL" => 0.55,
+
+        // --- Middle East ---
+        "Saudi Arabia Passport" | "UAE Passport" | "Kuwait Passport"
+        | "Qatar Passport" | "Bahrain Passport" | "Jordan Passport"
+        | "Lebanon Passport" | "Iran Passport" | "Iraq Passport"
+        | "Israel Passport" => 0.80,
+        "Saudi Arabia National ID" => 0.70,
+        "UAE Emirates ID" | "UAE Visa Number" => 0.70,
+        "Kuwait Civil ID" => 0.70,
+        "Qatar QID" => 0.70,
+        "Bahrain CPR" => 0.70,
+        "Jordan National ID" => 0.70,
+        "Lebanon ID" => 0.70,
+        "Iran Melli Code" => 0.70,
+        "Iraq National ID" => 0.70,
+        "Israel Teudat Zehut" => 0.70,
+
+        // --- Africa ---
+        "South Africa Passport" | "Nigeria Passport" | "Kenya Passport"
+        | "Ghana Passport" | "Ethiopia Passport" | "Uganda Passport"
+        | "Morocco Passport" | "Egypt Passport" | "Tunisia Passport"
+        | "Tanzania Passport" => 0.80,
+        "South Africa ID" => 0.65,
+        "South Africa DL" => 0.55,
+        "Nigeria NIN" | "Nigeria BVN" | "Nigeria TIN" | "Nigeria Voter Card"
+        | "Nigeria Driver Licence" => 0.65,
+        "Kenya National ID" | "Kenya KRA PIN" | "Kenya NHIF" => 0.65,
+        "Ghana Card" | "Ghana TIN" | "Ghana NHIS" => 0.65,
+        "Ethiopia National ID" | "Ethiopia TIN" => 0.65,
+        "Uganda NIN" => 0.65,
+        "Morocco CIN" | "Morocco Tax ID" => 0.65,
+        "Egypt National ID" | "Egypt Tax ID" => 0.65,
+        "Tunisia CIN" => 0.65,
+        "Tanzania NIDA" | "Tanzania TIN" => 0.65,
+
+        // --- Latin America ---
+        "Brazil Passport" | "Mexico Passport" | "Argentina Passport"
+        | "Colombia Passport" | "Chile Passport" | "Peru Passport"
+        | "Ecuador Passport" | "Venezuela Passport" | "Uruguay Passport"
+        | "Paraguay Passport" | "Costa Rica Passport" => 0.80,
+        "Brazil CPF" | "Brazil CNPJ" | "Brazil RG" | "Brazil CNH"
+        | "Brazil SUS Card" => 0.70,
+        "Mexico CURP" | "Mexico RFC" | "Mexico NSS" | "Mexico Clave Elector"
+        | "Mexico INE CIC" | "Mexico INE OCR" => 0.70,
+        "Argentina DNI" | "Argentina CUIL/CUIT" => 0.70,
+        "Colombia Cedula" | "Colombia NIT" | "Colombia NUIP" => 0.70,
+        "Chile RUN/RUT" => 0.70,
+        "Peru DNI" | "Peru RUC" | "Peru Carnet Extranjeria" => 0.70,
+        "Ecuador Cedula" | "Ecuador RUC" => 0.70,
+        "Venezuela Cedula" | "Venezuela RIF" => 0.70,
+        "Uruguay Cedula" | "Uruguay RUT" => 0.70,
+        "Paraguay Cedula" | "Paraguay RUC" => 0.70,
+        "Costa Rica Cedula" | "Costa Rica DIMEX" => 0.70,
+
+        // --- Date patterns ---
+        "Date ISO" | "Date US" | "Date EU" => 0.35,
+
+        // --- Postal codes (not already scored) ---
+
+        // --- Classification labels ---
+        "Top Secret" | "Secret Classification" | "Confidential Classification"
+        | "Highly Confidential" | "Restricted" | "FOUO" | "NOFORN" | "Eyes Only"
+        | "SBU" | "CUI" | "CSI" | "LES" => 0.45,
+        "Corporate Confidential" | "Internal Only" | "Proprietary"
+        | "Do Not Distribute" | "Draft Not for Circulation"
+        | "Embargoed" | "Need to Know" => 0.45,
+
+        // --- Financial regulatory / market labels ---
+        "MNPI" | "Inside Information" | "Market Sensitive"
+        | "Investment Restricted" | "Information Barrier"
+        | "Non-Public Supervisory" | "Supervisory Confidential"
+        | "Supervisory Controlled" | "Restricted Supervisory"
+        | "Pre-Decisional" | "Examination Findings" => 0.45,
+
+        // --- Legal / privilege markers ---
+        "Legal Privilege" | "Attorney-Client Privilege" | "Work Product"
+        | "Privileged and Confidential" | "Privileged Information"
+        | "Protected by Privilege" | "Litigation Hold" => 0.45,
+
+        // --- Compliance patterns ---
+        "PII Label" | "PHI Label" | "PCI-DSS" | "HIPAA" | "GDPR Personal Data"
+        | "CCPA/CPRA" | "FERPA" | "GLBA" | "SOX" => 0.45,
+
+        // --- Secrets (additional) ---
+        "Generic Secret Assignment" => 0.50,
+
         _ => DEFAULT_SPECIFICITY,
     }
 }

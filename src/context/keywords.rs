@@ -133,11 +133,11 @@ pub static CONTEXT_KEYWORDS: &[(&str, &str, ContextEntry)] = &[
     ("Geolocation", "Geohash", ContextEntry { keywords: &["geohash", "geo hash", "location hash"], distance: 50 }),
 
     // Postal Codes
-    ("Postal Codes", "US ZIP+4 Code", ContextEntry { keywords: &["zip", "zip code", "zipcode", "postal code", "mailing address", "zip+4"], distance: 50 }),
-    ("Postal Codes", "UK Postcode", ContextEntry { keywords: &["postcode", "post code", "postal code", "uk address"], distance: 50 }),
-    ("Postal Codes", "Canada Postal Code", ContextEntry { keywords: &["postal code", "code postal", "canadian address"], distance: 50 }),
-    ("Postal Codes", "Japan Postal Code", ContextEntry { keywords: &["postal code", "yubin bangou", "japanese address"], distance: 50 }),
-    ("Postal Codes", "Brazil CEP", ContextEntry { keywords: &["cep", "codigo postal", "brazilian address"], distance: 50 }),
+    ("Postal Codes", "US ZIP+4 Code", ContextEntry { keywords: &["zip", "zip code", "zipcode", "postal code", "postcode", "mailing address", "zip+4", "united states", "usa"], distance: 50 }),
+    ("Postal Codes", "UK Postcode", ContextEntry { keywords: &["postcode", "post code", "postal code", "zip code", "uk address", "united kingdom"], distance: 50 }),
+    ("Postal Codes", "Canada Postal Code", ContextEntry { keywords: &["postal code", "postcode", "zip code", "code postal", "canadian address", "canada"], distance: 50 }),
+    ("Postal Codes", "Japan Postal Code", ContextEntry { keywords: &["postal code", "postcode", "zip code", "yubin bangou", "japanese address", "japan"], distance: 50 }),
+    ("Postal Codes", "Brazil CEP", ContextEntry { keywords: &["cep", "postal code", "postcode", "zip code", "codigo postal", "brazilian address", "brazil"], distance: 50 }),
 
     // Device Identifiers
     ("Device Identifiers", "IMEI", ContextEntry { keywords: &["imei", "international mobile equipment identity", "device imei", "handset id", "phone imei", "equipment identity"], distance: 50 }),
@@ -202,12 +202,12 @@ pub static CONTEXT_KEYWORDS: &[(&str, &str, ContextEntry)] = &[
     // Data Classification Labels
     ("Data Classification Labels", "Top Secret", ContextEntry { keywords: &["classified", "top secret", "ts", "sci", "national security", "clearance"], distance: 100 }),
     ("Data Classification Labels", "Secret Classification", ContextEntry { keywords: &["classified", "secret", "national security", "clearance", "noforn"], distance: 100 }),
-    ("Data Classification Labels", "Confidential Classification", ContextEntry { keywords: &["classified", "confidential", "national security", "government"], distance: 100 }),
-    ("Data Classification Labels", "FOUO", ContextEntry { keywords: &["official use", "fouo", "government", "not for public release"], distance: 100 }),
-    ("Data Classification Labels", "CUI", ContextEntry { keywords: &["cui", "controlled unclassified", "sensitive information", "marking"], distance: 100 }),
-    ("Data Classification Labels", "SBU", ContextEntry { keywords: &["sensitive", "unclassified", "sbu", "government"], distance: 100 }),
-    ("Data Classification Labels", "LES", ContextEntry { keywords: &["law enforcement", "sensitive", "les", "police", "investigation"], distance: 100 }),
-    ("Data Classification Labels", "NOFORN", ContextEntry { keywords: &["noforn", "foreign nationals", "not releasable", "classification"], distance: 100 }),
+    ("Data Classification Labels", "Confidential Classification", ContextEntry { keywords: &["classified", "confidential", "national security", "government", "security classification", "clearance"], distance: 100 }),
+    ("Data Classification Labels", "FOUO", ContextEntry { keywords: &["official use", "fouo", "government", "not for public release", "classified", "security classification", "clearance"], distance: 100 }),
+    ("Data Classification Labels", "CUI", ContextEntry { keywords: &["cui", "controlled unclassified", "sensitive information", "marking", "classified", "security classification", "clearance"], distance: 100 }),
+    ("Data Classification Labels", "SBU", ContextEntry { keywords: &["sensitive", "unclassified", "sbu", "government", "classified", "security classification", "clearance"], distance: 100 }),
+    ("Data Classification Labels", "LES", ContextEntry { keywords: &["law enforcement", "sensitive", "les", "police", "investigation", "classified", "security classification", "clearance"], distance: 100 }),
+    ("Data Classification Labels", "NOFORN", ContextEntry { keywords: &["noforn", "foreign nationals", "not releasable", "classification", "classified", "security classification", "clearance"], distance: 100 }),
 
     // Corporate Classification
     ("Corporate Classification", "Internal Only", ContextEntry { keywords: &["internal", "company", "employees only", "staff only", "not for external"], distance: 80 }),
@@ -278,60 +278,60 @@ pub static CONTEXT_KEYWORDS: &[(&str, &str, ContextEntry)] = &[
     ("North America - United States", "US DoD ID", ContextEntry { keywords: &["dod id", "military id", "edipi", "cac card", "common access card", "department of defense"], distance: 50 }),
     ("North America - United States", "US Known Traveler Number", ContextEntry { keywords: &["known traveler", "ktn", "global entry", "trusted traveler", "pass id", "nexus", "sentri"], distance: 50 }),
     ("North America - United States", "US Phone Number", ContextEntry { keywords: &["phone", "telephone", "tel", "cell", "mobile", "call", "fax"], distance: 50 }),
-    ("North America - United States", "Alabama DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "alabama dl", "alabama license"], distance: 50 }),
-    ("North America - United States", "Alaska DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "alaska dl", "alaska license"], distance: 50 }),
-    ("North America - United States", "Arizona DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "arizona dl", "arizona license"], distance: 50 }),
-    ("North America - United States", "Arkansas DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "arkansas dl", "arkansas license"], distance: 50 }),
-    ("North America - United States", "California DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "california dl", "california license"], distance: 50 }),
-    ("North America - United States", "Colorado DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "colorado dl", "colorado license"], distance: 50 }),
-    ("North America - United States", "Connecticut DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "connecticut dl", "connecticut license"], distance: 50 }),
-    ("North America - United States", "Delaware DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "delaware dl", "delaware license"], distance: 50 }),
-    ("North America - United States", "DC DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "dc dl", "district of columbia license"], distance: 50 }),
-    ("North America - United States", "Florida DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "florida dl", "florida license"], distance: 50 }),
-    ("North America - United States", "Georgia DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "georgia dl", "georgia license"], distance: 50 }),
-    ("North America - United States", "Hawaii DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "hawaii dl", "hawaii license"], distance: 50 }),
-    ("North America - United States", "Idaho DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "idaho dl", "idaho license"], distance: 50 }),
-    ("North America - United States", "Illinois DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "illinois dl", "illinois license"], distance: 50 }),
-    ("North America - United States", "Indiana DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "indiana dl", "indiana license"], distance: 50 }),
-    ("North America - United States", "Iowa DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "iowa dl", "iowa license"], distance: 50 }),
-    ("North America - United States", "Kansas DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "kansas dl", "kansas license"], distance: 50 }),
-    ("North America - United States", "Kentucky DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "kentucky dl", "kentucky license"], distance: 50 }),
-    ("North America - United States", "Louisiana DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "louisiana dl", "louisiana license"], distance: 50 }),
-    ("North America - United States", "Maine DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "maine dl", "maine license"], distance: 50 }),
-    ("North America - United States", "Maryland DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "maryland dl", "maryland license"], distance: 50 }),
-    ("North America - United States", "Massachusetts DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "massachusetts dl", "massachusetts license"], distance: 50 }),
-    ("North America - United States", "Michigan DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "michigan dl", "michigan license"], distance: 50 }),
-    ("North America - United States", "Minnesota DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "minnesota dl", "minnesota license"], distance: 50 }),
-    ("North America - United States", "Mississippi DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "mississippi dl", "mississippi license"], distance: 50 }),
-    ("North America - United States", "Missouri DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "missouri dl", "missouri license"], distance: 50 }),
-    ("North America - United States", "Montana DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "montana dl", "montana license"], distance: 50 }),
-    ("North America - United States", "Nebraska DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "nebraska dl", "nebraska license"], distance: 50 }),
-    ("North America - United States", "Nevada DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "nevada dl", "nevada license"], distance: 50 }),
-    ("North America - United States", "New Hampshire DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "new hampshire dl", "new hampshire license"], distance: 50 }),
-    ("North America - United States", "New Jersey DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "new jersey dl", "new jersey license"], distance: 50 }),
-    ("North America - United States", "New Mexico DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "new mexico dl", "new mexico license"], distance: 50 }),
-    ("North America - United States", "New York DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "new york dl", "new york license"], distance: 50 }),
-    ("North America - United States", "North Carolina DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "north carolina dl", "north carolina license"], distance: 50 }),
-    ("North America - United States", "North Dakota DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "north dakota dl", "north dakota license"], distance: 50 }),
-    ("North America - United States", "Ohio DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "ohio dl", "ohio license"], distance: 50 }),
-    ("North America - United States", "Oklahoma DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "oklahoma dl", "oklahoma license"], distance: 50 }),
-    ("North America - United States", "Oregon DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "oregon dl", "oregon license"], distance: 50 }),
-    ("North America - United States", "Pennsylvania DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "pennsylvania dl", "pennsylvania license"], distance: 50 }),
-    ("North America - United States", "Rhode Island DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "rhode island dl", "rhode island license"], distance: 50 }),
-    ("North America - United States", "South Carolina DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "south carolina dl", "south carolina license"], distance: 50 }),
-    ("North America - United States", "South Dakota DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "south dakota dl", "south dakota license"], distance: 50 }),
-    ("North America - United States", "Tennessee DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "tennessee dl", "tennessee license"], distance: 50 }),
-    ("North America - United States", "Texas DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "texas dl", "texas license"], distance: 50 }),
-    ("North America - United States", "Utah DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "utah dl", "utah license"], distance: 50 }),
-    ("North America - United States", "Vermont DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "vermont dl", "vermont license"], distance: 50 }),
-    ("North America - United States", "Virginia DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "virginia dl", "virginia license"], distance: 50 }),
-    ("North America - United States", "Washington DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "washington dl", "washington license"], distance: 50 }),
-    ("North America - United States", "West Virginia DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "west virginia dl", "west virginia license"], distance: 50 }),
-    ("North America - United States", "Wisconsin DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "wisconsin dl", "wisconsin license"], distance: 50 }),
-    ("North America - United States", "Wyoming DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "dl", "wyoming dl", "wyoming license"], distance: 50 }),
+    ("North America - United States", "Alabama DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "alabama dl", "alabama license"], distance: 50 }),
+    ("North America - United States", "Alaska DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "alaska dl", "alaska license"], distance: 50 }),
+    ("North America - United States", "Arizona DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "arizona dl", "arizona license"], distance: 50 }),
+    ("North America - United States", "Arkansas DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "arkansas dl", "arkansas license"], distance: 50 }),
+    ("North America - United States", "California DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "california dl", "california license"], distance: 50 }),
+    ("North America - United States", "Colorado DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "colorado dl", "colorado license"], distance: 50 }),
+    ("North America - United States", "Connecticut DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "connecticut dl", "connecticut license"], distance: 50 }),
+    ("North America - United States", "Delaware DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "delaware dl", "delaware license"], distance: 50 }),
+    ("North America - United States", "DC DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "dc dl", "district of columbia license"], distance: 50 }),
+    ("North America - United States", "Florida DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "florida dl", "florida license"], distance: 50 }),
+    ("North America - United States", "Georgia DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "georgia dl", "georgia license"], distance: 50 }),
+    ("North America - United States", "Hawaii DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "hawaii dl", "hawaii license"], distance: 50 }),
+    ("North America - United States", "Idaho DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "idaho dl", "idaho license"], distance: 50 }),
+    ("North America - United States", "Illinois DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "illinois dl", "illinois license"], distance: 50 }),
+    ("North America - United States", "Indiana DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "indiana dl", "indiana license"], distance: 50 }),
+    ("North America - United States", "Iowa DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "iowa dl", "iowa license"], distance: 50 }),
+    ("North America - United States", "Kansas DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "kansas dl", "kansas license"], distance: 50 }),
+    ("North America - United States", "Kentucky DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "kentucky dl", "kentucky license"], distance: 50 }),
+    ("North America - United States", "Louisiana DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "louisiana dl", "louisiana license"], distance: 50 }),
+    ("North America - United States", "Maine DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "maine dl", "maine license"], distance: 50 }),
+    ("North America - United States", "Maryland DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "maryland dl", "maryland license"], distance: 50 }),
+    ("North America - United States", "Massachusetts DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "massachusetts dl", "massachusetts license"], distance: 50 }),
+    ("North America - United States", "Michigan DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "michigan dl", "michigan license"], distance: 50 }),
+    ("North America - United States", "Minnesota DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "minnesota dl", "minnesota license"], distance: 50 }),
+    ("North America - United States", "Mississippi DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "mississippi dl", "mississippi license"], distance: 50 }),
+    ("North America - United States", "Missouri DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "missouri dl", "missouri license"], distance: 50 }),
+    ("North America - United States", "Montana DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "montana dl", "montana license"], distance: 50 }),
+    ("North America - United States", "Nebraska DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "nebraska dl", "nebraska license"], distance: 50 }),
+    ("North America - United States", "Nevada DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "nevada dl", "nevada license"], distance: 50 }),
+    ("North America - United States", "New Hampshire DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "new hampshire dl", "new hampshire license"], distance: 50 }),
+    ("North America - United States", "New Jersey DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "new jersey dl", "new jersey license"], distance: 50 }),
+    ("North America - United States", "New Mexico DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "new mexico dl", "new mexico license"], distance: 50 }),
+    ("North America - United States", "New York DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "new york dl", "new york license"], distance: 50 }),
+    ("North America - United States", "North Carolina DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "north carolina dl", "north carolina license"], distance: 50 }),
+    ("North America - United States", "North Dakota DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "north dakota dl", "north dakota license"], distance: 50 }),
+    ("North America - United States", "Ohio DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "ohio dl", "ohio license"], distance: 50 }),
+    ("North America - United States", "Oklahoma DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "oklahoma dl", "oklahoma license"], distance: 50 }),
+    ("North America - United States", "Oregon DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "oregon dl", "oregon license"], distance: 50 }),
+    ("North America - United States", "Pennsylvania DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "pennsylvania dl", "pennsylvania license"], distance: 50 }),
+    ("North America - United States", "Rhode Island DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "rhode island dl", "rhode island license"], distance: 50 }),
+    ("North America - United States", "South Carolina DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "south carolina dl", "south carolina license"], distance: 50 }),
+    ("North America - United States", "South Dakota DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "south dakota dl", "south dakota license"], distance: 50 }),
+    ("North America - United States", "Tennessee DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "tennessee dl", "tennessee license"], distance: 50 }),
+    ("North America - United States", "Texas DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "texas dl", "texas license"], distance: 50 }),
+    ("North America - United States", "Utah DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "utah dl", "utah license"], distance: 50 }),
+    ("North America - United States", "Vermont DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "vermont dl", "vermont license"], distance: 50 }),
+    ("North America - United States", "Virginia DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "virginia dl", "virginia license"], distance: 50 }),
+    ("North America - United States", "Washington DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "washington dl", "washington license"], distance: 50 }),
+    ("North America - United States", "West Virginia DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "west virginia dl", "west virginia license"], distance: 50 }),
+    ("North America - United States", "Wisconsin DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "wisconsin dl", "wisconsin license"], distance: 50 }),
+    ("North America - United States", "Wyoming DL", ContextEntry { keywords: &["driver license", "drivers license", "driver's license", "driving licence", "dl", "wyoming dl", "wyoming license"], distance: 50 }),
 
     // North America - US Generic DL
-    ("North America - US Generic DL", "Generic US DL", ContextEntry { keywords: &["driver's license", "dl number", "driving license", "license id", "driver license", "drivers license", "licence number", "license number", "dl no"], distance: 50 }),
+    ("North America - US Generic DL", "Generic US DL", ContextEntry { keywords: &["driver", "license", "licence", "dl", "driving", "driver's license", "dl number", "driving license", "driving licence", "license id", "driver license", "drivers license", "licence number", "license number", "dl no"], distance: 50 }),
 
     // North America - Canada
     ("North America - Canada", "Canada SIN", ContextEntry { keywords: &["social insurance number", "sin", "social insurance no"], distance: 50 }),
@@ -383,7 +383,7 @@ pub static CONTEXT_KEYWORDS: &[(&str, &str, ContextEntry)] = &[
     ("Europe - United Kingdom", "UK DL", ContextEntry { keywords: &["driving licence", "driver licence", "dvla", "uk driving", "uk dl"], distance: 50 }),
 
     // Europe - Germany
-    ("Europe - Germany", "Germany ID", ContextEntry { keywords: &["personalausweis", "german id", "identification number", "ausweisnummer"], distance: 50 }),
+    ("Europe - Germany", "Germany ID", ContextEntry { keywords: &["personalausweis", "german id", "identification number", "ausweisnummer", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Germany", "Germany Passport", ContextEntry { keywords: &["german passport", "germany passport", "reisepass"], distance: 50 }),
     ("Europe - Germany", "Germany Tax ID", ContextEntry { keywords: &["steueridentifikationsnummer", "steuer-id", "tax identification", "tin", "steuernummer"], distance: 50 }),
     ("Europe - Germany", "Germany Social Insurance", ContextEntry { keywords: &["sozialversicherungsnummer", "social insurance", "sv-nummer", "rentenversicherung"], distance: 50 }),
@@ -393,40 +393,40 @@ pub static CONTEXT_KEYWORDS: &[(&str, &str, ContextEntry)] = &[
     // Europe - France
     ("Europe - France", "France NIR", ContextEntry { keywords: &["insee", "nir", "securite sociale", "french social security", "numero de securite"], distance: 50 }),
     ("Europe - France", "France Passport", ContextEntry { keywords: &["french passport", "france passport", "passeport"], distance: 50 }),
-    ("Europe - France", "France CNI", ContextEntry { keywords: &["carte nationale", "carte identite", "cni", "french id card"], distance: 50 }),
+    ("Europe - France", "France CNI", ContextEntry { keywords: &["carte nationale", "carte identite", "cni", "french id card", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - France", "France DL", ContextEntry { keywords: &["permis de conduire", "french driving", "permis"], distance: 50 }),
     ("Europe - France", "France IBAN", ContextEntry { keywords: &["iban", "french bank", "compte bancaire", "rib"], distance: 50 }),
 
     // Europe - Italy
-    ("Europe - Italy", "Italy Codice Fiscale", ContextEntry { keywords: &["codice fiscale", "fiscal code", "italian tax", "cf"], distance: 50 }),
+    ("Europe - Italy", "Italy Codice Fiscale", ContextEntry { keywords: &["codice fiscale", "fiscal code", "italian tax", "cf", "national id", "identity card", "id card", "carta d'identita"], distance: 50 }),
     ("Europe - Italy", "Italy Passport", ContextEntry { keywords: &["italian passport", "italy passport", "passaporto"], distance: 50 }),
     ("Europe - Italy", "Italy DL", ContextEntry { keywords: &["patente di guida", "italian driving", "patente"], distance: 50 }),
     ("Europe - Italy", "Italy SSN", ContextEntry { keywords: &["italian ssn", "tessera sanitaria", "health card"], distance: 50 }),
     ("Europe - Italy", "Italy Partita IVA", ContextEntry { keywords: &["partita iva", "vat number", "p.iva", "piva"], distance: 50 }),
 
     // Europe - Netherlands
-    ("Europe - Netherlands", "Netherlands BSN", ContextEntry { keywords: &["burgerservicenummer", "bsn", "citizen service number", "sofinummer"], distance: 50 }),
+    ("Europe - Netherlands", "Netherlands BSN", ContextEntry { keywords: &["burgerservicenummer", "bsn", "citizen service number", "sofinummer", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Netherlands", "Netherlands Passport", ContextEntry { keywords: &["dutch passport", "netherlands passport", "nl passport"], distance: 50 }),
     ("Europe - Netherlands", "Netherlands DL", ContextEntry { keywords: &["rijbewijs", "dutch driving", "netherlands driving licence"], distance: 50 }),
     ("Europe - Netherlands", "Netherlands IBAN", ContextEntry { keywords: &["iban", "dutch bank", "nl bank", "rekeningnummer"], distance: 50 }),
 
     // Europe - Spain
-    ("Europe - Spain", "Spain DNI", ContextEntry { keywords: &["dni", "documento nacional de identidad", "spanish id"], distance: 50 }),
+    ("Europe - Spain", "Spain DNI", ContextEntry { keywords: &["dni", "documento nacional de identidad", "spanish id", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Spain", "Spain NIE", ContextEntry { keywords: &["nie", "numero de identidad de extranjero", "foreigner id"], distance: 50 }),
     ("Europe - Spain", "Spain Passport", ContextEntry { keywords: &["spanish passport", "pasaporte", "spain passport"], distance: 50 }),
     ("Europe - Spain", "Spain NSS", ContextEntry { keywords: &["numero seguridad social", "nss", "spanish social security"], distance: 50 }),
     ("Europe - Spain", "Spain DL", ContextEntry { keywords: &["permiso de conducir", "carnet de conducir", "spanish driving"], distance: 50 }),
 
     // Europe - Poland
-    ("Europe - Poland", "Poland PESEL", ContextEntry { keywords: &["pesel", "polish id", "personal identification number", "numer pesel"], distance: 50 }),
+    ("Europe - Poland", "Poland PESEL", ContextEntry { keywords: &["pesel", "polish id", "personal identification number", "numer pesel", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Poland", "Poland NIP", ContextEntry { keywords: &["nip", "numer identyfikacji podatkowej", "tax identification"], distance: 50 }),
     ("Europe - Poland", "Poland REGON", ContextEntry { keywords: &["regon", "statistical number", "business registration"], distance: 50 }),
-    ("Europe - Poland", "Poland ID Card", ContextEntry { keywords: &["dowod osobisty", "polish id card", "identity card"], distance: 50 }),
+    ("Europe - Poland", "Poland ID Card", ContextEntry { keywords: &["dowod osobisty", "polish id card", "identity card", "national id", "id card"], distance: 50 }),
     ("Europe - Poland", "Poland Passport", ContextEntry { keywords: &["polish passport", "paszport"], distance: 50 }),
     ("Europe - Poland", "Poland DL", ContextEntry { keywords: &["prawo jazdy", "polish driving", "driving licence"], distance: 50 }),
 
     // Europe - Sweden
-    ("Europe - Sweden", "Sweden PIN", ContextEntry { keywords: &["personnummer", "swedish id", "personal identity number", "swedish personal number"], distance: 50 }),
+    ("Europe - Sweden", "Sweden PIN", ContextEntry { keywords: &["personnummer", "swedish id", "personal identity number", "swedish personal number", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Sweden", "Sweden Passport", ContextEntry { keywords: &["swedish passport", "sverige pass"], distance: 50 }),
     ("Europe - Sweden", "Sweden DL", ContextEntry { keywords: &["korkort", "swedish driving", "driving licence"], distance: 50 }),
     ("Europe - Sweden", "Sweden Organisation Number", ContextEntry { keywords: &["organisationsnummer", "org number", "swedish company"], distance: 50 }),
@@ -444,7 +444,7 @@ pub static CONTEXT_KEYWORDS: &[(&str, &str, ContextEntry)] = &[
     ("Europe - Switzerland", "Switzerland UID", ContextEntry { keywords: &["uid", "unternehmens-identifikationsnummer", "swiss company", "che number"], distance: 50 }),
 
     // Europe - Turkey
-    ("Europe - Turkey", "Turkey TC Kimlik", ContextEntry { keywords: &["tc kimlik", "turkish id", "kimlik numarasi", "tc no"], distance: 50 }),
+    ("Europe - Turkey", "Turkey TC Kimlik", ContextEntry { keywords: &["tc kimlik", "turkish id", "kimlik numarasi", "tc no", "national id", "identity card", "id card", "nufus cuzdani"], distance: 50 }),
     ("Europe - Turkey", "Turkey Passport", ContextEntry { keywords: &["turkish passport", "turk pasaportu"], distance: 50 }),
     ("Europe - Turkey", "Turkey DL", ContextEntry { keywords: &["surucu belgesi", "ehliyet", "turkish driving"], distance: 50 }),
     ("Europe - Turkey", "Turkey Tax ID", ContextEntry { keywords: &["vergi kimlik", "vergi numarasi", "turkish tax", "vkn"], distance: 50 }),
@@ -452,53 +452,53 @@ pub static CONTEXT_KEYWORDS: &[(&str, &str, ContextEntry)] = &[
     // Europe - Austria
     ("Europe - Austria", "Austria SVN", ContextEntry { keywords: &["sozialversicherungsnummer", "svnr", "sv-nummer", "austrian social security", "versicherungsnummer"], distance: 50 }),
     ("Europe - Austria", "Austria Passport", ContextEntry { keywords: &["austrian passport", "osterreichischer reisepass", "reisepass"], distance: 50 }),
-    ("Europe - Austria", "Austria ID Card", ContextEntry { keywords: &["personalausweis", "austrian id", "identity card"], distance: 50 }),
+    ("Europe - Austria", "Austria ID Card", ContextEntry { keywords: &["personalausweis", "austrian id", "identity card", "national id", "id card"], distance: 50 }),
     ("Europe - Austria", "Austria DL", ContextEntry { keywords: &["fuhrerschein", "austrian driving", "driving licence"], distance: 50 }),
     ("Europe - Austria", "Austria Tax Number", ContextEntry { keywords: &["steuernummer", "austrian tax", "tax number", "abgabenkontonummer"], distance: 50 }),
 
     // Europe - Belgium
-    ("Europe - Belgium", "Belgium NRN", ContextEntry { keywords: &["rijksregisternummer", "nrn", "national register number", "registre national", "insz"], distance: 50 }),
+    ("Europe - Belgium", "Belgium NRN", ContextEntry { keywords: &["rijksregisternummer", "nrn", "national register number", "registre national", "insz", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Belgium", "Belgium Passport", ContextEntry { keywords: &["belgian passport", "belgisch paspoort", "passeport belge"], distance: 50 }),
     ("Europe - Belgium", "Belgium DL", ContextEntry { keywords: &["belgisch rijbewijs", "belgian driving", "permis de conduire belge"], distance: 50 }),
     ("Europe - Belgium", "Belgium VAT", ContextEntry { keywords: &["btw", "tva", "belgian vat", "ondernemingsnummer", "numero entreprise"], distance: 50 }),
 
     // Europe - Ireland
-    ("Europe - Ireland", "Ireland PPS", ContextEntry { keywords: &["pps", "ppsn", "personal public service", "pps number"], distance: 50 }),
+    ("Europe - Ireland", "Ireland PPS", ContextEntry { keywords: &["pps", "ppsn", "personal public service", "pps number", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Ireland", "Ireland Passport", ContextEntry { keywords: &["irish passport", "ireland passport"], distance: 50 }),
     ("Europe - Ireland", "Ireland DL", ContextEntry { keywords: &["irish driving", "driving licence", "ceadunas tiomana"], distance: 50 }),
     ("Europe - Ireland", "Ireland Eircode", ContextEntry { keywords: &["eircode", "irish postcode", "postal code"], distance: 50 }),
 
     // Europe - Denmark
-    ("Europe - Denmark", "Denmark CPR", ContextEntry { keywords: &["cpr", "personnummer", "cpr-nummer", "danish personal", "civil registration"], distance: 50 }),
+    ("Europe - Denmark", "Denmark CPR", ContextEntry { keywords: &["cpr", "personnummer", "cpr-nummer", "danish personal", "civil registration", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Denmark", "Denmark Passport", ContextEntry { keywords: &["danish passport", "dansk pas"], distance: 50 }),
     ("Europe - Denmark", "Denmark DL", ContextEntry { keywords: &["korekort", "danish driving", "driving licence"], distance: 50 }),
 
     // Europe - Finland
-    ("Europe - Finland", "Finland HETU", ContextEntry { keywords: &["henkilotunnus", "hetu", "finnish personal identity", "personal identity code", "henkilotunnus"], distance: 50 }),
+    ("Europe - Finland", "Finland HETU", ContextEntry { keywords: &["henkilotunnus", "hetu", "finnish personal identity", "personal identity code", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Finland", "Finland Passport", ContextEntry { keywords: &["finnish passport", "suomen passi"], distance: 50 }),
     ("Europe - Finland", "Finland DL", ContextEntry { keywords: &["ajokortti", "finnish driving", "driving licence"], distance: 50 }),
 
     // Europe - Norway
-    ("Europe - Norway", "Norway FNR", ContextEntry { keywords: &["fodselsnummer", "fnr", "norwegian personal", "birth number", "personnummer"], distance: 50 }),
+    ("Europe - Norway", "Norway FNR", ContextEntry { keywords: &["fodselsnummer", "fnr", "norwegian personal", "birth number", "personnummer", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Norway", "Norway D-Number", ContextEntry { keywords: &["d-nummer", "d-number", "norwegian temporary"], distance: 50 }),
     ("Europe - Norway", "Norway Passport", ContextEntry { keywords: &["norwegian passport", "norsk pass"], distance: 50 }),
     ("Europe - Norway", "Norway DL", ContextEntry { keywords: &["forerkort", "norwegian driving", "driving licence"], distance: 50 }),
 
     // Europe - Czech Republic
-    ("Europe - Czech Republic", "Czech Birth Number", ContextEntry { keywords: &["rodne cislo", "birth number", "czech personal", "rc"], distance: 50 }),
+    ("Europe - Czech Republic", "Czech Birth Number", ContextEntry { keywords: &["rodne cislo", "birth number", "czech personal", "rc", "national id", "identity card", "id card", "obcansky prukaz"], distance: 50 }),
     ("Europe - Czech Republic", "Czech Passport", ContextEntry { keywords: &["czech passport", "cesky pas"], distance: 50 }),
     ("Europe - Czech Republic", "Czech DL", ContextEntry { keywords: &["ridicsky prukaz", "czech driving", "driving licence"], distance: 50 }),
     ("Europe - Czech Republic", "Czech ICO", ContextEntry { keywords: &["ico", "identifikacni cislo", "business id"], distance: 50 }),
 
     // Europe - Hungary
-    ("Europe - Hungary", "Hungary Personal ID", ContextEntry { keywords: &["szemelyazonosito", "personal id", "hungarian id", "szemelyi szam"], distance: 50 }),
+    ("Europe - Hungary", "Hungary Personal ID", ContextEntry { keywords: &["szemelyazonosito", "personal id", "hungarian id", "szemelyi szam", "national id", "identity card", "id card", "szemelyi igazolvany"], distance: 50 }),
     ("Europe - Hungary", "Hungary TAJ", ContextEntry { keywords: &["taj szam", "social security", "taj", "egeszsegbiztositasi"], distance: 50 }),
     ("Europe - Hungary", "Hungary Tax Number", ContextEntry { keywords: &["adoazonosito", "tax number", "hungarian tax", "ado szam"], distance: 50 }),
     ("Europe - Hungary", "Hungary Passport", ContextEntry { keywords: &["hungarian passport", "magyar utlevel"], distance: 50 }),
     ("Europe - Hungary", "Hungary DL", ContextEntry { keywords: &["jogositvany", "hungarian driving", "veztoi engedely"], distance: 50 }),
 
     // Europe - Romania
-    ("Europe - Romania", "Romania CNP", ContextEntry { keywords: &["cnp", "cod numeric personal", "romanian personal", "personal numeric code"], distance: 50 }),
+    ("Europe - Romania", "Romania CNP", ContextEntry { keywords: &["cnp", "cod numeric personal", "romanian personal", "personal numeric code", "national id", "identity card", "id card", "carte de identitate"], distance: 50 }),
     ("Europe - Romania", "Romania CIF", ContextEntry { keywords: &["cif", "cod identificare fiscala", "romanian tax", "fiscal code"], distance: 50 }),
     ("Europe - Romania", "Romania Passport", ContextEntry { keywords: &["romanian passport", "pasaport"], distance: 50 }),
     ("Europe - Romania", "Romania DL", ContextEntry { keywords: &["permis de conducere", "romanian driving", "driving licence"], distance: 50 }),
@@ -506,69 +506,69 @@ pub static CONTEXT_KEYWORDS: &[(&str, &str, ContextEntry)] = &[
     // Europe - Greece
     ("Europe - Greece", "Greece AFM", ContextEntry { keywords: &["afm", "arithmos forologikou mitroou", "greek tax", "tax number"], distance: 50 }),
     ("Europe - Greece", "Greece AMKA", ContextEntry { keywords: &["amka", "social security", "arithmos mitroou koinonikis asfalisis"], distance: 50 }),
-    ("Europe - Greece", "Greece ID Card", ContextEntry { keywords: &["taftotita", "greek id", "deltio taftotitas", "identity card"], distance: 50 }),
+    ("Europe - Greece", "Greece ID Card", ContextEntry { keywords: &["taftotita", "greek id", "deltio taftotitas", "identity card", "national id", "id card"], distance: 50 }),
     ("Europe - Greece", "Greece Passport", ContextEntry { keywords: &["greek passport", "elliniko diavatirio"], distance: 50 }),
     ("Europe - Greece", "Greece DL", ContextEntry { keywords: &["adeia odigisis", "greek driving", "driving licence"], distance: 50 }),
 
     // Europe - Croatia
-    ("Europe - Croatia", "Croatia OIB", ContextEntry { keywords: &["oib", "osobni identifikacijski broj", "croatian personal", "personal identification number"], distance: 50 }),
+    ("Europe - Croatia", "Croatia OIB", ContextEntry { keywords: &["oib", "osobni identifikacijski broj", "croatian personal", "personal identification number", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Croatia", "Croatia Passport", ContextEntry { keywords: &["croatian passport", "hrvatska putovnica"], distance: 50 }),
-    ("Europe - Croatia", "Croatia ID Card", ContextEntry { keywords: &["osobna iskaznica", "croatian id", "identity card"], distance: 50 }),
+    ("Europe - Croatia", "Croatia ID Card", ContextEntry { keywords: &["osobna iskaznica", "croatian id", "identity card", "national id", "id card"], distance: 50 }),
     ("Europe - Croatia", "Croatia DL", ContextEntry { keywords: &["vozacka dozvola", "croatian driving", "driving licence"], distance: 50 }),
 
     // Europe - Bulgaria
-    ("Europe - Bulgaria", "Bulgaria EGN", ContextEntry { keywords: &["egn", "edinen grazhdanski nomer", "bulgarian personal", "unified civil number"], distance: 50 }),
+    ("Europe - Bulgaria", "Bulgaria EGN", ContextEntry { keywords: &["egn", "edinen grazhdanski nomer", "bulgarian personal", "unified civil number", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Bulgaria", "Bulgaria LNC", ContextEntry { keywords: &["lnch", "lichna karta", "foreigner number", "personal number of foreigner"], distance: 50 }),
-    ("Europe - Bulgaria", "Bulgaria ID Card", ContextEntry { keywords: &["lichna karta", "bulgarian id", "identity card"], distance: 50 }),
+    ("Europe - Bulgaria", "Bulgaria ID Card", ContextEntry { keywords: &["lichna karta", "bulgarian id", "identity card", "national id", "id card"], distance: 50 }),
     ("Europe - Bulgaria", "Bulgaria Passport", ContextEntry { keywords: &["bulgarian passport", "bulgarski pasport"], distance: 50 }),
 
     // Europe - Slovakia
-    ("Europe - Slovakia", "Slovakia Birth Number", ContextEntry { keywords: &["rodne cislo", "birth number", "slovak personal", "rc"], distance: 50 }),
+    ("Europe - Slovakia", "Slovakia Birth Number", ContextEntry { keywords: &["rodne cislo", "birth number", "slovak personal", "rc", "national id", "identity card", "id card", "obciansky preukaz"], distance: 50 }),
     ("Europe - Slovakia", "Slovakia Passport", ContextEntry { keywords: &["slovak passport", "slovensky pas"], distance: 50 }),
     ("Europe - Slovakia", "Slovakia DL", ContextEntry { keywords: &["vodicsky preukaz", "slovak driving", "driving licence"], distance: 50 }),
 
     // Europe - Lithuania
-    ("Europe - Lithuania", "Lithuania Asmens Kodas", ContextEntry { keywords: &["asmens kodas", "lithuanian personal", "personal code", "ak"], distance: 50 }),
+    ("Europe - Lithuania", "Lithuania Asmens Kodas", ContextEntry { keywords: &["asmens kodas", "lithuanian personal", "personal code", "ak", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Lithuania", "Lithuania Passport", ContextEntry { keywords: &["lithuanian passport", "lietuvos pasas"], distance: 50 }),
     ("Europe - Lithuania", "Lithuania DL", ContextEntry { keywords: &["vairuotojo pazymejimas", "lithuanian driving", "driving licence"], distance: 50 }),
 
     // Europe - Latvia
-    ("Europe - Latvia", "Latvia Personas Kods", ContextEntry { keywords: &["personas kods", "latvian personal", "personal code", "pk"], distance: 50 }),
+    ("Europe - Latvia", "Latvia Personas Kods", ContextEntry { keywords: &["personas kods", "latvian personal", "personal code", "pk", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Latvia", "Latvia Passport", ContextEntry { keywords: &["latvian passport", "latvijas pase"], distance: 50 }),
     ("Europe - Latvia", "Latvia DL", ContextEntry { keywords: &["vaditaja aplieciba", "latvian driving", "driving licence"], distance: 50 }),
 
     // Europe - Estonia
-    ("Europe - Estonia", "Estonia Isikukood", ContextEntry { keywords: &["isikukood", "estonian personal", "personal identification code", "id-kood"], distance: 50 }),
+    ("Europe - Estonia", "Estonia Isikukood", ContextEntry { keywords: &["isikukood", "estonian personal", "personal identification code", "id-kood", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Estonia", "Estonia Passport", ContextEntry { keywords: &["estonian passport", "eesti pass"], distance: 50 }),
     ("Europe - Estonia", "Estonia DL", ContextEntry { keywords: &["juhiluba", "estonian driving", "driving licence"], distance: 50 }),
 
     // Europe - Slovenia
-    ("Europe - Slovenia", "Slovenia EMSO", ContextEntry { keywords: &["emso", "enotna maticna stevilka", "slovenian personal", "personal number"], distance: 50 }),
+    ("Europe - Slovenia", "Slovenia EMSO", ContextEntry { keywords: &["emso", "enotna maticna stevilka", "slovenian personal", "personal number", "national id", "identity card", "id card", "osebna izkaznica"], distance: 50 }),
     ("Europe - Slovenia", "Slovenia Tax Number", ContextEntry { keywords: &["davcna stevilka", "slovenian tax", "tax number"], distance: 50 }),
     ("Europe - Slovenia", "Slovenia Passport", ContextEntry { keywords: &["slovenian passport", "slovenski potni list"], distance: 50 }),
     ("Europe - Slovenia", "Slovenia DL", ContextEntry { keywords: &["voznisko dovoljenje", "slovenian driving", "driving licence"], distance: 50 }),
 
     // Europe - Luxembourg
-    ("Europe - Luxembourg", "Luxembourg NIN", ContextEntry { keywords: &["matricule", "luxembourg id", "national identification", "nin"], distance: 50 }),
+    ("Europe - Luxembourg", "Luxembourg NIN", ContextEntry { keywords: &["matricule", "luxembourg id", "national identification", "nin", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Luxembourg", "Luxembourg Passport", ContextEntry { keywords: &["luxembourg passport", "passeport"], distance: 50 }),
     ("Europe - Luxembourg", "Luxembourg DL", ContextEntry { keywords: &["permis de conduire", "luxembourg driving", "driving licence"], distance: 50 }),
 
     // Europe - Malta
-    ("Europe - Malta", "Malta ID Card", ContextEntry { keywords: &["maltese id", "identity card", "karta tal-identita"], distance: 50 }),
+    ("Europe - Malta", "Malta ID Card", ContextEntry { keywords: &["maltese id", "identity card", "karta tal-identita", "national id", "id card"], distance: 50 }),
     ("Europe - Malta", "Malta Passport", ContextEntry { keywords: &["maltese passport", "passaport malti"], distance: 50 }),
     ("Europe - Malta", "Malta TIN", ContextEntry { keywords: &["maltese tax", "tin", "tax identification"], distance: 50 }),
 
     // Europe - Cyprus
-    ("Europe - Cyprus", "Cyprus ID Card", ContextEntry { keywords: &["cypriot id", "identity card", "taftotita"], distance: 50 }),
+    ("Europe - Cyprus", "Cyprus ID Card", ContextEntry { keywords: &["cypriot id", "identity card", "taftotita", "national id", "id card"], distance: 50 }),
     ("Europe - Cyprus", "Cyprus Passport", ContextEntry { keywords: &["cypriot passport", "kypriako diavatirio"], distance: 50 }),
     ("Europe - Cyprus", "Cyprus TIN", ContextEntry { keywords: &["cypriot tax", "tin", "tax identification"], distance: 50 }),
 
     // Europe - Iceland
-    ("Europe - Iceland", "Iceland Kennitala", ContextEntry { keywords: &["kennitala", "icelandic id", "personal id number", "kt"], distance: 50 }),
+    ("Europe - Iceland", "Iceland Kennitala", ContextEntry { keywords: &["kennitala", "icelandic id", "personal id number", "kt", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Iceland", "Iceland Passport", ContextEntry { keywords: &["icelandic passport", "islenskt vegabref"], distance: 50 }),
 
     // Europe - Liechtenstein
-    ("Europe - Liechtenstein", "Liechtenstein PIN", ContextEntry { keywords: &["liechtenstein personal", "personal identification", "pin"], distance: 50 }),
+    ("Europe - Liechtenstein", "Liechtenstein PIN", ContextEntry { keywords: &["liechtenstein personal", "personal identification", "pin", "national id", "identity card", "id card"], distance: 50 }),
     ("Europe - Liechtenstein", "Liechtenstein Passport", ContextEntry { keywords: &["liechtenstein passport"], distance: 50 }),
 
     // Europe - EU
