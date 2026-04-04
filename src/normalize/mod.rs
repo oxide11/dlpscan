@@ -1,36 +1,40 @@
 //! Unicode normalization to defeat evasion attacks.
 //!
-//! Handles zero-width character stripping, whitespace normalization,
-//! homoglyph substitution, and leet-speak decoding.
+//! Handles zero-width character stripping, combining mark removal,
+//! whitespace normalization, NFKC normalization, and confusable/homoglyph
+//! substitution using a 1,500+ entry map derived from Unicode NFKC/NFKD data.
+
+mod confusables;
 
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
+use unicode_general_category::{get_general_category, GeneralCategory};
 use unicode_normalization::UnicodeNormalization;
 
-/// Zero-width and invisible Unicode characters.
-pub static ZERO_WIDTH_CHARS: Lazy<Vec<char>> = Lazy::new(|| {
-    vec![
-        '\u{200B}', '\u{200C}', '\u{200D}', '\u{200E}', '\u{200F}',
-        '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}',
-        '\u{2060}', '\u{2061}', '\u{2062}', '\u{2063}', '\u{2064}',
-        '\u{FEFF}', '\u{00AD}', '\u{034F}', '\u{061C}',
-        '\u{180E}', '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}',
-        '\u{FE00}', '\u{FE01}', '\u{FE02}', '\u{FE03}', '\u{FE04}',
-        '\u{FE05}', '\u{FE06}', '\u{FE07}', '\u{FE08}', '\u{FE09}',
-        '\u{FE0A}', '\u{FE0B}', '\u{FE0C}', '\u{FE0D}', '\u{FE0E}',
-        '\u{FE0F}',
-    ]
-});
+/// Returns true if a character is invisible/zero-width and should be stripped.
+///
+/// Uses Unicode General_Category for future-proof detection rather than a
+/// hand-maintained whitelist. Catches all Format (Cf) characters plus
+/// variation selectors (Mn category, FE00-FE0F range).
+#[inline]
+fn is_invisible(c: char) -> bool {
+    match get_general_category(c) {
+        // Format characters: ZWSP, ZWNJ, ZWJ, bidi controls, BOM, soft hyphen, etc.
+        GeneralCategory::Format => true,
+        // Variation selectors are Nonspacing Marks, but act as invisible modifiers
+        GeneralCategory::NonspacingMark => {
+            matches!(c, '\u{FE00}'..='\u{FE0F}' | '\u{E0100}'..='\u{E01EF}')
+        }
+        _ => false,
+    }
+}
 
-/// Exotic Unicode whitespace characters.
-pub static UNICODE_SPACES: Lazy<Vec<char>> = Lazy::new(|| {
-    vec![
-        '\u{00A0}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}',
-        '\u{2003}', '\u{2004}', '\u{2005}', '\u{2006}', '\u{2007}',
-        '\u{2008}', '\u{2009}', '\u{200A}', '\u{202F}', '\u{205F}',
-        '\u{3000}',
-    ]
-});
+/// Returns true if a character is an exotic Unicode whitespace (General_Category = Zs)
+/// that should be normalized to ASCII space. Excludes regular ASCII space (U+0020).
+#[inline]
+fn is_unicode_space(c: char) -> bool {
+    c != ' ' && get_general_category(c) == GeneralCategory::SpaceSeparator
+}
 
 /// Leet-speak substitution map.
 static LEET_MAP: Lazy<HashMap<char, char>> = Lazy::new(|| {
@@ -43,10 +47,22 @@ static LEET_MAP: Lazy<HashMap<char, char>> = Lazy::new(|| {
     pairs.iter().copied().collect()
 });
 
-/// Homoglyph substitution map (Cyrillic, Greek, mathematical, etc. → ASCII).
-/// Applied AFTER NFKC, so this catches anything NFKC doesn't normalize.
+/// Comprehensive confusable/homoglyph substitution map (1,500+ entries).
+///
+/// Built from the auto-generated `confusables::CONFUSABLES` table (derived from
+/// Unicode NFKC/NFKD decomposition data) plus hand-curated additions for
+/// characters that Unicode decomposition doesn't cover (Cyrillic/Greek
+/// lookalikes, IPA variants, small capitals).
+///
+/// Applied AFTER NFKC normalization to catch anything NFKC doesn't handle.
 static HOMOGLYPH_MAP: Lazy<HashMap<char, char>> = Lazy::new(|| {
-    let pairs = [
+    // Start with the auto-generated confusables (1,573 entries from Unicode data)
+    let mut map: HashMap<char, char> = confusables::CONFUSABLES.iter().copied().collect();
+
+    // Hand-curated additions: characters that NFKC/NFKD don't decompose to ASCII
+    // but are visually confusable. These override any conflicting auto-generated
+    // entries where we have a better manual mapping.
+    let manual_overrides = [
         // ---- Cyrillic uppercase ----
         ('\u{0410}', 'A'), ('\u{0412}', 'B'), ('\u{0421}', 'C'),
         ('\u{0415}', 'E'), ('\u{041D}', 'H'), ('\u{0406}', 'I'),
@@ -254,19 +270,67 @@ static HOMOGLYPH_MAP: Lazy<HashMap<char, char>> = Lazy::new(|| {
         ('\u{1D530}', 's'), ('\u{1D531}', 't'), ('\u{1D532}', 'u'),
         ('\u{1D533}', 'v'), ('\u{1D534}', 'w'), ('\u{1D535}', 'x'),
         ('\u{1D536}', 'y'), ('\u{1D537}', 'z'),
-        // ---- IPA / Latin Extended lookalikes ----
+        // ---- IPA / Latin Extended lookalikes (U+0250-02AF) ----
         ('\u{0131}', 'i'), // dotless i
         ('\u{0237}', 'j'), // dotless j
-        ('\u{0251}', 'a'), // ɑ (open back unrounded)
-        ('\u{0261}', 'g'), // ɡ (voiced velar plosive)
-        ('\u{026A}', 'i'), // ɪ (near-close front)
-        ('\u{0280}', 'R'), // ʀ (uvular trill)
-        ('\u{0299}', 'B'), // ʙ (bilabial trill)
-        // ---- Small capitals ----
-        ('\u{1D00}', 'A'), ('\u{1D04}', 'C'), ('\u{1D05}', 'D'),
-        ('\u{1D07}', 'E'), ('\u{1D0A}', 'J'), ('\u{1D0B}', 'K'),
+        ('\u{0251}', 'a'), // ɑ open back unrounded
+        ('\u{0252}', 'a'), // ɒ open back rounded (turned a)
+        ('\u{0253}', 'b'), // ɓ implosive b
+        ('\u{0255}', 'c'), // ɕ alveolo-palatal
+        ('\u{0256}', 'd'), // ɖ retroflex d
+        ('\u{0257}', 'd'), // ɗ implosive d
+        ('\u{025B}', 'e'), // ɛ open-mid front
+        ('\u{025C}', 'e'), // ɜ open-mid central
+        ('\u{0260}', 'g'), // ɠ implosive g
+        ('\u{0261}', 'g'), // ɡ voiced velar plosive
+        ('\u{0262}', 'G'), // ɢ small capital G
+        ('\u{0265}', 'h'), // ɥ turned h
+        ('\u{0266}', 'h'), // ɦ hooktop h
+        ('\u{0268}', 'i'), // ɨ barred i
+        ('\u{026A}', 'i'), // ɪ near-close front
+        ('\u{026B}', 'l'), // ɫ dark l
+        ('\u{026C}', 'l'), // ɬ lateral fricative
+        ('\u{026D}', 'l'), // ɭ retroflex l
+        ('\u{026F}', 'm'), // ɯ turned m
+        ('\u{0270}', 'm'), // ɰ turned m with long leg
+        ('\u{0271}', 'm'), // ɱ labiodental nasal
+        ('\u{0272}', 'n'), // ɲ palatal nasal
+        ('\u{0273}', 'n'), // ɳ retroflex nasal
+        ('\u{0274}', 'N'), // ɴ small capital N
+        ('\u{0275}', 'o'), // ɵ barred o
+        ('\u{0278}', 'p'), // ɸ (phi-like, but IPA for voiceless bilabial)
+        ('\u{0279}', 'r'), // ɹ turned r
+        ('\u{027A}', 'r'), // ɺ turned r with long leg
+        ('\u{027B}', 'r'), // ɻ turned r with hook
+        ('\u{027C}', 'r'), // ɼ r with long leg
+        ('\u{027D}', 'r'), // ɽ retroflex flap
+        ('\u{027E}', 'r'), // ɾ alveolar flap
+        ('\u{027F}', 'r'), // ɿ reversed r with fishhook
+        ('\u{0280}', 'R'), // ʀ uvular trill
+        ('\u{0282}', 's'), // ʂ retroflex s
+        ('\u{0284}', 'j'), // ʄ dotless j with stroke and hook
+        ('\u{0285}', 's'), // ʅ squat reversed esh (looks like s)
+        ('\u{0288}', 't'), // ʈ retroflex t
+        ('\u{028B}', 'v'), // ʋ labiodental approximant
+        ('\u{028C}', 'v'), // ʌ turned v
+        ('\u{028D}', 'w'), // ʍ turned w
+        ('\u{028F}', 'Y'), // ʏ small capital Y
+        ('\u{0290}', 'z'), // ʐ retroflex z
+        ('\u{0291}', 'z'), // ʑ curly-tail z
+        ('\u{0297}', 'c'), // ʗ stretched c (click)
+        ('\u{0299}', 'B'), // ʙ bilabial trill
+        ('\u{029B}', 'G'), // ʛ small capital G with hook
+        ('\u{029C}', 'H'), // ʜ small capital H
+        ('\u{029D}', 'j'), // ʝ curly-tail j
+        ('\u{029F}', 'L'), // ʟ small capital L
+        ('\u{02A0}', 'q'), // ʠ q with hook
+        // ---- Small capitals (U+1D00-1D2F) ----
+        ('\u{1D00}', 'A'), ('\u{1D03}', 'B'), ('\u{1D04}', 'C'),
+        ('\u{1D05}', 'D'), ('\u{1D07}', 'E'), ('\u{1D08}', 'e'),
+        ('\u{1D09}', 'i'), ('\u{1D0A}', 'J'), ('\u{1D0B}', 'K'),
         ('\u{1D0C}', 'L'), ('\u{1D0D}', 'M'), ('\u{1D0F}', 'O'),
-        ('\u{1D18}', 'P'), ('\u{1D1B}', 'T'), ('\u{1D1C}', 'U'),
+        ('\u{1D18}', 'P'), ('\u{1D19}', 'R'), ('\u{1D1A}', 'R'),
+        ('\u{1D1B}', 'T'), ('\u{1D1C}', 'U'), ('\u{1D1D}', 'u'),
         ('\u{1D20}', 'V'), ('\u{1D21}', 'W'), ('\u{1D22}', 'Z'),
         // ---- Letterlike symbols ----
         ('\u{210E}', 'h'), // Planck constant (italic h)
@@ -278,16 +342,18 @@ static HOMOGLYPH_MAP: Lazy<HashMap<char, char>> = Lazy::new(|| {
         ('\u{2131}', 'F'), // script F
         ('\u{2133}', 'M'), // script M
     ];
-    pairs.iter().copied().collect()
+    for (src, dst) in manual_overrides {
+        map.insert(src, dst);
+    }
+    map
 });
 
-/// Strip zero-width characters from text.
+/// Strip invisible/zero-width characters from text.
 /// Returns (cleaned_text, offset_map) where offset_map[i] = original position of char i.
 pub fn strip_zero_width(text: &str) -> (String, Vec<usize>) {
-    // Fast path: check if any zero-width chars exist
-    let has_zw = text.chars().any(|c| ZERO_WIDTH_CHARS.contains(&c));
-    if !has_zw {
-        // Return empty offset_map to signal "no mapping needed" (identity)
+    // Fast path: check if any invisible chars exist
+    let has_invisible = text.chars().any(|c| is_invisible(c));
+    if !has_invisible {
         return (text.to_string(), Vec::new());
     }
 
@@ -295,9 +361,8 @@ pub fn strip_zero_width(text: &str) -> (String, Vec<usize>) {
     let mut offset_map = Vec::with_capacity(text.len());
 
     for (byte_idx, ch) in text.char_indices() {
-        if !ZERO_WIDTH_CHARS.contains(&ch) {
+        if !is_invisible(ch) {
             result.push(ch);
-            // Map each byte of the output char to the original byte index
             for i in 0..ch.len_utf8() {
                 offset_map.push(byte_idx + i);
             }
@@ -310,7 +375,7 @@ pub fn strip_zero_width(text: &str) -> (String, Vec<usize>) {
 /// Replace exotic Unicode whitespace with ASCII space.
 pub fn normalize_whitespace(text: &str) -> String {
     text.chars()
-        .map(|c| if UNICODE_SPACES.contains(&c) { ' ' } else { c })
+        .map(|c| if is_unicode_space(c) { ' ' } else { c })
         .collect()
 }
 
@@ -369,7 +434,7 @@ pub fn normalize_text(text: &str) -> (String, Vec<usize>) {
     let mut offsets: Vec<usize> = Vec::with_capacity(text.len());
 
     for (byte_idx, ch) in text.char_indices() {
-        if !ZERO_WIDTH_CHARS.contains(&ch) && !is_combining_mark(ch) {
+        if !is_invisible(ch) && !is_combining_mark(ch) {
             current.push(ch);
             for i in 0..ch.len_utf8() {
                 offsets.push(byte_idx + i);
@@ -379,7 +444,7 @@ pub fn normalize_text(text: &str) -> (String, Vec<usize>) {
 
     // Stage 2: Normalize exotic whitespace (char-by-char, may change byte widths).
     let (current, offsets) = remap_char_transform(&current, &offsets, |c| {
-        if UNICODE_SPACES.contains(&c) { ' ' } else { c }
+        if is_unicode_space(c) { ' ' } else { c }
     });
 
     // Stage 3: NFKC normalization (handles fullwidth digits/letters, ligatures, etc.).
