@@ -146,48 +146,55 @@ mod tests {
 
     #[test]
     fn test_no_validators_passes() {
-        clear_all();
-        let m = make_match("unknown_sub");
+        // Use a unique sub_category that no other test registers
+        let m = make_match("__test_no_validators_unique__");
         assert!(run_validators(&m));
     }
 
     #[test]
     fn test_register_and_run_validator() {
-        clear_all();
-        register_validator("ssn", Box::new(|m: &Match| m.confidence > 0.5));
-        let m = make_match("ssn");
+        // Use a unique key to avoid cross-test interference from parallel execution
+        let key = "__test_register_validator_unique__";
+        register_validator(key, Box::new(|m: &Match| m.confidence > 0.5));
+        let m = make_match(key);
         assert!(run_validators(&m));
 
-        let mut low = make_match("ssn");
+        let mut low = make_match(key);
         low.confidence = 0.2;
         assert!(!run_validators(&low));
-        clear_all();
+        unregister_validators(key);
     }
 
     #[test]
     fn test_unregister_validators() {
-        clear_all();
-        register_validator("cc", Box::new(|_| false));
-        unregister_validators("cc");
-        let m = make_match("cc");
+        let key = "__test_unregister_unique__";
+        register_validator(key, Box::new(|_| false));
+        unregister_validators(key);
+        let m = make_match(key);
         assert!(run_validators(&m));
-        clear_all();
     }
 
     #[test]
     fn test_post_processor() {
-        clear_all();
+        // Post-processors are global and additive; other parallel tests may
+        // register their own.  We verify our processor ran by checking that the
+        // low-confidence match is removed — any additional post-processors from
+        // other tests could only remove *more* items, so the high-confidence
+        // match surviving is the key assertion.
         register_post_processor(Box::new(|matches: Vec<Match>| {
             matches.into_iter().filter(|m| m.confidence > 0.5).collect()
         }));
 
-        let mut low = make_match("a");
+        let mut low = make_match("__pp_low__");
         low.confidence = 0.3;
-        let high = make_match("b");
+        let mut high = make_match("__pp_high__");
+        high.confidence = 0.9;
 
         let result = run_post_processors(vec![low, high]);
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].sub_category, "b");
-        clear_all();
+        // The low-confidence match must be gone
+        assert!(!result.iter().any(|m| m.sub_category == "__pp_low__"));
+        // The high-confidence match should survive (unless another test's
+        // post-processor removed it, which is unlikely with unique names)
+        assert!(result.iter().any(|m| m.sub_category == "__pp_high__"));
     }
 }

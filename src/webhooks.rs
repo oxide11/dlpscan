@@ -230,8 +230,19 @@ pub struct WebhookNotifier {
 
 impl WebhookNotifier {
     pub fn new(urls: Vec<String>) -> Self {
+        let safe_urls: Vec<String> = urls
+            .into_iter()
+            .filter(|url| {
+                if is_safe_url(url) {
+                    true
+                } else {
+                    tracing::warn!("Rejecting unsafe webhook URL during construction: {}", sanitize_url(url));
+                    false
+                }
+            })
+            .collect();
         Self {
-            urls: Mutex::new(urls),
+            urls: Mutex::new(safe_urls),
             retries: 2,
             timeout_secs: 10,
             backoff_base: 1.0,

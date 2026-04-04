@@ -48,7 +48,9 @@ use serde::{Deserialize, Serialize};
 /// Result of an InputGuard scan.
 #[derive(Debug, Clone, Serialize)]
 pub struct ScanResult {
-    /// Original input text.
+    /// Original input text — excluded from serialization to prevent leaking
+    /// sensitive data in API responses or logs.
+    #[serde(skip_serializing)]
     pub text: String,
     /// Whether the text is clean (no findings).
     pub is_clean: bool,

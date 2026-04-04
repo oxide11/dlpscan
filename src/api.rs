@@ -135,9 +135,12 @@ pub struct VaultEntry {
     pub created_at: Instant,
 }
 
-/// Simple sliding-window rate limiter.
+/// Per-IP sliding-window rate limiter with a global fallback.
 pub struct RateLimiter {
-    requests: Vec<Instant>,
+    /// Per-IP request timestamps.
+    per_ip: HashMap<String, Vec<Instant>>,
+    /// Maximum tracked IPs before oldest entries are evicted.
+    max_ips: usize,
     max_requests: usize,
     window: std::time::Duration,
 }
@@ -145,33 +148,51 @@ pub struct RateLimiter {
 impl RateLimiter {
     pub fn new(max_requests: usize, window_secs: u64) -> Self {
         Self {
-            requests: Vec::new(),
+            per_ip: HashMap::new(),
+            max_ips: 10_000,
             max_requests,
             window: std::time::Duration::from_secs(window_secs),
         }
     }
 
-    /// Check if a request is allowed. Returns true if under limit.
-    pub fn check(&mut self) -> bool {
+    /// Check if a request from the given IP is allowed.
+    pub fn check_ip(&mut self, ip: &str) -> bool {
         let now = Instant::now();
-        self.requests.retain(|&t| now.duration_since(t) < self.window);
-        if self.requests.len() < self.max_requests {
-            self.requests.push(now);
+
+        // Evict stale IPs if we're over the limit
+        if self.per_ip.len() >= self.max_ips {
+            self.per_ip.retain(|_, timestamps| {
+                timestamps.retain(|&t| now.duration_since(t) < self.window);
+                !timestamps.is_empty()
+            });
+        }
+
+        let timestamps = self.per_ip.entry(ip.to_string()).or_default();
+        timestamps.retain(|&t| now.duration_since(t) < self.window);
+        if timestamps.len() < self.max_requests {
+            timestamps.push(now);
             true
         } else {
             false
         }
     }
 
-    /// Remaining requests in the current window.
+    /// Check if a request is allowed (legacy global check, uses empty key).
+    pub fn check(&mut self) -> bool {
+        self.check_ip("")
+    }
+
+    /// Remaining requests in the current window for a given IP.
     pub fn remaining(&self) -> usize {
+        // For backward compat, report based on the busiest IP
         let now = Instant::now();
-        let active = self
-            .requests
-            .iter()
-            .filter(|&&t| now.duration_since(t) < self.window)
-            .count();
-        self.max_requests.saturating_sub(active)
+        let max_active = self
+            .per_ip
+            .values()
+            .map(|ts| ts.iter().filter(|&&t| now.duration_since(t) < self.window).count())
+            .max()
+            .unwrap_or(0);
+        self.max_requests.saturating_sub(max_active)
     }
 }
 
@@ -256,6 +277,10 @@ impl ApiConfig {
 
 /// Process a scan request.
 pub fn handle_scan(req: &ScanRequest) -> Result<ScanResponse, String> {
+    const MAX_TEXT_SIZE: usize = 10 * 1024 * 1024; // 10 MB
+    if req.text.len() > MAX_TEXT_SIZE {
+        return Err(format!("Text size {} exceeds maximum {}", req.text.len(), MAX_TEXT_SIZE));
+    }
     let guard = build_guard(req)?;
     let result = guard
         .scan(&req.text)
@@ -382,7 +407,7 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
 
     loop {
         let accept = listener.accept();
-        let (tcp_socket, _) = tokio::select! {
+        let (tcp_socket, peer_addr) = tokio::select! {
             result = accept => match result {
                 Ok(conn) => conn,
                 Err(e) => {
@@ -412,6 +437,7 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
         let state = state.clone();
         let active_connections = active_connections.clone();
         let tls = tls_acceptor.clone();
+        let peer_ip = peer_addr.ip().to_string();
 
         if active_connections.load(Ordering::SeqCst) >= MAX_CONCURRENT_CONNECTIONS {
             let response = b"HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: 42\r\n\r\n{\"detail\":\"Too many concurrent connections\"}";
@@ -508,8 +534,8 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
             let request_id = simple_uuid();
             let _span = tracing::info_span!("request", request_id = %request_id).entered();
 
-            let (status, body) = route_request(&request, &state);
-            tracing::info!(status = %status, "Request completed");
+            let (status, body) = route_request(&request, &state, &peer_ip);
+            tracing::info!(status = %status, peer = %peer_ip, "Request completed");
 
             let response = format!(
                 "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nX-Request-ID: {}\r\n\r\n{body}",
@@ -523,7 +549,7 @@ pub async fn serve(config: ApiConfig) -> Result<(), Box<dyn std::error::Error>> 
 }
 
 #[cfg(feature = "async-support")]
-fn route_request(raw: &str, state: &AppState) -> (String, String) {
+fn route_request(raw: &str, state: &AppState, peer_ip: &str) -> (String, String) {
     let first_line = raw.lines().next().unwrap_or("");
     let parts: Vec<&str> = first_line.split_whitespace().collect();
     let method = parts.first().copied().unwrap_or("");
@@ -552,10 +578,10 @@ fn route_request(raw: &str, state: &AppState) -> (String, String) {
         }
     }
 
-    // Rate limiting
+    // Per-IP rate limiting
     if path != "/health" {
         if let Ok(mut rl) = state.rate_limiter.write() {
-            if !rl.check() {
+            if !rl.check_ip(peer_ip) {
                 return (
                     "429 Too Many Requests".to_string(),
                     r#"{"detail":"Rate limit exceeded"}"#.to_string(),
@@ -613,6 +639,40 @@ fn route_request(raw: &str, state: &AppState) -> (String, String) {
         },
         ("POST", "/v1/patterns") => match serde_json::from_str::<PatternCreateRequest>(body) {
             Ok(req) => {
+                const MAX_CUSTOM_PATTERNS: usize = 100;
+                const MAX_PATTERN_LENGTH: usize = 4096;
+                const MAX_NAME_LENGTH: usize = 256;
+
+                // Enforce limits on pattern and name length
+                if req.pattern.len() > MAX_PATTERN_LENGTH {
+                    return (
+                        "422 Unprocessable Entity".to_string(),
+                        format!("{{\"detail\":\"Pattern length {} exceeds maximum {}\"}}", req.pattern.len(), MAX_PATTERN_LENGTH),
+                    );
+                }
+                if req.name.len() > MAX_NAME_LENGTH || req.category.len() > MAX_NAME_LENGTH {
+                    return (
+                        "422 Unprocessable Entity".to_string(),
+                        format!("{{\"detail\":\"Name or category exceeds maximum length {}\"}}", MAX_NAME_LENGTH),
+                    );
+                }
+                if !(0.0..=1.0).contains(&req.confidence) {
+                    return (
+                        "422 Unprocessable Entity".to_string(),
+                        r#"{"detail":"Confidence must be between 0.0 and 1.0"}"#.to_string(),
+                    );
+                }
+
+                // Enforce max custom pattern count
+                if let Ok(patterns) = state.custom_patterns.read() {
+                    if patterns.len() >= MAX_CUSTOM_PATTERNS {
+                        return (
+                            "429 Too Many Requests".to_string(),
+                            format!("{{\"detail\":\"Custom pattern limit reached (max {})\"}}", MAX_CUSTOM_PATTERNS),
+                        );
+                    }
+                }
+
                 // Validate regex
                 if regex::Regex::new(&req.pattern).is_err() {
                     return (

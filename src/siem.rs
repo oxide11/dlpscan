@@ -332,6 +332,10 @@ pub fn create_siem_from_env() -> Option<Box<dyn SIEMAdapter>> {
     match siem_type.to_lowercase().as_str() {
         "splunk" => {
             let url = std::env::var("DLPSCAN_SIEM_URL").ok()?;
+            if !crate::webhooks::is_safe_url(&url) {
+                tracing::error!("DLPSCAN_SIEM_URL rejected: SSRF protection blocked the URL");
+                return None;
+            }
             let token = std::env::var("DLPSCAN_SIEM_TOKEN").ok()?;
             let mut adapter = SplunkHECAdapter::new(&url, &token);
             if let Ok(source) = std::env::var("DLPSCAN_SIEM_SOURCE") {
@@ -341,6 +345,10 @@ pub fn create_siem_from_env() -> Option<Box<dyn SIEMAdapter>> {
         }
         "elasticsearch" => {
             let url = std::env::var("DLPSCAN_SIEM_URL").ok()?;
+            if !crate::webhooks::is_safe_url(&url) {
+                tracing::error!("DLPSCAN_SIEM_URL rejected: SSRF protection blocked the URL");
+                return None;
+            }
             let mut adapter = ElasticsearchAdapter::new(&url);
             if let Ok(index) = std::env::var("DLPSCAN_SIEM_INDEX") {
                 adapter = adapter.with_index(&index);
@@ -370,6 +378,10 @@ pub fn create_siem_from_env() -> Option<Box<dyn SIEMAdapter>> {
         }
         "webhook" => {
             let url = std::env::var("DLPSCAN_SIEM_URL").ok()?;
+            if !crate::webhooks::is_safe_url(&url) {
+                tracing::error!("DLPSCAN_SIEM_URL rejected: SSRF protection blocked the URL");
+                return None;
+            }
             Some(Box::new(WebhookSIEMAdapter::new(&url)))
         }
         "datadog" => {
@@ -518,6 +530,13 @@ fn http_post_sync(
 
     let mut req = format!("POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Length: {}\r\n", body.len());
     for (k, v) in headers {
+        // Prevent HTTP header injection: reject keys/values containing CR/LF/NUL
+        if k.bytes().any(|b| b == b'\r' || b == b'\n' || b == b'\0')
+            || v.bytes().any(|b| b == b'\r' || b == b'\n' || b == b'\0')
+        {
+            tracing::warn!("Skipping SIEM header with invalid characters");
+            continue;
+        }
         req.push_str(&format!("{k}: {v}\r\n"));
     }
     req.push_str("Connection: close\r\n\r\n");
