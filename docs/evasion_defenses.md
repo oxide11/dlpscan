@@ -9,90 +9,113 @@ techniques. Each defense maps to one or more attack vectors cataloged in
 ## Defense Architecture
 
 dlpscan applies a **normalization-before-scanning** pipeline. All text passes
-through three preprocessing stages before regex patterns are evaluated:
+through five preprocessing stages before regex patterns are evaluated:
 
 ```
 Original Text
      │
      ▼
 ┌──────────────────────────┐
-│ 1. Zero-Width Stripping  │  Remove invisible characters (ZWSP, ZWNJ, ZWJ,
-│    strip_zero_width()    │  BOM, soft hyphen, bidi overrides, variation
-│                          │  selectors, Unicode Tags)
-│    → offset_map built    │
+│ 1. Invisible Character   │  Remove all Unicode Format (Cf) characters:
+│    Stripping              │  ZWSP, ZWNJ, ZWJ, BOM, soft hyphen, bidi
+│    + Combining Mark Strip │  overrides, variation selectors, Unicode Tags.
+│                           │  Also strips 6 combining diacritical mark
+│    → offset_map built     │  ranges (U+0300-036F, U+0483-0489, etc.)
+└──────────┬────────────────┘
+           │
+           ▼
+┌──────────────────────────┐
+│ 2. Whitespace Normalize  │  Convert all Unicode Space Separator (Zs)
+│    normalize_whitespace() │  characters to ASCII space
 └──────────┬───────────────┘
            │
            ▼
 ┌──────────────────────────┐
-│ 2. Whitespace Normalize  │  Convert 14 exotic Unicode spaces (ideographic,
-│    normalize_whitespace() │  thin, hair, em, en, etc.) to ASCII space
+│ 3. NFKC Decomposition    │  Standard Unicode compatibility decomposition
+│    unicode-normalization  │  handles fullwidth, ligatures, compatibility
 └──────────┬───────────────┘
            │
            ▼
 ┌──────────────────────────┐
-│ 3. Homoglyph Normalize   │  NFKC decomposition + explicit mapping of 80+
-│    normalize_homoglyphs() │  Cyrillic/Greek/fullwidth/symbol confusables
+│ 4. Confusable/Homoglyph  │  1,650+ character mappings:
+│    Mapping                │  - 1,573 auto-generated from NFKC/NFKD
+│    normalize_homoglyphs() │  - 80+ manual overrides (Cyrillic, Greek,
+│                           │    IPA, small caps, letterlike symbols)
 └──────────┬───────────────┘
            │
            ▼
     Normalized Text  ──→  Regex Scanning  ──→  Offset Map  ──→  Original Spans
 ```
 
-The **offset map** created in step 1 tracks the original position of every
+The **offset map** created in stage 1 tracks the original position of every
 surviving character, allowing match spans to be mapped back to the original text
 for accurate redaction, tokenization, and obfuscation.
 
+### Character Classification
+
+dlpscan uses the `unicode-general-category` crate for standards-compliant
+character classification:
+
+- **Invisible characters**: `GeneralCategory::Format` (Cf) — covers all zero-width,
+  bidi, and format control characters without maintaining a manual whitelist
+- **Unicode spaces**: `GeneralCategory::SpaceSeparator` (Zs) — covers all Unicode
+  space characters including ideographic, thin, hair, em, en, figure, etc.
+- **Variation selectors**: Explicitly matched within `NonspacingMark` category
+  (`U+FE00`–`U+FE0F`, `U+E0100`–`U+E01EF`)
+
 ---
 
-## 1. Zero-Width Character Stripping
+## 1. Invisible Character Stripping
 
-**Module:** `dlpscan/unicode_normalize.py` — `strip_zero_width()`
+**Module:** `src/normalize/mod.rs` — `is_invisible()`
 
 **Attack:** Insert invisible Unicode characters between digits/letters to break
-regex continuity (e.g., `4\u200b5\u200b3\u200b2...` for a Visa number).
+regex continuity (e.g., `4\u{200b}5\u{200b}3\u{200b}2...` for a Visa number).
 
-**Defense:** Removes **all** characters in the `ZERO_WIDTH_CHARS` set before
-scanning. The current set contains **160+ characters** across these groups:
+**Defense:** Removes **all** characters classified as Unicode Format (Cf) plus
+variation selectors before scanning. This is category-based, not a manual
+whitelist, so it automatically covers:
 
-| Group | Characters | Count |
+| Group | Characters | Coverage |
 |-------|-----------|-------|
-| Core invisible | ZWSP, ZWNJ, ZWJ, Word Joiner, invisible operators | 10 |
-| Marks | LRM, RLM, Arabic Letter Mark, Mongolian Vowel Separator | 4 |
-| Format | BOM, Soft Hyphen, Combining Grapheme Joiner | 3 |
-| Annotation | Interlinear anchors/separators | 3 |
-| Bidi overrides | LRE, RLE, PDF, LRO, RLO (`U+202A`–`U+202E`) | 5 |
-| Bidi isolates | LRI, RLI, FSI, PDI (`U+2066`–`U+2069`) | 4 |
-| Variation selectors | VS1–VS16 (`U+FE00`–`U+FE0F`) | 16 |
-| Unicode Tags | Language tag block (`U+E0001`–`U+E007F`) | 127 |
+| Core invisible | ZWSP, ZWNJ, ZWJ, Word Joiner, invisible operators | Automatic (Cf) |
+| Marks | LRM, RLM, Arabic Letter Mark, Mongolian Vowel Separator | Automatic (Cf) |
+| Format | BOM, Soft Hyphen, Combining Grapheme Joiner | Automatic (Cf) |
+| Annotation | Interlinear anchors/separators | Automatic (Cf) |
+| Bidi overrides | LRE, RLE, PDF, LRO, RLO (`U+202A`–`U+202E`) | Automatic (Cf) |
+| Bidi isolates | LRI, RLI, FSI, PDI (`U+2066`–`U+2069`) | Automatic (Cf) |
+| Variation selectors | VS1–VS16 (`U+FE00`–`U+FE0F`) | Explicit match |
+| Unicode Tags | Language tag block (`U+E0001`–`U+E007F`) | Automatic (Cf) |
+
+### Combining Diacritical Mark Stripping
+
+Additionally, combining diacritical marks are stripped to defeat accent-based
+evasion (e.g., `S̈S̈N̈: 1̈2̈3̈-4̈5̈-6̈7̈8̈9̈`). Six Unicode ranges are covered:
+
+| Range | Name |
+|-------|------|
+| `U+0300`–`U+036F` | Combining Diacritical Marks |
+| `U+0483`–`U+0489` | Combining Cyrillic |
+| `U+1AB0`–`U+1AFF` | Combining Diacritical Marks Extended |
+| `U+1DC0`–`U+1DFF` | Combining Diacritical Marks Supplement |
+| `U+20D0`–`U+20FF` | Combining Diacritical Marks for Symbols |
+| `U+FE20`–`U+FE2F` | Combining Half Marks |
 
 **Offset mapping:** Each surviving character's original index is recorded in a
-list. Position `i` in the cleaned text maps to `offset_map[i]` in the original.
-This ensures redaction targets the correct bytes even when hundreds of invisible
-characters were injected.
-
-### Usage
-
-```python
-from dlpscan.unicode_normalize import strip_zero_width
-
-text = "4\u200b5\u200b3\u200b2\u200b0151\u200b1283\u200b0366"
-cleaned, offsets = strip_zero_width(text)
-# cleaned = "4532015112830366"
-# offsets = [0, 2, 4, 6, 8, 9, 10, 11, 13, 14, 15, 16, 18, 19, 20, 21]
-```
+vector. Position `i` in the cleaned text maps to `offset_map[i]` in the original.
+Multi-byte character boundaries are handled correctly.
 
 ---
 
 ## 2. RTL/Bidi Override Stripping
 
-**Module:** `dlpscan/unicode_normalize.py` — `ZERO_WIDTH_CHARS`
+**Module:** `src/normalize/mod.rs` — `is_invisible()`
 
 **Attack:** Insert directional override characters (`U+202E` RLO, `U+2066` LRI,
-etc.) to visually reorder digits while the logical byte order in memory differs,
-causing regex patterns to scan reversed or rearranged text.
+etc.) to visually reorder digits while the logical byte order in memory differs.
 
-**Defense:** All 9 directional formatting characters are included in the
-zero-width strip set:
+**Defense:** All 9 directional formatting characters are automatically classified
+as `GeneralCategory::Format` and stripped:
 
 | Code Point | Name | Purpose |
 |-----------|------|---------|
@@ -106,51 +129,21 @@ zero-width strip set:
 | `U+2068` | First Strong Isolate | Auto-detect direction |
 | `U+2069` | Pop Directional Isolate | End isolate |
 
-Combined with `U+200E` (LRM) and `U+200F` (RLM) already in the set, **all 11
-Unicode directional formatting characters** are stripped before scanning.
-
 ---
 
-## 3. Variation Selector Stripping
+## 3. Unicode Whitespace Normalization
 
-**Module:** `dlpscan/unicode_normalize.py` — `ZERO_WIDTH_CHARS`
-
-**Attack:** Insert variation selectors (`U+FE00`–`U+FE0F`) between characters.
-These invisible characters select glyph variants and break regex continuity
-without changing visual appearance.
-
-**Defense:** All 16 variation selectors (VS1–VS16) are included in the
-zero-width strip set and removed before scanning.
-
----
-
-## 4. Unicode Tags Block Stripping
-
-**Module:** `dlpscan/unicode_normalize.py` — `ZERO_WIDTH_CHARS`
-
-**Attack:** Embed data steganographically using Unicode Tag characters
-(`U+E0001`–`U+E007F`). These invisible characters from the Supplementary
-Special-purpose Plane can encode full ASCII text invisibly within document
-content.
-
-**Defense:** The entire Unicode Tags range (127 characters) is included in the
-zero-width strip set and removed before scanning.
-
----
-
-## 5. Unicode Whitespace Normalization
-
-**Module:** `dlpscan/unicode_normalize.py` — `normalize_whitespace()`
+**Module:** `src/normalize/mod.rs` — `is_unicode_space()`
 
 **Attack:** Use exotic Unicode space characters as delimiters in sensitive data.
-Standard delimiter patterns (`_S`) match common separators but not ideographic
-space (`U+3000`), thin space (`U+2009`), or other rare whitespace characters.
 
-**Defense:** Converts 14 exotic Unicode whitespace characters to ASCII space
-before scanning:
+**Defense:** Converts all characters classified as Unicode `SpaceSeparator` (Zs)
+to ASCII space before scanning. This automatically covers:
 
 | Code Point | Name |
 |-----------|------|
+| `U+00A0` | No-Break Space |
+| `U+1680` | Ogham Space Mark |
 | `U+2000` | En Quad |
 | `U+2001` | Em Quad |
 | `U+2002` | En Space |
@@ -166,310 +159,129 @@ before scanning:
 | `U+205F` | Medium Mathematical Space |
 | `U+3000` | Ideographic Space |
 
-This is a 1:1 character replacement (no length change), so the offset map
-remains valid across this stage.
-
-### Usage
-
-```python
-from dlpscan.unicode_normalize import normalize_whitespace
-
-text = "4532\u30000151\u30001283\u30000366"  # Ideographic spaces
-normalized = normalize_whitespace(text)
-# "4532 0151 1283 0366"  — now matches standard delimiter patterns
-```
-
 ---
 
-## 6. Homoglyph / Confusable Normalization
+## 4. Confusable / Homoglyph Normalization
 
-**Module:** `dlpscan/unicode_normalize.py` — `normalize_homoglyphs()`
+**Module:** `src/normalize/mod.rs` — `normalize_homoglyphs()`,
+`src/normalize/confusables.rs`
 
 **Attack:** Replace ASCII digits or letters with visually identical Unicode
 characters from other scripts (Cyrillic `а` for Latin `a`, fullwidth `４` for
 `4`, Greek `Ο` for Latin `O`).
 
-**Defense:** Two-pass normalization:
+**Defense:** Two-pass normalization with 1,650+ character mappings:
 
-1. **NFKC decomposition** — Handles fullwidth digits/letters, ligatures (`ﬁ` →
-   `fi`), circled characters, and other compatibility forms.
+### Pass 1: NFKC Decomposition
 
-2. **Explicit homoglyph map** — 80+ entries covering characters NFKC doesn't
-   normalize:
-   - **Cyrillic → Latin**: А/а, В/в, С/с, Е/е, Н/н, І/і, К/к, М/м, О/о, Р/р,
-     Ѕ/ѕ, Т/т, Х/х, У/у
-   - **Greek → Latin**: Α/α, Β/β, Ε/ε, Η/η, Ι/ι, Κ/κ, Μ/μ, Ν/ν, Ο/ο, Ρ/ρ,
-     Τ/τ, Χ/χ, Υ/υ, Ζ/ζ
-   - **Fullwidth Latin**: Ａ–Ｚ, ａ–ｚ (52 entries)
-   - **Digit confusables**: Fullwidth ０–９, subscript ₀–₉, superscript ⁰–⁹
-   - **Symbol lookalikes**: 10 dash/hyphen variants, fullwidth `.`, `@`, `/`
+Handles fullwidth digits/letters, ligatures (`ﬁ` → `fi`), circled characters,
+and other compatibility forms.
 
-### Usage
+### Pass 2: Confusable Map (1,650+ entries)
 
-```python
-from dlpscan.unicode_normalize import normalize_homoglyphs
+| Source | Characters | Count |
+|--------|-----------|-------|
+| Auto-generated (NFKC/NFKD) | Accented letters, mathematical symbols, enclosed forms, compatibility chars | 1,573 |
+| Cyrillic → Latin | А/а, В/в, С/с, Е/е, Н/н, І/і, К/к, М/м, О/о, Р/р, Ѕ/ѕ, Т/т, Х/х, У/у, Ј, Ґ, З, Є | 30+ |
+| Greek → Latin | Α/α, Β/β, Ε/ε, Η/η, Ι/ι, Κ/κ, Μ/μ, Ν/ν, Ο/ο, Ρ/ρ, Τ/τ, Χ/χ, Υ/υ, Ζ/ζ, ϲ, ϒ | 30+ |
+| IPA Extensions | 50+ characters (U+0251–U+02A0) | 50+ |
+| Small Capitals | ᴀ→A through ᴢ→Z | 22 |
+| Letterlike Symbols | ℃→C, ℉→F, Ω→O, ℓ→l, etc. | 10+ |
+| Fullwidth symbols | ：→:, ！→!, ＠→@, ＃→#, etc. | 20+ |
+| Circled/enclosed | ①→1, ⓪→0, Ⅰ→I, etc. | 30+ |
 
-# Fullwidth Visa number
-text = "\uff14\uff15\uff13\uff12\uff10\uff11\uff15\uff11\uff11\uff12\uff18\uff13\uff10\uff13\uff16\uff16"
-normalized = normalize_homoglyphs(text)
-# "4532015112830366"
+### Example
 
-# Cyrillic email evasion
-text = "us\u0435r@t\u0435st.com"  # Cyrillic е
-normalized = normalize_homoglyphs(text)
-# "user@test.com"
+```rust
+use dlpscan::normalize::normalize_text;
+
+// Fullwidth Visa number
+let text = "\u{FF14}\u{FF15}\u{FF13}\u{FF12}015112830366";
+let (normalized, offsets) = normalize_text(text);
+// normalized = "4532015112830366"
+
+// Cyrillic email evasion
+let text = "us\u{0435}r@t\u{0435}st.com";  // Cyrillic е
+let (normalized, _) = normalize_text(text);
+// normalized = "user@test.com"
+
+// Combined evasion: zero-width + combining marks + fullwidth
+let text = "S\u{0308}\u{200B}S\u{0308}N: \u{FF11}23-45-6789";
+let (normalized, _) = normalize_text(text);
+// normalized = "SSN: 123-45-6789"
 ```
 
 ---
 
-## 7. Cross-Platform Regex Timeout
+## 5. Regex Safety (ReDoS Protection)
 
-**Module:** `dlpscan/scanner.py` — `_ThreadTimeout`, `_can_use_sigalrm()`
+**Module:** `src/scanner/mod.rs`
 
-**Attack:** Craft input that triggers catastrophic backtracking (ReDoS) in regex
-patterns. On non-Unix platforms or in worker threads, the SIGALRM-based timeout
-doesn't work, allowing unbounded CPU consumption.
+**Attack:** Craft input that triggers catastrophic backtracking in regex patterns.
 
-**Defense:** Dual-layer timeout system:
-
-| Layer | Mechanism | Scope | Precision |
-|-------|-----------|-------|-----------|
-| **SIGALRM** | Unix signal handler | Main thread, Unix only | Interrupts mid-regex |
-| **_ThreadTimeout** | `threading.Timer` | All platforms, all threads | Checked between patterns |
-
-The `_ThreadTimeout` class starts a daemon timer that sets an `expired` flag
-after the configured duration. The scan loop checks this flag between every
-pattern category and sub-category iteration. While it cannot interrupt a single
-blocking regex mid-execution, it prevents runaway scans from consuming unbounded
-time across multiple patterns.
-
-**Configuration:**
+**Defense:** Rust's `regex` crate guarantees **linear-time matching** by design —
+it uses a finite automaton approach that prevents catastrophic backtracking entirely.
+Additionally, defense-in-depth timeouts are configured:
 
 | Constant | Default | Description |
 |----------|---------|-------------|
-| `REGEX_TIMEOUT_SECONDS` | 5 | Per-pattern SIGALRM timeout (Unix main thread) |
-| `MAX_SCAN_SECONDS` | 120 | Global scan timeout (both layers) |
-
-### How it works
-
-```python
-# In enhanced_scan_text():
-if _can_use_sigalrm():
-    # Unix main thread: hard interrupt via SIGALRM
-    signal.signal(signal.SIGALRM, _timeout_handler)
-    signal.alarm(MAX_SCAN_SECONDS)
-else:
-    # Fallback: threading.Timer sets flag checked in scan loop
-    _thread_timeout = _ThreadTimeout(MAX_SCAN_SECONDS)
-    _thread_timeout.start()
-
-# Between each pattern:
-if _thread_timeout and _thread_timeout.expired:
-    scan_timed_out = True
-    break
-```
+| `REGEX_TIMEOUT_SECONDS` | 5 | Per-pattern regex timeout |
+| `MAX_SCAN_SECONDS` | 120 | Global scan timeout |
+| `MAX_MATCHES` | 50,000 | Maximum matches per scan |
+| `MAX_INPUT_SIZE` | 10 MB | Maximum input size |
 
 ---
 
-## 8. Scan Completeness Indicator
+## 6. Scan Completeness Indicator
 
-**Module:** `dlpscan/guard/core.py` — `ScanResult`
+**Module:** `src/scanner/mod.rs` — `ScanOutput`
 
 **Attack:** Flood a document with 50,000+ pattern matches so the scanner hits
-`MAX_MATCHES` and silently stops. Real sensitive data after the limit is
-unscanned.
+`MAX_MATCHES` and silently stops.
 
-**Defense:** `ScanResult` now exposes truncation status to API consumers:
+**Defense:** `ScanOutput` exposes truncation status:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `scan_truncated` | `bool` | `True` if scan was cut short by match limits or timeout |
-| `scan_complete` | `bool` (property) | `True` if scan ran to full completion |
-
-These fields are also included in `ScanResult.to_dict()` for JSON serialization.
-
-### Usage
-
-```python
-from dlpscan import InputGuard, Preset, Action
-
-guard = InputGuard(presets=[Preset.PCI_DSS], action=Action.FLAG)
-result = guard.scan(text)
-
-if result.scan_truncated:
-    logger.warning("Scan incomplete — %d findings found before truncation",
-                   result.finding_count)
-
-# JSON output includes the field:
-result.to_dict()
-# {'is_clean': False, 'scan_truncated': True, 'finding_count': 50000, ...}
+```rust
+pub struct ScanOutput {
+    pub matches: Vec<Match>,
+    pub truncated: bool,  // True if scan was terminated early
+}
 ```
 
 ---
 
-## 9. InputGuard Transform Pipeline
+## 7. Context-Gated Pattern Prefilter
 
-**Module:** `dlpscan/guard/core.py`, `dlpscan/guard/transforms.py`
+**Module:** `src/scanner/mod.rs`, `src/context/mod.rs`
 
-**Attack:** Zero-width characters survive into match text, causing format
-mismatches in redaction, tokenization, and obfuscation outputs.
+**Attack:** Submit text with many low-specificity pattern matches to waste
+scanning resources.
 
-**Defense:** All InputGuard transform actions clean match text before processing:
+**Defense:** Aho-Corasick keyword prefilter gates 452 low-specificity patterns:
 
-- **REDACT** (`core.py:_redact_matches`): Calls `strip_zero_width()` on each
-  match span before passing to `redact_sensitive_info()`.
-- **TOKENIZE** (`transforms.py:tokenize_matches`): Stores the cleaned value
-  (not the raw text with invisible characters) in the token vault.
-- **OBFUSCATE** (`transforms.py`): All 7 obfuscation generators
-  (`_obfuscate_credit_card`, `_obfuscate_phone`, `_obfuscate_ssn`, etc.) use
-  `_clean_match_text()` to strip zero-width characters before generating format-
-  preserving fake data.
-
-This ensures output text never contains invisible characters from evasion
-attempts.
+- Patterns with specificity ≥ 0.85 or in `CRITICAL_ALWAYS_RUN` run unconditionally
+- Patterns below 0.85 only run if their context keywords are found in the text
+- Single O(n) Aho-Corasick pass identifies which keyword groups are present
+- 2,718 keywords across 560 groups provide comprehensive context coverage
 
 ---
 
-## 10. Chained/Polymorphic Evasion
+## 8. Chained/Polymorphic Evasion
 
 **Attack:** Layer multiple evasion techniques simultaneously — e.g., fullwidth
-digits + zero-width spaces + RTL overrides.
+digits + zero-width spaces + combining marks + RTL overrides.
 
-**Defense:** The normalization pipeline handles chained attacks because it
-applies transformations in sequence:
+**Defense:** The 5-stage normalization pipeline handles chained attacks because
+each stage operates on the output of the previous:
 
-1. Zero-width stripping removes ZWSP, bidi overrides, variation selectors
+1. Invisible char + combining mark stripping removes ZWSP, bidi, diacritics
 2. Whitespace normalization converts exotic spaces to ASCII
-3. NFKC + homoglyph mapping converts fullwidth/Cyrillic/Greek to ASCII
+3. NFKC decomposes compatibility forms
+4. Confusable mapping converts remaining lookalikes to ASCII
 
-Each stage operates on the output of the previous stage, so layered evasion
-techniques are peeled away one layer at a time. A string like
-`\u202e\uff14\u200b\uff15\u200b\uff13\u200b\uff12...` (RTL override +
-fullwidth digits + zero-width spaces) is normalized to `4532...` after all
-three stages complete.
-
----
-
-## 11. Fuzzy Context Keyword Matching
-
-**Module:** `dlpscan/scanner.py` — `_fuzzy_keyword_match()`, `_levenshtein_distance()`
-
-**Attack:** Use typos, misspellings, or abbreviations of context keywords
-(e.g., `credti card` instead of `credit card`) to prevent keyword proximity
-matching, causing context-dependent patterns to lose confidence.
-
-**Defense:** Two-pass context matching in `scan_for_context()`:
-
-1. **Fast path** — Exact regex match against compiled keyword patterns (existing).
-2. **Slow path** — Levenshtein edit distance (≤ 2) fuzzy matching for keywords
-   ≥ 5 characters. Multi-word keywords use n-gram matching to compare word
-   sequences.
-
-**Configuration:**
-
-| Constant | Default | Description |
-|----------|---------|-------------|
-| `FUZZY_MAX_DISTANCE` | 2 | Maximum Levenshtein edit distance |
-| `FUZZY_MIN_KEYWORD_LENGTH` | 5 | Minimum keyword length for fuzzy matching |
-
-### Usage
-
-```python
-# Typo "credti" matches "credit" with edit distance 2
-text = "credti card 4532015112830366"
-results = list(enhanced_scan_text(text))
-# Credit card match has has_context=True despite the typo
-```
-
----
-
-## 12. Expanded Homoglyph Coverage
-
-**Module:** `dlpscan/unicode_normalize.py` — `_HOMOGLYPH_MAP`
-
-**Attack:** Use less common confusable scripts (Armenian, Cherokee, small
-capitals) that weren't in the original 80-entry homoglyph map.
-
-**Defense:** Homoglyph map expanded to **200+ entries** covering:
-
-| Script | Characters Added | Examples |
-|--------|-----------------|----------|
-| Armenian | 13 letters | Օ→O, ո→n, ս→s, հ→h |
-| Cherokee | 23 letters | Ꭰ→D, Ꭲ→T, Ꮃ→W, Ꮇ→M, Ꮲ→P |
-| Small capitals | 26 letters | ᴀ→A, ʙ→B, ᴄ→C through ᴢ→Z |
-| Circled digits | 10 + 9 dingbat | ①→1, ❶→1, ⓪→0 |
-| Parenthesized digits | 9 | ⑴→1, ⑵→2 through ⑼→9 |
-| Fullwidth symbols | 20 | ：→:, ！→!, ＃→#, ＄→$, etc. |
-| Additional Cyrillic | 5 | Ј→J, Ґ→G, З→Z, Є→E, Щ→W |
-| Additional Greek | 2 | ϲ→c, ϒ→Y |
-| Latin variants | 2 | ı→i (Turkish), ȷ→j (dotless) |
-
----
-
-## 13. RTF Extraction & Content-Type Detection
-
-**Module:** `dlpscan/extractors.py` — `_extract_rtf()`, `_detect_format_by_content()`
-
-**Attack:** Embed sensitive data in RTF files or rename files to hide their
-format from extension-based extractor selection.
-
-**Defense:**
-
-- **RTF extractor**: Built-in parser strips RTF control words, handles Unicode
-  escapes (`\uN`), hex escapes (`\'XX`), and nested groups. No external
-  dependencies.
-- **Content-type detection**: `_detect_format_by_content()` reads file magic
-  bytes to detect PDF, RTF, and ZIP-based Office formats (DOCX, XLSX, PPTX)
-  regardless of file extension. Used as fallback when no extractor matches the
-  extension.
-
----
-
-## 14. OCR Confidence Hardening
-
-**Module:** `dlpscan/ocr.py` — `MIN_OCR_CONFIDENCE`
-
-**Attack:** Provide degraded images that produce OCR text just above the
-confidence threshold, introducing character errors that break pattern matching.
-
-**Defense:** `MIN_OCR_CONFIDENCE` raised from 30 to **60**. Text extracted with
-confidence below 60% is discarded, reducing false matches from adversarial or
-low-quality images.
-
----
-
-## 15. Wildcard Allowlist Matching
-
-**Module:** `dlpscan/allowlist.py` — `Allowlist`
-
-**Attack:** Modify allowlisted test values by one character (e.g.,
-`4111111111111112` when `4111111111111111` is allowlisted) to bypass exact-match
-filtering.
-
-**Defense:** Allowlist text entries now support `fnmatch` glob syntax:
-
-| Pattern | Matches | Example |
-|---------|---------|---------|
-| `4111*` | Any text starting with `4111` | `4111111111111112` |
-| `test?@*.com` | Single char wildcard + domain glob | `test1@example.com` |
-| `[12]34*` | Character sets | `134...`, `234...` |
-
-Exact-match entries use fast set lookup. Glob patterns are applied via
-`fnmatch.fnmatch()` only when the fast path misses.
-
-### Usage
-
-```python
-from dlpscan import Allowlist
-
-al = Allowlist(
-    texts=['4111*', 'test@example.com'],  # Mix of glob and exact
-    patterns=['Gender Marker'],
-)
-
-# '4111*' suppresses any Visa starting with 4111
-al.is_allowed(match)  # False for text='4111222233334444'
-```
+A string like `\u{202e}\u{FF14}\u{200b}\u{FF15}\u{0308}\u{200b}\u{FF13}...`
+(RTL override + fullwidth digits + zero-width + combining marks) is normalized
+to `453...` after all stages complete.
 
 ---
 
@@ -477,22 +289,20 @@ al.is_allowed(match)  # False for text='4111222233334444'
 
 | Evasion Technique | Defense | Status |
 |-------------------|---------|--------|
-| Zero-width char insertion | `strip_zero_width()` | **Defended** |
-| RTL/Bidi manipulation | Bidi chars in strip set | **Defended** |
-| Variation selectors | VS1–VS16 in strip set | **Defended** |
-| Unicode Tags steganography | Tags block in strip set | **Defended** |
-| Delimiter variation | `normalize_whitespace()` | **Defended** |
-| Homoglyph substitution | `normalize_homoglyphs()` | **Defended** (200+ mappings) |
-| Word boundary bypass | Post-normalization `\b` | **Defended** |
-| ReDoS / timeout bypass | SIGALRM + `_ThreadTimeout` | **Defended** |
-| Max matches truncation | `ScanResult.scan_truncated` | **Exposed** |
-| Polymorphic encoding chains | Sequential pipeline | **Defended** |
-| Transform output pollution | `_clean_match_text()` | **Defended** |
-| Context keyword homoglyphs | Normalized before context search | **Defended** |
-| Context keyword evasion | Fuzzy Levenshtein matching | **Defended** |
-| OCR confidence manipulation | Threshold raised to 60% | **Partial** |
-| Unsupported file formats | RTF extractor + content-type detection | **Partial** |
-| Allowlist value mutation | Wildcard/glob matching | **Defended** |
+| Zero-width char insertion | `is_invisible()` (Cf category) | **Defended** |
+| Combining mark injection | `is_combining_mark()` (6 ranges) | **Defended** |
+| RTL/Bidi manipulation | Automatic (Cf category) | **Defended** |
+| Variation selectors | Explicit match in `is_invisible()` | **Defended** |
+| Unicode Tags steganography | Automatic (Cf category) | **Defended** |
+| Delimiter variation | `is_unicode_space()` (Zs category) | **Defended** |
+| Homoglyph substitution | 1,650+ confusable mappings | **Defended** |
+| Fullwidth/compatibility forms | NFKC decomposition | **Defended** |
+| Case-variant evasion | 152 patterns now case-insensitive | **Defended** |
+| Separator-variant evasion | IBAN/E.164 patterns accept `-./\s` | **Defended** |
+| ReDoS / timeout bypass | Linear-time regex + timeouts | **Defended** |
+| Max matches truncation | `ScanOutput.truncated` | **Exposed** |
+| Polymorphic encoding chains | Sequential 5-stage pipeline | **Defended** |
+| Low-specificity flooding | Context-gated prefilter | **Defended** |
 
 ---
 
@@ -500,21 +310,16 @@ al.is_allowed(match)  # False for text='4111222233334444'
 
 These evasion vectors are identified but not yet fully defended:
 
-1. **Full Unicode confusables.txt** — Current map has 200+ entries vs Unicode
-   Consortium's confusables.txt (6,000+). Georgian and mathematical alphanumeric
-   symbols are not mapped.
-
-2. **Multilingual context keywords** — Keyword lists are primarily English. No
+1. **Multilingual context keywords** — Keyword lists are primarily English. No
    translations or non-English synonyms.
+
+2. **Leet-speak normalization** — A `normalize_leet()` function exists but is
+   intentionally NOT enabled globally because it converts digits to letters
+   (4→a, 0→o), which is catastrophic for digit-based patterns (SSN, CC, phone).
+   Leet-speak normalization would need to be pattern-category-aware.
 
 3. **Per-pattern OCR confidence** — Global threshold may be too aggressive for
    some patterns and too lenient for others.
-
-4. **ODS/Pages extractors** — OpenDocument Spreadsheet and Apple Pages formats
-   still lack extractors.
-
-5. **Path exclusion guardrails** — Skip patterns are fully user-configurable
-   with no warnings for common sensitive locations.
 
 See the [Priority Remediation Roadmap](evasion_techniques.md#priority-remediation-roadmap)
 in evasion_techniques.md for the full backlog.

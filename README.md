@@ -4,7 +4,10 @@ High-performance DLP scanner written in Rust. Detects, redacts, and protects
 sensitive data with exceptional throughput.
 
 **560 patterns** across **126 categories** — full parity with the Python version.
-**15,000+ lines** of Rust across 37 modules. **238 tests** passing.
+**21,600+ lines** of Rust across 38 modules. **267 tests** passing.
+
+See [PATTERNS.md](PATTERNS.md) for the complete pattern inventory with specificity
+scores. See [KEYWORDS.md](KEYWORDS.md) for all 2,718 context keywords.
 
 ## Performance
 
@@ -151,8 +154,8 @@ println!("Matches: {}, Truncated: {}", output.matches.len(), output.truncated);
 |---|---|
 | `scanner` | Core engine — parallel regex matching with Rayon, AC prefilter |
 | `patterns` | 560 compiled regex patterns across 126 categories |
-| `context` | Aho-Corasick keyword proximity matching (560+ keywords) |
-| `normalize` | Unicode normalization (zero-width, homoglyphs, whitespace) |
+| `context` | Aho-Corasick keyword proximity matching (2,718 keywords across 560 groups) |
+| `normalize` | 5-stage Unicode normalization (invisible strip, combining mark strip, whitespace normalize, NFKC, 1,650+ confusable/homoglyph mappings) |
 | `scoring` | Confidence scoring and overlapping match deduplication |
 | `validation` | Luhn check, input validation |
 | `models` | `Match`, `PatternDef`, specificity scores |
@@ -204,12 +207,21 @@ println!("Matches: {}, Truncated: {}", output.matches.len(), output.truncated);
 
 dlpscan has been hardened through a comprehensive security audit:
 
-- **Unicode evasion defense** — 4-stage normalization pipeline (zero-width strip,
-  whitespace normalize, NFKC, homoglyph mapping with 120+ entries) with byte-level
-  offset tracking through every transform
-- **SSRF protection** — All webhook and SIEM URLs validated against RFC 1918,
-  loopback, link-local, and IPv4-mapped IPv6 ranges
+- **Unicode evasion defense** — 5-stage normalization pipeline (invisible char strip,
+  combining mark strip, whitespace normalize, NFKC, 1,650+ confusable/homoglyph
+  mappings) with byte-level offset tracking through every transform. Uses
+  `unicode-general-category` for standards-compliant character classification.
+- **SSRF protection** — All webhook and SIEM URLs (Splunk, Elasticsearch, webhook,
+  Datadog) validated against RFC 1918, loopback, link-local, IPv4-mapped IPv6, and
+  zero-address ranges. Constructor-level validation in `WebhookNotifier`.
+- **HTTP header injection** — CR/LF/NUL validation on all SIEM header key/value pairs
 - **Constant-time auth** — API key verification via SHA-256 hash comparison
+- **Per-IP rate limiting** — Sliding-window rate limiter with per-IP tracking and
+  automatic eviction of stale entries (max 10K tracked IPs)
+- **Input size limits** — 10 MB per scan request, 1000-item batch limit, 100 custom
+  patterns max, 4 KB pattern length limit, confidence range validation
+- **Data leak prevention** — `ScanResult.text` excluded from JSON serialization to
+  prevent raw sensitive data in API responses
 - **Archive bomb protection** — Size and file count limits on ZIP/RAR/7z extraction
 - **Path traversal prevention** — Entry name validation and path canonicalization
 - **No sensitive data in cache** — Matched text stripped before LRU caching
@@ -235,10 +247,13 @@ DLPSCAN_API_RATE_LIMIT=100  # Requests per 60s (default: 100)
 
 The API server (`--features async-support`) supports:
 - Graceful shutdown on SIGTERM/SIGINT with 30s connection drain
-- Rate limiting and API key authentication
+- Per-IP rate limiting with sliding window (configurable via `DLPSCAN_API_RATE_LIMIT`)
+- API key authentication with constant-time comparison
 - Connection cap (256 concurrent)
-- Request size limit (10MB)
+- Request size limit (10 MB per scan, 1000-item batch limit)
+- Custom pattern management (max 100 patterns, 4 KB regex limit)
 - Request correlation via `X-Request-ID` header (propagated to log spans)
+- SSRF-protected SIEM/webhook integrations
 - Health check at `GET /health`
 
 ### Deployment
@@ -252,7 +267,12 @@ The API server (`--features async-support`) supports:
 ```
 Input text
   │
-  ├── normalize (ASCII fast-path, or NFKC + homoglyph + zero-width)
+  ├── 5-stage normalization pipeline
+  │   ├── Stage 1: Strip invisible chars (Unicode Cf) and combining marks
+  │   ├── Stage 2: Normalize Unicode whitespace (Zs → ASCII space)
+  │   ├── Stage 3: NFKC decomposition
+  │   ├── Stage 4: Homoglyph/confusable mapping (1,650+ entries)
+  │   └── Stage 5: Byte offset map for original↔normalized position tracking
   │
   ├── Aho-Corasick keyword pre-scan (single O(n) pass)
   │   └── Builds ContextHitIndex: (category, sub_category) → positions
